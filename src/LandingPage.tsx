@@ -103,16 +103,16 @@ function LandingPage() {
             
             <div className="flex items-center space-x-4">
               <button 
-                onClick={() => window.location.href = '?page=dashboard'}
+                onClick={() => window.location.href = '/login'}
                 className="text-gray-600 hover:text-gray-900 font-medium transition-colors"
               >
                 Sign In
               </button>
               <button 
-                onClick={() => window.location.href = '?page=dashboard'}
+                onClick={() => window.location.href = '/signup'}
                 className="bg-blue-600 text-white px-6 py-2 rounded-xl font-medium hover:bg-blue-700 transition-colors"
               >
-                Go to Dashboard
+                Get Started
               </button>
             </div>
           </div>
@@ -133,7 +133,7 @@ function LandingPage() {
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
               <button 
-                onClick={() => window.location.href = '?page=dashboard'}
+                onClick={() => window.location.href = '/signup'}
                 className="bg-blue-600 text-white px-8 py-4 rounded-xl font-medium hover:bg-blue-700 transition-all duration-200 shadow-lg hover:shadow-xl flex items-center space-x-2"
               >
                 <span>Start Your Journey</span>
@@ -302,7 +302,7 @@ function LandingPage() {
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
             <button 
-              onClick={() => window.location.href = '?page=dashboard'}
+              onClick={() => window.location.href = '/signup'}
               className="bg-white text-blue-600 px-8 py-4 rounded-xl font-medium hover:bg-gray-50 transition-all duration-200 shadow-lg hover:shadow-xl"
             >
               Create Your Profile
