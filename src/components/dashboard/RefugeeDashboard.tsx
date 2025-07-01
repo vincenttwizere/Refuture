@@ -36,12 +36,12 @@ const RefugeeDashboard: React.FC = () => {
       setLoading(true);
       
       // Fetch interviews
-      const interviewsResponse = await axios.get('http://localhost:5000/api/interviews/talent');
+      const interviewsResponse = await axios.get('http://localhost:5001/api/interviews/talent');
       setInterviews(interviewsResponse.data.interviews);
 
       // Fetch profile if exists
       try {
-        const profileResponse = await axios.get('http://localhost:5000/api/profiles/me/my-profile');
+        const profileResponse = await axios.get('http://localhost:5001/api/profiles/me/my-profile');
         setProfile(profileResponse.data.profile);
       } catch (error) {
         // Profile doesn't exist yet
@@ -56,7 +56,7 @@ const RefugeeDashboard: React.FC = () => {
 
   const handleInterviewResponse = async (interviewId: string, status: 'accepted' | 'declined', message?: string) => {
     try {
-      await axios.put(`http://localhost:5000/api/interviews/${interviewId}/respond`, {
+      await axios.put(`http://localhost:5001/api/interviews/${interviewId}/respond`, {
         status,
         message
       });

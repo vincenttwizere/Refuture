@@ -9,16 +9,21 @@ import interviewRoutes from './routes/interviews.js';
 dotenv.config();
 
 const app = express();
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 5001;
 
 // Middleware
 app.use(cors());
 app.use(express.json());
 
 // MongoDB Connection
-mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/refuture')
+const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/refuture';
+mongoose.connect(MONGODB_URI)
   .then(() => console.log('Connected to MongoDB'))
-  .catch(err => console.error('MongoDB connection error:', err));
+  .catch(err => {
+    console.error('MongoDB connection error:', err);
+    console.log('Please make sure MongoDB is installed and running');
+    console.log('You can download MongoDB from: https://www.mongodb.com/try/download/community');
+  });
 
 // Routes
 app.use('/api/auth', authRoutes);

@@ -69,7 +69,7 @@ const ProviderDashboard: React.FC = () => {
         params.append('search', searchTerm);
       }
 
-      const response = await axios.get(`http://localhost:5000/api/profiles/talents?${params}`);
+      const response = await axios.get(`http://localhost:5001/api/profiles/talents?${params}`);
       setTalents(response.data.profiles);
       setTotalPages(response.data.pagination.total);
     } catch (error) {
@@ -91,7 +91,7 @@ const ProviderDashboard: React.FC = () => {
 
   const handleInvite = async (talentId: string, inviteData: any) => {
     try {
-      await axios.post('http://localhost:5000/api/interviews/invite', {
+      await axios.post('http://localhost:5001/api/interviews/invite', {
         talentId,
         ...inviteData
       });
