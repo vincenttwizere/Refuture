@@ -33,7 +33,7 @@ import SignupForm from './components/auth/SignupForm'
 import RefugeeDashboard from './components/dashboard/RefugeeDashboard'
 import ProviderDashboard from './components/dashboard/ProviderDashboard'
 import AdminDashboard from './components/dashboard/AdminDashboard'
-import CreateProfile from './components/dashboard/CreateProfile'
+import CreateProfile from './components/profiles/CreateProfile'
 
 function AppRouter() {
   return (

@@ -86,9 +86,9 @@ const ProviderDashboard = () => {
   const renderMenuItem = (item) => {
     const Icon = item.icon;
     const isActive = activeItem === item.id;
-    return (
+  return (
       <div key={item.id} className="mb-1">
-        <button
+              <button
           onClick={() => setActiveItem(item.id)}
           className={`w-full flex items-center justify-between px-3 py-2 text-left text-sm rounded-lg transition-colors ${
             isActive 
@@ -106,7 +106,7 @@ const ProviderDashboard = () => {
             </span>
           )}
         </button>
-      </div>
+        </div>
     );
   };
 
@@ -119,7 +119,7 @@ const ProviderDashboard = () => {
             <div className="bg-blue-50 p-4 rounded-lg">
               <h3 className="font-medium text-blue-900">Active Opportunities</h3>
               <p className="text-2xl font-bold text-blue-600 mt-2">8</p>
-            </div>
+              </div>
             <div className="bg-green-50 p-4 rounded-lg">
               <h3 className="font-medium text-green-900">Total Applications</h3>
               <p className="text-2xl font-bold text-green-600 mt-2">156</p>
@@ -127,32 +127,32 @@ const ProviderDashboard = () => {
             <div className="bg-purple-50 p-4 rounded-lg">
               <h3 className="font-medium text-purple-900">Pending Review</h3>
               <p className="text-2xl font-bold text-purple-600 mt-2">12</p>
-            </div>
+          </div>
             <div className="bg-orange-50 p-4 rounded-lg">
               <h3 className="font-medium text-orange-900">Successful Placements</h3>
               <p className="text-2xl font-bold text-orange-600 mt-2">23</p>
-            </div>
+        </div>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
               <h3 className="font-medium text-gray-900 mb-3">Recent Applications</h3>
               <div className="space-y-2">
                 <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                  <div>
+                    <div>
                     <p className="font-medium text-sm">Software Engineer Position</p>
                     <p className="text-xs text-gray-500">3 new applications</p>
-                  </div>
+                    </div>
                   <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">New</span>
-                </div>
+                    </div>
                 <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                   <div>
                     <p className="font-medium text-sm">Computer Science Scholarship</p>
                     <p className="text-xs text-gray-500">5 new applications</p>
                   </div>
                   <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded">Review</span>
-                </div>
-              </div>
-            </div>
+                    </div>
+                        </div>
+                      </div>
             <div>
               <h3 className="font-medium text-gray-900 mb-3">Upcoming Interviews</h3>
               <div className="space-y-2">
@@ -173,7 +173,7 @@ const ProviderDashboard = () => {
               </div>
             </div>
           </div>
-        </div>
+          </div>
       );
     }
     if (subItems[activeItem]) {
@@ -185,11 +185,11 @@ const ProviderDashboard = () => {
               <div className="font-medium text-gray-900">{sub.label}</div>
               {sub.badge && (
                 <span className="ml-auto bg-red-100 text-red-800 text-xs font-medium px-2 py-1 rounded-full">{sub.badge}</span>
-              )}
-            </div>
+        )}
+      </div>
           ))}
-        </div>
-      );
+    </div>
+  );
     }
     return <div className="text-gray-500">Select a section to view details.</div>;
   };
@@ -202,7 +202,7 @@ const ProviderDashboard = () => {
         <div className="p-6 border-b border-gray-200">
           <h1 className="text-xl font-bold text-gray-900">Provider Dashboard</h1>
           <p className="text-sm text-gray-600 mt-1">Discover talent, post opportunities</p>
-        </div>
+            </div>
 
         {/* Navigation */}
         <nav className="p-4">
@@ -219,7 +219,7 @@ const ProviderDashboard = () => {
             Logout
           </span>
         </button>
-      </div>
+            </div>
 
       {/* Main Content Area */}
       <div className="flex-1 p-8">
@@ -233,7 +233,7 @@ const ProviderDashboard = () => {
             <div className="text-gray-600">
               {renderMainContent()}
             </div>
-          </div>
+            </div>
         </div>
       </div>
     </div>

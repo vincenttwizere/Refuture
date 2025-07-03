@@ -20,24 +20,35 @@ const LoginForm = () => {
     setError('');
     try {
       const result = await login(email, password);
-      if (result.success && result.redirectTo) {
-        // Fetch user from AuthContext after login
-        const user = JSON.parse(localStorage.getItem('user')) || null;
-        // If user is refugee, check for profile
+      if (result.success) {
+        // Get the user data from the login response
+        const user = result.user || JSON.parse(localStorage.getItem('user')) || null;
+        
+        // If user is refugee, check for existing profile
         if (user && user.role === 'refugee') {
-          const profileRes = await axios.get(`http://localhost:5001/api/profiles?email=${user.email}`);
-          if (profileRes.data.profiles && profileRes.data.profiles.length > 0) {
-            navigate('/refugee-dashboard');
-          } else {
+          try {
+            const profileRes = await axios.get(`http://localhost:5001/api/profiles?email=${user.email}`);
+            if (profileRes.data.profiles && profileRes.data.profiles.length > 0) {
+              // User has a profile, go directly to dashboard
+              navigate('/refugee-dashboard');
+            } else {
+              // User doesn't have a profile, go to create profile form
+              navigate('/create-profile');
+            }
+          } catch (profileError) {
+            console.error('Error checking profile:', profileError);
+            // If we can't check the profile, default to create profile form
             navigate('/create-profile');
           }
         } else {
-          navigate(result.redirectTo);
+          // For non-refugee users, use the default redirect
+          navigate(result.redirectTo || '/');
         }
       } else {
         setError(result.message || 'Login failed');
       }
     } catch (err) {
+      console.error('Login error:', err);
       setError('An unexpected error occurred.');
     }
     setLoading(false);

@@ -49,7 +49,7 @@ export const AuthProvider = ({ children }) => {
       setToken(newToken);
       setUser(userData);
 
-      return { success: true, redirectTo };
+      return { success: true, redirectTo, user: userData };
     } catch (error) {
       if (error.response) {
         const message = error.response.data?.message || 'Login failed';
