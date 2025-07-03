@@ -3,7 +3,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { Eye, EyeOff, Mail, Lock } from 'lucide-react';
 
-const LoginForm: React.FC = () => {
+const LoginForm = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -13,19 +13,20 @@ const LoginForm: React.FC = () => {
   const { login } = useAuth();
   const navigate = useNavigate();
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
     setError('');
-
-    const result = await login(email, password);
-    
-    if (result.success && result.redirectTo) {
-      navigate(result.redirectTo);
-    } else {
-      setError(result.message || 'Login failed');
+    try {
+      const result = await login(email, password);
+      if (result.success && result.redirectTo) {
+        navigate(result.redirectTo);
+      } else {
+        setError(result.message || 'Login failed');
+      }
+    } catch (err) {
+      setError('An unexpected error occurred.');
     }
-    
     setLoading(false);
   };
 

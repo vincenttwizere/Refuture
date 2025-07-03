@@ -1,7 +1,7 @@
 import React from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 
-const AdminDashboard: React.FC = () => {
+const AdminDashboard = () => {
   const { user, logout } = useAuth();
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center">

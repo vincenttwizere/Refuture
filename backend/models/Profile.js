@@ -1,39 +1,56 @@
 import mongoose from 'mongoose';
 
 const ProfileSchema = new mongoose.Schema({
-  user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, unique: true },
-  fullName: { type: String, required: true },
-  age: { type: Number },
-  gender: { type: String },
-  nationality: { type: String },
-  currentLocation: { type: String },
-  contactEmail: { type: String, required: true },
-  academic: {
-    highestLevel: String,
-    institution: String,
-    yearOfCompletion: String,
-    performance: String,
-    certificates: [String],
+  option: {
+    type: String,
+    enum: ['student', 'job seeker', 'undocumented_talent'],
+    required: true
   },
-  skills: [String],
-  languages: [String],
-  technicalSkills: [String],
-  experience: [
-    {
-      role: String,
-      project: String,
-      organization: String,
-      duration: String,
-      portfolio: String,
-    }
-  ],
-  personalStatement: {
-    bio: String,
-    vision: String,
-    motivation: String,
+  fullName: {
+    type: String,
+    required: true
   },
-  tags: [String],
-  isPublic: { type: Boolean, default: false },
+  age: {
+    type: Number,
+    required: true
+  },
+  gender: {
+    type: String,
+    enum: ['male', 'female', 'other'],
+    required: true
+  },
+  nationality: {
+    type: String,
+    required: true
+  },
+  currentLocation: {
+    type: String,
+    required: true
+  },
+  email: {
+    type: String,
+    required: true,
+    unique: true
+  },
+  skills: {
+    type: [String],
+    default: []
+  },
+  language: {
+    type: [String],
+    default: []
+  },
+  tags: {
+    type: [String],
+    default: []
+  },
+  document: {
+    type: String 
+  },
+  isPublic: {
+    type: Boolean,
+    default: false
+  }
 }, { timestamps: true });
 
-export default mongoose.model('Profile', ProfileSchema); 
+export default mongoose.model('ProfileModel', ProfileSchema);

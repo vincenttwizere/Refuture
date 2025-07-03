@@ -3,14 +3,14 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { Eye, EyeOff, Mail, Lock, User, Users, GraduationCap } from 'lucide-react';
 
-const SignupForm: React.FC = () => {
+const SignupForm = () => {
   const [formData, setFormData] = useState({
     firstName: '',
     lastName: '',
     email: '',
     password: '',
     confirmPassword: '',
-    role: 'refugee' as 'refugee' | 'provider' | 'admin'
+    role: 'refugee'
   });
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
@@ -20,41 +20,40 @@ const SignupForm: React.FC = () => {
   const { signup } = useAuth();
   const navigate = useNavigate();
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+  const handleChange = (e) => {
     setFormData({
       ...formData,
       [e.target.name]: e.target.value
     });
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
     setError('');
-
     // Validate passwords match
     if (formData.password !== formData.confirmPassword) {
       setError('Passwords do not match');
       setLoading(false);
       return;
     }
-
     // Validate password length
     if (formData.password.length < 6) {
       setError('Password must be at least 6 characters long');
       setLoading(false);
       return;
     }
-
     const { confirmPassword, ...signupData } = formData;
-    const result = await signup(signupData);
-    
-    if (result.success && result.redirectTo) {
-      navigate(result.redirectTo);
-    } else {
-      setError(result.message || 'Signup failed');
+    try {
+      const result = await signup(signupData);
+      if (result.success && result.redirectTo) {
+        navigate(result.redirectTo);
+      } else {
+        setError(result.message || 'Signup failed');
+      }
+    } catch (err) {
+      setError('An unexpected error occurred.');
     }
-    
     setLoading(false);
   };
 

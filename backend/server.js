@@ -3,9 +3,8 @@ import mongoose from 'mongoose';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import authRoutes from './routes/auth.js';
-import profileRoutes from './routes/profiles.js';
 import interviewRoutes from './routes/interviews.js';
-
+import profileRoutes from './routes/profileRoutes.js';
 dotenv.config();
 
 const app = express();
@@ -27,8 +26,8 @@ mongoose.connect(MONGODB_URI)
 
 // Routes
 app.use('/api/auth', authRoutes);
-app.use('/api/profiles', profileRoutes);
 app.use('/api/interviews', interviewRoutes);
+app.use('/api/profiles', profileRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

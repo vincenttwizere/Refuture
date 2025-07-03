@@ -1,53 +1,11 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect } from 'react';
 import axios from 'axios';
 
-interface User {
-  _id: string;
-  email: string;
-  firstName: string;
-  lastName: string;
-  role: 'refugee' | 'provider' | 'admin';
-  hasProfile: boolean;
-  isActive: boolean;
-  createdAt: string;
-  lastLogin?: string;
-}
+const AuthContext = createContext();
 
-interface AuthContextType {
-  user: User | null;
-  token: string | null;
-  login: (email: string, password: string) => Promise<{ success: boolean; redirectTo?: string; message?: string }>;
-  signup: (userData: SignupData) => Promise<{ success: boolean; redirectTo?: string; message?: string }>;
-  logout: () => void;
-  loading: boolean;
-  isAuthenticated: boolean;
-}
-
-interface SignupData {
-  email: string;
-  password: string;
-  firstName: string;
-  lastName: string;
-  role: 'refugee' | 'provider' | 'admin';
-}
-
-const AuthContext = createContext<AuthContextType | undefined>(undefined);
-
-export const useAuth = () => {
-  const context = useContext(AuthContext);
-  if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
-  return context;
-};
-
-interface AuthProviderProps {
-  children: ReactNode;
-}
-
-export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
-  const [user, setUser] = useState<User | null>(null);
-  const [token, setToken] = useState<string | null>(localStorage.getItem('token'));
+export const AuthProvider = ({ children }) => {
+  const [user, setUser] = useState(null);
+  const [token, setToken] = useState(localStorage.getItem('token'));
   const [loading, setLoading] = useState(true);
 
   // Set up axios defaults
@@ -78,7 +36,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     checkAuth();
   }, [token]);
 
-  const login = async (email: string, password: string) => {
+  const login = async (email, password) => {
     try {
       const response = await axios.post('http://localhost:5001/api/auth/login', {
         email,
@@ -92,13 +50,19 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       setUser(userData);
 
       return { success: true, redirectTo };
-    } catch (error: any) {
-      const message = error.response?.data?.message || 'Login failed';
-      return { success: false, message };
+    } catch (error) {
+      if (error.response) {
+        const message = error.response.data?.message || 'Login failed';
+        return { success: false, message };
+      } else if (error.request) {
+        return { success: false, message: 'Unable to reach server. Please try again later.' };
+      } else {
+        return { success: false, message: 'An unexpected error occurred.' };
+      }
     }
   };
 
-  const signup = async (userData: SignupData) => {
+  const signup = async (userData) => {
     try {
       const response = await axios.post('http://localhost:5001/api/auth/signup', userData);
       
@@ -109,9 +73,15 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       setUser(newUser);
 
       return { success: true, redirectTo };
-    } catch (error: any) {
-      const message = error.response?.data?.message || 'Signup failed';
-      return { success: false, message };
+    } catch (error) {
+      if (error.response) {
+        const message = error.response.data?.message || 'Signup failed';
+        return { success: false, message };
+      } else if (error.request) {
+        return { success: false, message: 'Unable to reach server. Please try again later.' };
+      } else {
+        return { success: false, message: 'An unexpected error occurred.' };
+      }
     }
   };
 
@@ -122,7 +92,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     delete axios.defaults.headers.common['Authorization'];
   };
 
-  const value: AuthContextType = {
+  const value = {
     user,
     token,
     login,
@@ -137,4 +107,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       {children}
     </AuthContext.Provider>
   );
+};
+
+export const useAuth = () => {
+  const context = useContext(AuthContext);
+  if (context === undefined) {
+    throw new Error('useAuth must be used within an AuthProvider');
+  }
+  return context;
 }; 

@@ -84,7 +84,7 @@ function AppRouter() {
 }
 
 // Protected route component
-function ProtectedRoute({ children, role }: { children: React.ReactNode; role?: string }) {
+function ProtectedRoute({ children, role }) {
   const { user, loading, isAuthenticated } = useAuth()
   if (loading) return <div className="min-h-screen flex items-center justify-center">Loading...</div>
   if (!isAuthenticated) return <Navigate to="/login" replace />
