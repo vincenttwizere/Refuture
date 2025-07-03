@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { Eye, EyeOff, Mail, Lock } from 'lucide-react';
+import axios from 'axios';
 
 const LoginForm = () => {
   const [email, setEmail] = useState('');
@@ -20,7 +21,19 @@ const LoginForm = () => {
     try {
       const result = await login(email, password);
       if (result.success && result.redirectTo) {
-        navigate(result.redirectTo);
+        // Fetch user from AuthContext after login
+        const user = JSON.parse(localStorage.getItem('user')) || null;
+        // If user is refugee, check for profile
+        if (user && user.role === 'refugee') {
+          const profileRes = await axios.get(`http://localhost:5001/api/profiles?email=${user.email}`);
+          if (profileRes.data.profiles && profileRes.data.profiles.length > 0) {
+            navigate('/refugee-dashboard');
+          } else {
+            navigate('/create-profile');
+          }
+        } else {
+          navigate(result.redirectTo);
+        }
       } else {
         setError(result.message || 'Login failed');
       }

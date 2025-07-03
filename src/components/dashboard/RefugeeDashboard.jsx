@@ -17,8 +17,11 @@ import {
   Settings,
   HelpCircle,
   ChevronRight,
-  ChevronDown
+  ChevronDown,
+  LogOut
 } from 'lucide-react';
+import { useAuth } from '../../contexts/AuthContext';
+import { useNavigate } from 'react-router-dom';
 
 const RefugeeDashboard = () => {
   const [activeItem, setActiveItem] = useState('overview');
@@ -28,6 +31,9 @@ const RefugeeDashboard = () => {
     profile: true
   });
 
+  const { logout } = useAuth();
+  const navigate = useNavigate();
+
   const toggleSection = (section) => {
     setExpandedSections(prev => ({
       ...prev,
@@ -35,167 +41,44 @@ const RefugeeDashboard = () => {
     }));
   };
 
+  // Sidebar main categories only
   const navigationItems = [
-    {
-      id: 'overview',
-      label: 'Dashboard Overview',
-      icon: Home,
-      description: 'Quick stats, recent activities, upcoming deadlines'
-    },
-    {
-      id: 'profile',
-      label: 'My Profile',
-      icon: User,
-      isSection: true,
-      children: [
-        {
-          id: 'profile-view',
-          label: 'View Profile',
-          icon: User,
-          description: 'Public profile visibility'
-        },
-        {
-          id: 'profile-edit',
-          label: 'Edit Profile',
-          icon: FileText,
-          description: 'Personal info, skills, experience'
-        },
-        {
-          id: 'documents',
-          label: 'Documents',
-          icon: FileText,
-          description: 'CV, transcripts, certificates, motivation letters'
-        }
-      ]
-    },
-    {
-      id: 'opportunities',
-      label: 'Opportunities',
-      icon: Search,
-      isSection: true,
-      children: [
-        {
-          id: 'browse-opportunities',
-          label: 'Browse All',
-          icon: Search,
-          description: 'Search scholarships, jobs, mentorships, funding'
-        },
-        {
-          id: 'scholarships',
-          label: 'Scholarships',
-          icon: Award,
-          description: 'Educational funding opportunities'
-        },
-        {
-          id: 'jobs',
-          label: 'Job Opportunities',
-          icon: Briefcase,
-          description: 'Employment positions'
-        },
-        {
-          id: 'mentorships',
-          label: 'Mentorships',
-          icon: Users,
-          description: 'Career guidance and support'
-        },
-        {
-          id: 'funding',
-          label: 'Funding',
-          icon: DollarSign,
-          description: 'Investment and financial support'
-        }
-      ]
-    },
-    {
-      id: 'applications',
-      label: 'My Applications',
-      icon: Send,
-      isSection: true,
-      children: [
-        {
-          id: 'application-status',
-          label: 'Application Status',
-          icon: Clock,
-          description: 'Track all submitted applications'
-        },
-        {
-          id: 'saved-opportunities',
-          label: 'Saved Opportunities',
-          icon: BookOpen,
-          description: 'Bookmarked opportunities'
-        },
-        {
-          id: 'interview-schedule',
-          label: 'Interviews',
-          icon: Calendar,
-          description: 'Scheduled interviews and meetings'
-        }
-      ]
-    },
-    {
-      id: 'messages',
-      label: 'Messages',
-      icon: MessageCircle,
-      description: 'Communication with sponsors, employers, mentors',
-      badge: '3'
-    },
-    {
-      id: 'learning',
-      label: 'Learning Resources',
-      icon: BookOpen,
-      description: 'Career guidance, skill development, tutorials'
-    },
-    {
-      id: 'notifications',
-      label: 'Notifications',
-      icon: Bell,
-      description: 'Alerts, deadlines, updates',
-      badge: '5'
-    },
-    {
-      id: 'settings',
-      label: 'Settings',
-      icon: Settings,
-      description: 'Account preferences, privacy, notifications'
-    },
-    {
-      id: 'support',
-      label: 'Help & Support',
-      icon: HelpCircle,
-      description: 'FAQ, contact support, platform guide'
-    }
+    { id: 'overview', label: 'Dashboard Overview', icon: Home },
+    { id: 'profile', label: 'My Profile', icon: User },
+    { id: 'opportunities', label: 'Opportunities', icon: Search },
+    { id: 'applications', label: 'My Applications', icon: Send },
+    { id: 'messages', label: 'Messages', icon: MessageCircle, badge: '3' },
+    { id: 'learning', label: 'Learning Resources', icon: BookOpen },
+    { id: 'notifications', label: 'Notifications', icon: Bell, badge: '5' },
+    { id: 'settings', label: 'Settings', icon: Settings },
+    { id: 'support', label: 'Help & Support', icon: HelpCircle }
   ];
 
-  const renderMenuItem = (item, isChild = false) => {
+  // Subitems for each main category
+  const subItems = {
+    profile: [
+      { label: 'View Profile', icon: User },
+      { label: 'Edit Profile', icon: FileText },
+      { label: 'Documents', icon: FileText }
+    ],
+    opportunities: [
+      { label: 'Browse All', icon: Search },
+      { label: 'Scholarships', icon: Award },
+      { label: 'Job Opportunities', icon: Briefcase },
+      { label: 'Mentorships', icon: Users },
+      { label: 'Funding', icon: DollarSign }
+    ],
+    applications: [
+      { label: 'Application Status', icon: Clock },
+      { label: 'Saved Opportunities', icon: BookOpen },
+      { label: 'Interviews', icon: Calendar }
+    ]
+  };
+
+  // Sidebar rendering (no dropdowns)
+  const renderMenuItem = (item) => {
     const Icon = item.icon;
     const isActive = activeItem === item.id;
-    
-    if (item.isSection) {
-      const isExpanded = expandedSections[item.id];
-      return (
-        <div key={item.id} className="mb-2">
-          <button
-            onClick={() => toggleSection(item.id)}
-            className="w-full flex items-center justify-between px-3 py-2 text-left text-sm font-medium text-gray-700 hover:bg-gray-50 rounded-lg transition-colors"
-          >
-            <div className="flex items-center">
-              <Icon className="h-5 w-5 mr-3 text-gray-500" />
-              {item.label}
-            </div>
-            {isExpanded ? 
-              <ChevronDown className="h-4 w-4 text-gray-400" /> : 
-              <ChevronRight className="h-4 w-4 text-gray-400" />
-            }
-          </button>
-          {isExpanded && (
-            <div className="ml-4 mt-1 space-y-1">
-              {item.children.map(child => renderMenuItem(child, true))}
-            </div>
-          )}
-        </div>
-      );
-    }
-
     return (
       <div key={item.id} className="mb-1">
         <button
@@ -204,16 +87,11 @@ const RefugeeDashboard = () => {
             isActive 
               ? 'bg-blue-50 text-blue-700 border-r-2 border-blue-500' 
               : 'text-gray-700 hover:bg-gray-50'
-          } ${isChild ? 'ml-2' : ''}`}
+          }`}
         >
           <div className="flex items-center">
             <Icon className={`h-5 w-5 mr-3 ${isActive ? 'text-blue-600' : 'text-gray-500'}`} />
-            <div>
-              <div className="font-medium">{item.label}</div>
-              {item.description && (
-                <div className="text-xs text-gray-500 mt-0.5">{item.description}</div>
-              )}
-            </div>
+            <div className="font-medium">{item.label}</div>
           </div>
           {item.badge && (
             <span className="bg-red-100 text-red-800 text-xs font-medium px-2 py-1 rounded-full">
@@ -223,6 +101,61 @@ const RefugeeDashboard = () => {
         </button>
       </div>
     );
+  };
+
+  // Main content area: show subitems for selected category
+  const renderMainContent = () => {
+    if (activeItem === 'overview') {
+      return (
+        <div className="space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="bg-blue-50 p-4 rounded-lg">
+              <h3 className="font-medium text-blue-900">Active Applications</h3>
+              <p className="text-2xl font-bold text-blue-600 mt-2">5</p>
+            </div>
+            <div className="bg-green-50 p-4 rounded-lg">
+              <h3 className="font-medium text-green-900">Interviews Scheduled</h3>
+              <p className="text-2xl font-bold text-green-600 mt-2">2</p>
+            </div>
+            <div className="bg-purple-50 p-4 rounded-lg">
+              <h3 className="font-medium text-purple-900">New Opportunities</h3>
+              <p className="text-2xl font-bold text-purple-600 mt-2">8</p>
+            </div>
+          </div>
+          <div>
+            <h3 className="font-medium text-gray-900 mb-3">Recent Activity</h3>
+            <div className="space-y-2">
+              <div className="flex items-center text-sm">
+                <div className="w-2 h-2 bg-blue-500 rounded-full mr-3"></div>
+                <span>New scholarship opportunity matches your profile</span>
+                <span className="text-gray-500 ml-auto">2 hours ago</span>
+              </div>
+              <div className="flex items-center text-sm">
+                <div className="w-2 h-2 bg-green-500 rounded-full mr-3"></div>
+                <span>Interview scheduled with Tech Corp</span>
+                <span className="text-gray-500 ml-auto">1 day ago</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+    if (subItems[activeItem]) {
+      return (
+        <div className="flex flex-row flex-wrap gap-4">
+          {subItems[activeItem].map((sub, idx) => (
+            <div key={idx} className="flex items-center p-4 bg-white rounded-lg shadow border border-gray-100 min-w-[220px]">
+              <sub.icon className="h-6 w-6 text-blue-500 mr-4" />
+              <div className="font-medium text-gray-900">{sub.label}</div>
+              {sub.badge && (
+                <span className="ml-auto bg-red-100 text-red-800 text-xs font-medium px-2 py-1 rounded-full">{sub.badge}</span>
+              )}
+            </div>
+          ))}
+        </div>
+      );
+    }
+    return <div className="text-gray-500">Select a section to view details.</div>;
   };
 
   return (
@@ -238,26 +171,16 @@ const RefugeeDashboard = () => {
         {/* Navigation */}
         <nav className="p-4">
           {navigationItems.map(item => renderMenuItem(item))}
+          <button
+            onClick={() => { logout(); navigate('/'); }}
+            className="w-full flex items-center justify-between px-3 py-2 text-left text-sm rounded-lg transition-colors text-gray-700 hover:bg-gray-100 mt-4 border-t border-gray-200"
+          >
+            <span className="flex items-center">
+              <LogOut className="h-5 w-5 mr-3 text-gray-500" />
+              Logout
+            </span>
+          </button>
         </nav>
-
-        {/* Quick Stats */}
-        <div className="p-4 border-t border-gray-200">
-          <h3 className="text-sm font-medium text-gray-700 mb-3">Quick Stats</h3>
-          <div className="space-y-2">
-            <div className="flex justify-between text-sm">
-              <span className="text-gray-600">Applications Submitted</span>
-              <span className="font-medium">12</span>
-            </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-gray-600">Profile Views</span>
-              <span className="font-medium">47</span>
-            </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-gray-600">Saved Opportunities</span>
-              <span className="font-medium">8</span>
-            </div>
-          </div>
-        </div>
       </div>
 
       {/* Main Content Area */}
@@ -270,42 +193,7 @@ const RefugeeDashboard = () => {
                'Dashboard Overview'}
             </h2>
             <div className="text-gray-600">
-              {activeItem === 'overview' && (
-                <div className="space-y-6">
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div className="bg-blue-50 p-4 rounded-lg">
-                      <h3 className="font-medium text-blue-900">Active Applications</h3>
-                      <p className="text-2xl font-bold text-blue-600 mt-2">5</p>
-                    </div>
-                    <div className="bg-green-50 p-4 rounded-lg">
-                      <h3 className="font-medium text-green-900">Interviews Scheduled</h3>
-                      <p className="text-2xl font-bold text-green-600 mt-2">2</p>
-                    </div>
-                    <div className="bg-purple-50 p-4 rounded-lg">
-                      <h3 className="font-medium text-purple-900">New Opportunities</h3>
-                      <p className="text-2xl font-bold text-purple-600 mt-2">8</p>
-                    </div>
-                  </div>
-                  <div>
-                    <h3 className="font-medium text-gray-900 mb-3">Recent Activity</h3>
-                    <div className="space-y-2">
-                      <div className="flex items-center text-sm">
-                        <div className="w-2 h-2 bg-blue-500 rounded-full mr-3"></div>
-                        <span>New scholarship opportunity matches your profile</span>
-                        <span className="text-gray-500 ml-auto">2 hours ago</span>
-                      </div>
-                      <div className="flex items-center text-sm">
-                        <div className="w-2 h-2 bg-green-500 rounded-full mr-3"></div>
-                        <span>Interview scheduled with Tech Corp</span>
-                        <span className="text-gray-500 ml-auto">1 day ago</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-              {activeItem !== 'overview' && (
-                <p>This section would contain the detailed content for the selected navigation item.</p>
-              )}
+              {renderMainContent()}
             </div>
           </div>
         </div>
