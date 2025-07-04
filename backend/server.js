@@ -9,6 +9,8 @@ import authRoutes from './routes/auth.js';
 import profileRoutes from './routes/profileRoutes.js';
 import opportunityRoutes from './routes/opportunityRoutes.js';
 import interviewRoutes from './routes/interviews.js';
+import notificationRoutes from './routes/notificationRoutes.js';
+import messageRoutes from './routes/messageRoutes.js';
 
 dotenv.config();
 
@@ -31,6 +33,8 @@ app.use('/api/auth', authRoutes);
 app.use('/api/profiles', profileRoutes);
 app.use('/api/opportunities', opportunityRoutes);
 app.use('/api/interviews', interviewRoutes);
+app.use('/api/notifications', notificationRoutes);
+app.use('/api/messages', messageRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

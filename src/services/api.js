@@ -86,4 +86,18 @@ export const healthAPI = {
   check: () => api.get('/health'),
 };
 
+export const notificationsAPI = {
+  getAll: () => api.get('/notifications'),
+  create: (data) => api.post('/notifications', data),
+  markAsRead: (id) => api.put(`/notifications/${id}/read`),
+  delete: (id) => api.delete(`/notifications/${id}`)
+};
+
+export const messagesAPI = {
+  getAll: () => api.get('/messages'),
+  send: (data) => api.post('/messages', data),
+  markAsRead: (id) => api.put(`/messages/${id}/read`),
+  delete: (id) => api.delete(`/messages/${id}`)
+};
+
 export default api; 

@@ -21,13 +21,18 @@ import {
   LogOut,
   AlertCircle,
   MapPin,
-  Eye
+  Eye,
+  Filter
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { useOpportunities } from '../../hooks/useOpportunities';
 import { useInterviews } from '../../hooks/useInterviews';
-import { useProfile } from '../../hooks/useProfiles';
+import { useProfiles } from '../../hooks/useProfiles';
+import { useNotifications } from '../../hooks/useNotifications';
+import { useMessages } from '../../hooks/useMessages';
+import ProfileView from '../profiles/ProfileView';
+import CreateProfile from '../profiles/CreateProfile';
 
 const RefugeeDashboard = () => {
   const [activeItem, setActiveItem] = useState('overview');
@@ -36,8 +41,10 @@ const RefugeeDashboard = () => {
     applications: true,
     profile: true
   });
+  const [opportunityType, setOpportunityType] = useState('all');
+  const [profileMode, setProfileMode] = useState('view');
 
-  const { logout, user } = useAuth();
+  const { logout, user, loading } = useAuth();
   const navigate = useNavigate();
 
   // Fetch real data from API
@@ -54,10 +61,18 @@ const RefugeeDashboard = () => {
   } = useInterviews('refugee');
 
   const { 
-    profile, 
+    profiles, 
     loading: profileLoading, 
     error: profileError 
-  } = useProfile(user?.profileId);
+  } = useProfiles({ email: user?.email });
+  const profile = profiles && profiles.length > 0 ? profiles[0] : null;
+
+  const { notifications } = useNotifications();
+  const { messages } = useMessages();
+
+  // Defensive loading state (must be after all hooks)
+  if (loading) return <div className="min-h-screen flex items-center justify-center">Loading user...</div>;
+  if (!user) return <div className="min-h-screen flex items-center justify-center text-red-600">User not found. Please log in again.</div>;
 
   const toggleSection = (section) => {
     setExpandedSections(prev => ({
@@ -72,9 +87,9 @@ const RefugeeDashboard = () => {
     { id: 'profile', label: 'My Profile', icon: User },
     { id: 'opportunities', label: 'Opportunities', icon: Search },
     { id: 'applications', label: 'My Applications', icon: Send },
-    { id: 'messages', label: 'Messages', icon: MessageCircle, badge: '3' },
+    { id: 'messages', label: 'Messages', icon: MessageCircle },
     { id: 'learning', label: 'Learning Resources', icon: BookOpen },
-    { id: 'notifications', label: 'Notifications', icon: Bell, badge: '5' },
+    { id: 'notifications', label: 'Notifications', icon: Bell },
     { id: 'settings', label: 'Settings', icon: Settings },
     { id: 'support', label: 'Help & Support', icon: HelpCircle }
   ];
@@ -218,8 +233,37 @@ const RefugeeDashboard = () => {
       );
     }
     if (activeItem === 'opportunities') {
+      // Opportunity type tabs
+      const typeTabs = [
+        { label: 'All', value: 'all' },
+        { label: 'Scholarships', value: 'scholarship' },
+        { label: 'Jobs', value: 'job' },
+        { label: 'Internships', value: 'internship' },
+        { label: 'Mentorships', value: 'mentorship' },
+        { label: 'Funding', value: 'funding' }
+      ];
+      // Filtered opportunities
+      const filteredOpportunities = opportunityType === 'all'
+        ? opportunities
+        : opportunities.filter(opp => opp.type === opportunityType);
       return (
         <div className="space-y-6">
+          {/* Tabs/Filters */}
+          <div className="flex space-x-2 mb-4">
+            {typeTabs.map(tab => (
+              <button
+                key={tab.value}
+                className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
+                  opportunityType === tab.value
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-gray-100 text-gray-700 hover:bg-blue-50'
+                }`}
+                onClick={() => setOpportunityType(tab.value)}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
           {/* Error Display */}
           {opportunitiesError && (
             <div className="bg-red-50 border border-red-200 rounded-lg p-4">
@@ -229,7 +273,6 @@ const RefugeeDashboard = () => {
               </div>
             </div>
           )}
-
           {/* Loading State */}
           {opportunitiesLoading && (
             <div className="space-y-4">
@@ -242,7 +285,6 @@ const RefugeeDashboard = () => {
               </div>
             </div>
           )}
-
           {/* Real Opportunities Display */}
           {!opportunitiesLoading && (
             <>
@@ -259,10 +301,9 @@ const RefugeeDashboard = () => {
                   </button>
                 </div>
               </div>
-
-              {opportunities.length > 0 ? (
+              {filteredOpportunities.length > 0 ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {opportunities.map((opportunity) => (
+                  {filteredOpportunities.map((opportunity) => (
                     <div key={opportunity._id} className="bg-white rounded-lg shadow border border-gray-200 p-6">
                       <div className="flex justify-between items-start mb-4">
                         <div>
@@ -273,16 +314,16 @@ const RefugeeDashboard = () => {
                           opportunity.type === 'scholarship' ? 'bg-green-100 text-green-800' :
                           opportunity.type === 'job' ? 'bg-blue-100 text-blue-800' :
                           opportunity.type === 'mentorship' ? 'bg-purple-100 text-purple-800' :
+                          opportunity.type === 'internship' ? 'bg-yellow-100 text-yellow-800' :
+                          opportunity.type === 'funding' ? 'bg-orange-100 text-orange-800' :
                           'bg-gray-100 text-gray-800'
                         }`}>
                           {opportunity.type}
                         </span>
                       </div>
-                      
                       <p className="text-sm text-gray-700 mb-4 line-clamp-2">
                         {opportunity.description}
                       </p>
-                      
                       <div className="space-y-2 mb-4">
                         <div className="flex items-center text-sm text-gray-600">
                           <MapPin className="h-4 w-4 mr-2" />
@@ -297,7 +338,6 @@ const RefugeeDashboard = () => {
                           Deadline: {new Date(opportunity.applicationDeadline).toLocaleDateString()}
                         </div>
                       </div>
-                      
                       <div className="flex space-x-2">
                         <button className="flex-1 bg-blue-600 text-white px-3 py-2 rounded text-sm hover:bg-blue-700 transition-colors">
                           <Eye className="h-4 w-4 inline mr-1" />
@@ -428,10 +468,48 @@ const RefugeeDashboard = () => {
     }
 
     if (subItems[activeItem]) {
+      // Profile section: handle view/edit
+      if (activeItem === 'profile') {
+        return (
+          <div className="w-full">
+            {profileMode === 'view' ? (
+              <ProfileView profile={profile} onEdit={() => setProfileMode('edit')} />
+            ) : (
+              <CreateProfile />
+            )}
+            <div className="flex flex-row flex-wrap gap-4 mt-4">
+              {subItems[activeItem].map((sub, idx) => (
+                <div
+                  key={idx}
+                  className="flex items-center p-4 bg-white rounded-lg shadow border border-gray-100 min-w-[220px] cursor-pointer hover:bg-blue-50 transition"
+                  onClick={() => {
+                    if (sub.label === 'View Profile') setProfileMode('view');
+                    if (sub.label === 'Edit Profile') setProfileMode('edit');
+                  }}
+                >
+                  <sub.icon className="h-6 w-6 text-blue-500 mr-4" />
+                  <div className="font-medium text-gray-900">{sub.label}</div>
+                  {sub.badge && (
+                    <span className="ml-auto bg-red-100 text-red-800 text-xs font-medium px-2 py-1 rounded-full">{sub.badge}</span>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      }
       return (
         <div className="flex flex-row flex-wrap gap-4">
           {subItems[activeItem].map((sub, idx) => (
-            <div key={idx} className="flex items-center p-4 bg-white rounded-lg shadow border border-gray-100 min-w-[220px]">
+            <div
+              key={idx}
+              className="flex items-center p-4 bg-white rounded-lg shadow border border-gray-100 min-w-[220px] cursor-pointer hover:bg-blue-50 transition"
+              onClick={() => {
+                if (activeItem === 'profile' && (sub.label === 'View Profile' || sub.label === 'Edit Profile')) {
+                  navigate('/create-profile');
+                }
+              }}
+            >
               <sub.icon className="h-6 w-6 text-blue-500 mr-4" />
               <div className="font-medium text-gray-900">{sub.label}</div>
               {sub.badge && (
@@ -447,8 +525,8 @@ const RefugeeDashboard = () => {
 
   return (
     <div className="flex h-screen bg-gray-50">
-      {/* Sidebar */}
-      <div className="w-80 bg-white shadow-lg overflow-y-auto">
+      {/* Sidebar - Fixed */}
+      <div className="w-80 bg-white shadow-lg fixed h-full overflow-y-auto">
         {/* Header */}
         <div className="p-6 border-b border-gray-200">
           <h1 className="text-xl font-bold text-gray-900">Refugee Dashboard</h1>
@@ -470,17 +548,19 @@ const RefugeeDashboard = () => {
         </nav>
       </div>
 
-      {/* Main Content Area */}
-      <div className="flex-1 p-8">
-        <div className="max-w-4xl mx-auto">
-          <div className="bg-white rounded-lg shadow-sm p-6">
-            <h2 className="text-2xl font-bold text-gray-900 mb-4">
-              {navigationItems.find(item => item.id === activeItem)?.label || 
-               navigationItems.find(item => item.children?.some(child => child.id === activeItem))?.children?.find(child => child.id === activeItem)?.label ||
-               'Dashboard Overview'}
-            </h2>
-            <div className="text-gray-600">
-              {renderMainContent()}
+      {/* Main Content Area - Scrollable */}
+      <div className="flex-1 ml-80 overflow-y-auto">
+        <div className="p-8">
+          <div className="max-w-4xl mx-auto">
+            <div className="bg-white rounded-lg shadow-sm p-6">
+              <h2 className="text-2xl font-bold text-gray-900 mb-4">
+                {navigationItems.find(item => item.id === activeItem)?.label || 
+                 navigationItems.find(item => item.children?.some(child => child.id === activeItem))?.children?.find(child => child.id === activeItem)?.label ||
+                 'Dashboard Overview'}
+              </h2>
+              <div className="text-gray-600">
+                {renderMainContent()}
+              </div>
             </div>
           </div>
         </div>

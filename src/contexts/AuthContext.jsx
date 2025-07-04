@@ -25,7 +25,7 @@ export const AuthProvider = ({ children }) => {
           const response = await axios.get('http://localhost:5001/api/auth/me');
           console.log('Auth check response:', response.data); // Debug log
           if (response.data.success && response.data.user) {
-            setUser(response.data.user);
+          setUser(response.data.user);
           } else {
             throw new Error('Invalid response format');
           }

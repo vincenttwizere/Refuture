@@ -86,7 +86,11 @@ export const useProfile = (id) => {
   const [error, setError] = useState(null);
 
   const fetchProfile = async () => {
-    if (!id) return;
+    if (!id) {
+      setLoading(false);
+      setProfile(null);
+      return;
+    }
     
     try {
       setLoading(true);

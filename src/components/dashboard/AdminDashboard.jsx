@@ -32,6 +32,8 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
+import { useNotifications } from '../../hooks/useNotifications';
+import { useMessages } from '../../hooks/useMessages';
 
 const AdminDashboard = () => {
   const [activeItem, setActiveItem] = useState('overview');
@@ -42,8 +44,14 @@ const AdminDashboard = () => {
     analytics: true
   });
 
-  const { logout } = useAuth();
+  const { logout, user, loading } = useAuth();
   const navigate = useNavigate();
+  const { notifications } = useNotifications();
+  const { messages } = useMessages();
+
+  // Defensive loading state (must be after all hooks)
+  if (loading) return <div className="min-h-screen flex items-center justify-center">Loading user...</div>;
+  if (!user) return <div className="min-h-screen flex items-center justify-center text-red-600">User not found. Please log in again.</div>;
 
   const toggleSection = (section) => {
     setExpandedSections(prev => ({
@@ -59,7 +67,7 @@ const AdminDashboard = () => {
     { id: 'content', label: 'Content Moderation', icon: FileText },
     { id: 'security', label: 'Security & Compliance', icon: Shield },
     { id: 'analytics', label: 'Analytics & Reports', icon: BarChart3 },
-    { id: 'disputes', label: 'Dispute Resolution', icon: AlertTriangle, badge: '3' },
+    { id: 'disputes', label: 'Dispute Resolution', icon: AlertTriangle },
     { id: 'communications', label: 'Communications', icon: MessageCircle },
     { id: 'notifications', label: 'System Notifications', icon: Bell },
     { id: 'settings', label: 'Platform Settings', icon: Settings },
