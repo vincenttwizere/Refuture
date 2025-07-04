@@ -18,10 +18,16 @@ import {
   HelpCircle,
   ChevronRight,
   ChevronDown,
-  LogOut
+  LogOut,
+  AlertCircle,
+  MapPin,
+  Eye
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
+import { useOpportunities } from '../../hooks/useOpportunities';
+import { useInterviews } from '../../hooks/useInterviews';
+import { useProfile } from '../../hooks/useProfiles';
 
 const RefugeeDashboard = () => {
   const [activeItem, setActiveItem] = useState('overview');
@@ -31,8 +37,27 @@ const RefugeeDashboard = () => {
     profile: true
   });
 
-  const { logout } = useAuth();
+  const { logout, user } = useAuth();
   const navigate = useNavigate();
+
+  // Fetch real data from API
+  const { 
+    opportunities, 
+    loading: opportunitiesLoading, 
+    error: opportunitiesError 
+  } = useOpportunities();
+
+  const { 
+    interviews, 
+    loading: interviewsLoading, 
+    error: interviewsError 
+  } = useInterviews('refugee');
+
+  const { 
+    profile, 
+    loading: profileLoading, 
+    error: profileError 
+  } = useProfile(user?.profileId);
 
   const toggleSection = (section) => {
     setExpandedSections(prev => ({
@@ -91,7 +116,7 @@ const RefugeeDashboard = () => {
         >
           <div className="flex items-center">
             <Icon className={`h-5 w-5 mr-3 ${isActive ? 'text-blue-600' : 'text-gray-500'}`} />
-            <div className="font-medium">{item.label}</div>
+              <div className="font-medium">{item.label}</div>
           </div>
           {item.badge && (
             <span className="bg-red-100 text-red-800 text-xs font-medium px-2 py-1 rounded-full">
@@ -106,40 +131,302 @@ const RefugeeDashboard = () => {
   // Main content area: show subitems for selected category
   const renderMainContent = () => {
     if (activeItem === 'overview') {
+      // Calculate real statistics
+      const activeApplications = interviews.filter(int => int.status === 'pending' || int.status === 'accepted').length;
+      const interviewsScheduled = interviews.filter(int => int.status === 'accepted').length;
+      const newOpportunities = opportunities.filter(opp => opp.isActive).length;
+
       return (
         <div className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="bg-blue-50 p-4 rounded-lg">
-              <h3 className="font-medium text-blue-900">Active Applications</h3>
-              <p className="text-2xl font-bold text-blue-600 mt-2">5</p>
-            </div>
-            <div className="bg-green-50 p-4 rounded-lg">
-              <h3 className="font-medium text-green-900">Interviews Scheduled</h3>
-              <p className="text-2xl font-bold text-green-600 mt-2">2</p>
-            </div>
-            <div className="bg-purple-50 p-4 rounded-lg">
-              <h3 className="font-medium text-purple-900">New Opportunities</h3>
-              <p className="text-2xl font-bold text-purple-600 mt-2">8</p>
-            </div>
-          </div>
-          <div>
-            <h3 className="font-medium text-gray-900 mb-3">Recent Activity</h3>
-            <div className="space-y-2">
-              <div className="flex items-center text-sm">
-                <div className="w-2 h-2 bg-blue-500 rounded-full mr-3"></div>
-                <span>New scholarship opportunity matches your profile</span>
-                <span className="text-gray-500 ml-auto">2 hours ago</span>
-              </div>
-              <div className="flex items-center text-sm">
-                <div className="w-2 h-2 bg-green-500 rounded-full mr-3"></div>
-                <span>Interview scheduled with Tech Corp</span>
-                <span className="text-gray-500 ml-auto">1 day ago</span>
+          {/* Error Display */}
+          {(opportunitiesError || interviewsError || profileError) && (
+            <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+              <div className="flex items-center">
+                <AlertCircle className="h-5 w-5 text-red-400 mr-2" />
+                <p className="text-red-800 text-sm">
+                  {opportunitiesError || interviewsError || profileError}
+                </p>
               </div>
             </div>
-          </div>
+          )}
+
+          {/* Loading State */}
+          {(opportunitiesLoading || interviewsLoading || profileLoading) && (
+            <div className="space-y-4">
+              <div className="animate-pulse">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {[1, 2, 3].map(i => (
+                    <div key={i} className="bg-gray-200 p-4 rounded-lg h-20"></div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Real Data Display */}
+          {!opportunitiesLoading && !interviewsLoading && !profileLoading && (
+            <>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="bg-blue-50 p-4 rounded-lg">
+                  <h3 className="font-medium text-blue-900">Active Applications</h3>
+                  <p className="text-2xl font-bold text-blue-600 mt-2">{activeApplications}</p>
+                </div>
+                <div className="bg-green-50 p-4 rounded-lg">
+                  <h3 className="font-medium text-green-900">Interviews Scheduled</h3>
+                  <p className="text-2xl font-bold text-green-600 mt-2">{interviewsScheduled}</p>
+                </div>
+                <div className="bg-purple-50 p-4 rounded-lg">
+                  <h3 className="font-medium text-purple-900">Available Opportunities</h3>
+                  <p className="text-2xl font-bold text-purple-600 mt-2">{newOpportunities}</p>
+                </div>
+              </div>
+              
+              <div>
+                <h3 className="font-medium text-gray-900 mb-3">Recent Activity</h3>
+                <div className="space-y-2">
+                  {interviews.slice(0, 3).map((interview) => (
+                    <div key={interview._id} className="flex items-center text-sm">
+                      <div className={`w-2 h-2 rounded-full mr-3 ${
+                        interview.status === 'pending' ? 'bg-yellow-500' :
+                        interview.status === 'accepted' ? 'bg-green-500' :
+                        interview.status === 'declined' ? 'bg-red-500' :
+                        'bg-blue-500'
+                      }`}></div>
+                      <span>
+                        {interview.status === 'pending' ? 'Interview invitation received from ' :
+                         interview.status === 'accepted' ? 'Interview accepted with ' :
+                         interview.status === 'declined' ? 'Interview declined with ' :
+                         'Interview with '}
+                        {interview.providerId?.firstName} {interview.providerId?.lastName}
+                      </span>
+                      <span className="text-gray-500 ml-auto">
+                        {new Date(interview.createdAt).toLocaleDateString()}
+                      </span>
+                    </div>
+                  ))}
+                  {interviews.length === 0 && (
+                    <div className="text-center py-8 text-gray-500">
+                      <MessageCircle className="h-12 w-12 mx-auto mb-2 text-gray-300" />
+                      <p>No recent activity</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </>
+          )}
         </div>
       );
     }
+    if (activeItem === 'opportunities') {
+      return (
+        <div className="space-y-6">
+          {/* Error Display */}
+          {opportunitiesError && (
+            <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+              <div className="flex items-center">
+                <AlertCircle className="h-5 w-5 text-red-400 mr-2" />
+                <p className="text-red-800 text-sm">{opportunitiesError}</p>
+              </div>
+            </div>
+          )}
+
+          {/* Loading State */}
+          {opportunitiesLoading && (
+            <div className="space-y-4">
+              <div className="animate-pulse">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {[1, 2, 3, 4, 5, 6].map(i => (
+                    <div key={i} className="bg-gray-200 p-6 rounded-lg h-32"></div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Real Opportunities Display */}
+          {!opportunitiesLoading && (
+            <>
+              <div className="flex justify-between items-center">
+                <h3 className="text-lg font-semibold text-gray-900">Available Opportunities</h3>
+                <div className="flex space-x-2">
+                  <button className="bg-gray-100 text-gray-700 px-3 py-2 rounded-lg text-sm hover:bg-gray-200 transition-colors">
+                    <Filter className="h-4 w-4 inline mr-1" />
+                    Filter
+                  </button>
+                  <button className="bg-blue-600 text-white px-3 py-2 rounded-lg text-sm hover:bg-blue-700 transition-colors">
+                    <Search className="h-4 w-4 inline mr-1" />
+                    Search
+                  </button>
+                </div>
+              </div>
+
+              {opportunities.length > 0 ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {opportunities.map((opportunity) => (
+                    <div key={opportunity._id} className="bg-white rounded-lg shadow border border-gray-200 p-6">
+                      <div className="flex justify-between items-start mb-4">
+                        <div>
+                          <h4 className="font-semibold text-gray-900 mb-1">{opportunity.title}</h4>
+                          <p className="text-sm text-gray-600">{opportunity.providerName}</p>
+                        </div>
+                        <span className={`text-xs px-2 py-1 rounded-full ${
+                          opportunity.type === 'scholarship' ? 'bg-green-100 text-green-800' :
+                          opportunity.type === 'job' ? 'bg-blue-100 text-blue-800' :
+                          opportunity.type === 'mentorship' ? 'bg-purple-100 text-purple-800' :
+                          'bg-gray-100 text-gray-800'
+                        }`}>
+                          {opportunity.type}
+                        </span>
+                      </div>
+                      
+                      <p className="text-sm text-gray-700 mb-4 line-clamp-2">
+                        {opportunity.description}
+                      </p>
+                      
+                      <div className="space-y-2 mb-4">
+                        <div className="flex items-center text-sm text-gray-600">
+                          <MapPin className="h-4 w-4 mr-2" />
+                          {opportunity.location}
+                        </div>
+                        <div className="flex items-center text-sm text-gray-600">
+                          <Briefcase className="h-4 w-4 mr-2" />
+                          {opportunity.category}
+                        </div>
+                        <div className="flex items-center text-sm text-gray-600">
+                          <Clock className="h-4 w-4 mr-2" />
+                          Deadline: {new Date(opportunity.applicationDeadline).toLocaleDateString()}
+                        </div>
+                      </div>
+                      
+                      <div className="flex space-x-2">
+                        <button className="flex-1 bg-blue-600 text-white px-3 py-2 rounded text-sm hover:bg-blue-700 transition-colors">
+                          <Eye className="h-4 w-4 inline mr-1" />
+                          View Details
+                        </button>
+                        <button className="flex-1 bg-gray-50 text-gray-700 px-3 py-2 rounded text-sm hover:bg-gray-100 transition-colors">
+                          <BookOpen className="h-4 w-4 inline mr-1" />
+                          Save
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-12">
+                  <Search className="h-16 w-16 mx-auto mb-4 text-gray-300" />
+                  <h3 className="text-lg font-medium text-gray-900 mb-2">No opportunities available</h3>
+                  <p className="text-gray-600 mb-6">Check back later for new opportunities that match your profile</p>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      );
+    }
+
+    if (activeItem === 'messages') {
+      return (
+        <div className="space-y-6">
+          {/* Error Display */}
+          {interviewsError && (
+            <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+              <div className="flex items-center">
+                <AlertCircle className="h-5 w-5 text-red-400 mr-2" />
+                <p className="text-red-800 text-sm">{interviewsError}</p>
+              </div>
+            </div>
+          )}
+
+          {/* Loading State */}
+          {interviewsLoading && (
+            <div className="space-y-4">
+              <div className="animate-pulse">
+                <div className="space-y-4">
+                  {[1, 2, 3].map(i => (
+                    <div key={i} className="bg-gray-200 p-6 rounded-lg h-24"></div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Real Messages Display */}
+          {!interviewsLoading && (
+            <>
+              <div className="flex justify-between items-center">
+                <h3 className="text-lg font-semibold text-gray-900">Interview Messages</h3>
+              </div>
+
+              {interviews.length > 0 ? (
+                <div className="space-y-4">
+                  {interviews.map((interview) => (
+                    <div key={interview._id} className="bg-white rounded-lg shadow border border-gray-200 p-6">
+                      <div className="flex justify-between items-start mb-4">
+                        <div>
+                          <h4 className="font-semibold text-gray-900 mb-1">
+                            {interview.providerId?.firstName} {interview.providerId?.lastName}
+                          </h4>
+                          <p className="text-sm text-gray-600">{interview.title}</p>
+                        </div>
+                        <span className={`text-xs px-3 py-1 rounded-full ${
+                          interview.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
+                          interview.status === 'accepted' ? 'bg-green-100 text-green-800' :
+                          interview.status === 'declined' ? 'bg-red-100 text-red-800' :
+                          'bg-gray-100 text-gray-800'
+                        }`}>
+                          {interview.status}
+                        </span>
+                      </div>
+                      
+                      <p className="text-sm text-gray-700 mb-4">
+                        {interview.description}
+                      </p>
+                      
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-4 text-sm text-gray-600">
+                          <div className="flex items-center">
+                            <Calendar className="h-4 w-4 mr-2" />
+                            {interview.scheduledDate ? new Date(interview.scheduledDate).toLocaleDateString() : 'Not scheduled'}
+                          </div>
+                          <div className="flex items-center">
+                            <MapPin className="h-4 w-4 mr-2" />
+                            {interview.location || 'Remote'}
+                          </div>
+                        </div>
+                        
+                        <div className="flex space-x-2">
+                          {interview.status === 'pending' && (
+                            <>
+                              <button className="bg-green-50 text-green-700 px-3 py-2 rounded text-sm hover:bg-green-100 transition-colors">
+                                Accept
+                              </button>
+                              <button className="bg-red-50 text-red-700 px-3 py-2 rounded text-sm hover:bg-red-100 transition-colors">
+                                Decline
+                              </button>
+                            </>
+                          )}
+                          <button className="bg-blue-50 text-blue-700 px-3 py-2 rounded text-sm hover:bg-blue-100 transition-colors">
+                            <MessageCircle className="h-4 w-4 inline mr-1" />
+                            Reply
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-12">
+                  <MessageCircle className="h-16 w-16 mx-auto mb-4 text-gray-300" />
+                  <h3 className="text-lg font-medium text-gray-900 mb-2">No messages yet</h3>
+                  <p className="text-gray-600 mb-6">When providers reach out to you, their messages will appear here</p>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      );
+    }
+
     if (subItems[activeItem]) {
       return (
         <div className="flex flex-row flex-wrap gap-4">

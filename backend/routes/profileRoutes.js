@@ -1,5 +1,5 @@
 import express from 'express';
-import upload from '../middleware/upload.js';
+import upload from '../middleware/uploadMiddleware.js';
 import { createProfile, getAllProfiles, getProfileById, updateProfile, deleteProfile } from '../controllers/profileController.js';
 
 const router = express.Router();

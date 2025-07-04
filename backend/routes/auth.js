@@ -1,6 +1,7 @@
 import express from 'express';
-import User from '../models/User.js';
-import { generateToken, authenticateToken } from '../middleware/auth.js';
+import User from '../models/UserModel.js';
+import { protect } from '../middleware/authMiddleware.js';
+import generateToken from '../utils/generateToken.js';
 
 const router = express.Router();
 
@@ -22,8 +23,9 @@ router.post('/signup', async (req, res) => {
     }
     const user = new User({ email, password, firstName, lastName, role, hasProfile: false });
     await user.save();
-    const token = generateToken(user._id, user.role);
+    const token = generateToken(user._id);
     res.status(201).json({
+      success: true,
       message: 'User created successfully',
       token,
       user: user.toPublicJSON(),
@@ -55,8 +57,9 @@ router.post('/login', async (req, res) => {
     }
     user.lastLogin = new Date();
     await user.save();
-    const token = generateToken(user._id, user.role);
+    const token = generateToken(user._id);
     res.json({
+      success: true,
       message: 'Login successful',
       token,
       user: user.toPublicJSON(),
@@ -69,9 +72,10 @@ router.post('/login', async (req, res) => {
 });
 
 // Get current user
-router.get('/me', authenticateToken, async (req, res) => {
+router.get('/me', protect, async (req, res) => {
   try {
     res.json({
+      success: true,
       user: req.user.toPublicJSON(),
       redirectTo: getRedirectPath(req.user.role, req.user.hasProfile)
     });

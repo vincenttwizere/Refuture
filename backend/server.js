@@ -1,37 +1,48 @@
 import express from 'express';
-import mongoose from 'mongoose';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import connectDB from './config/db.js';
+import errorHandler from './middleware/errorHandler.js';
+
+// Import routes
 import authRoutes from './routes/auth.js';
-import interviewRoutes from './routes/interviews.js';
 import profileRoutes from './routes/profileRoutes.js';
+import opportunityRoutes from './routes/opportunityRoutes.js';
+import interviewRoutes from './routes/interviews.js';
+
 dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 5001;
 
+// Connect to database
+connectDB();
+
 // Middleware
 app.use(cors());
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
-// MongoDB Connection
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/refuture';
-mongoose.connect(MONGODB_URI)
-  .then(() => console.log('Connected to MongoDB'))
-  .catch(err => {
-    console.error('MongoDB connection error:', err);
-    console.log('Please make sure MongoDB is installed and running');
-    console.log('You can download MongoDB from: https://www.mongodb.com/try/download/community');
-  });
+// Serve uploaded files
+app.use('/uploads', express.static('uploads'));
 
 // Routes
 app.use('/api/auth', authRoutes);
-app.use('/api/interviews', interviewRoutes);
 app.use('/api/profiles', profileRoutes);
+app.use('/api/opportunities', opportunityRoutes);
+app.use('/api/interviews', interviewRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
   res.json({ status: 'OK', message: 'Refuture API is running' });
+});
+
+// Error handling middleware
+app.use(errorHandler);
+
+// 404 handler
+app.use('*', (req, res) => {
+  res.status(404).json({ message: 'Route not found' });
 });
 
 app.listen(PORT, () => {

@@ -86,9 +86,16 @@ function AppRouter() {
 // Protected route component
 function ProtectedRoute({ children, role }) {
   const { user, loading, isAuthenticated } = useAuth()
+  
+  // Debug logging
+  console.log('ProtectedRoute:', { role, userRole: user?.role, isAuthenticated, loading });
+  
   if (loading) return <div className="min-h-screen flex items-center justify-center">Loading...</div>
   if (!isAuthenticated) return <Navigate to="/login" replace />
-  if (role && user?.role !== role) return <Navigate to="/" replace />
+  if (role && user?.role !== role) {
+    console.log('Role mismatch:', { expected: role, actual: user?.role });
+    return <Navigate to="/" replace />
+  }
   return <>{children}</>
 }
 

@@ -1,13 +1,13 @@
 import express from 'express';
 import Interview from '../models/Interview.js';
-import User from '../models/User.js';
-import Profile from '../models/Profile.js';
-import { authenticateToken, requireProvider, requireRefugee } from '../middleware/auth.js';
+import User from '../models/UserModel.js';
+import Profile from '../models/ProfileModel.js';
+import { protect } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
 
 // POST /api/interviews/invite - Send interview invitation (provider only)
-router.post('/invite', authenticateToken, requireProvider, async (req, res) => {
+router.post('/invite', protect, async (req, res) => {
   try {
     const { 
       talentId, 
@@ -91,8 +91,13 @@ router.post('/invite', authenticateToken, requireProvider, async (req, res) => {
 });
 
 // GET /api/interviews/provider - Get provider's sent invitations
-router.get('/provider', authenticateToken, requireProvider, async (req, res) => {
+router.get('/provider', protect, async (req, res) => {
   try {
+    // Check if user is a provider or admin
+    if (req.user.role !== 'provider' && req.user.role !== 'admin') {
+      return res.status(403).json({ message: 'Access denied. Provider role required.' });
+    }
+
     const { status, page = 1, limit = 10 } = req.query;
     const skip = (page - 1) * limit;
 
@@ -129,8 +134,13 @@ router.get('/provider', authenticateToken, requireProvider, async (req, res) => 
 });
 
 // GET /api/interviews/talent - Get talent's received invitations
-router.get('/talent', authenticateToken, requireRefugee, async (req, res) => {
+router.get('/talent', protect, async (req, res) => {
   try {
+    // Check if user is a refugee or admin
+    if (req.user.role !== 'refugee' && req.user.role !== 'admin') {
+      return res.status(403).json({ message: 'Access denied. Refugee role required.' });
+    }
+
     const { status, page = 1, limit = 10 } = req.query;
     const skip = (page - 1) * limit;
 
@@ -167,7 +177,7 @@ router.get('/talent', authenticateToken, requireRefugee, async (req, res) => {
 });
 
 // PUT /api/interviews/:id/respond - Respond to interview invitation (talent only)
-router.put('/:id/respond', authenticateToken, requireRefugee, async (req, res) => {
+router.put('/:id/respond', protect, async (req, res) => {
   try {
     const { status, message } = req.body;
 
@@ -216,7 +226,7 @@ router.put('/:id/respond', authenticateToken, requireRefugee, async (req, res) =
 });
 
 // GET /api/interviews/:id - Get specific interview
-router.get('/:id', authenticateToken, async (req, res) => {
+router.get('/:id', protect, async (req, res) => {
   try {
     const interview = await Interview.findById(req.params.id)
       .populate('providerId', 'firstName lastName email')
@@ -245,7 +255,7 @@ router.get('/:id', authenticateToken, async (req, res) => {
 });
 
 // PUT /api/interviews/:id - Update interview (provider only)
-router.put('/:id', authenticateToken, requireProvider, async (req, res) => {
+router.put('/:id', protect, async (req, res) => {
   try {
     const interview = await Interview.findById(req.params.id);
 

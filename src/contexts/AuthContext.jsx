@@ -23,11 +23,17 @@ export const AuthProvider = ({ children }) => {
       if (token) {
         try {
           const response = await axios.get('http://localhost:5001/api/auth/me');
-          setUser(response.data.user);
+          console.log('Auth check response:', response.data); // Debug log
+          if (response.data.success && response.data.user) {
+            setUser(response.data.user);
+          } else {
+            throw new Error('Invalid response format');
+          }
         } catch (error) {
           console.error('Auth check failed:', error);
           localStorage.removeItem('token');
           setToken(null);
+          setUser(null);
         }
       }
       setLoading(false);
@@ -43,6 +49,7 @@ export const AuthProvider = ({ children }) => {
         password
       });
 
+      console.log('Login response:', response.data); // Debug log
       const { token: newToken, user: userData, redirectTo } = response.data;
       
       localStorage.setItem('token', newToken);

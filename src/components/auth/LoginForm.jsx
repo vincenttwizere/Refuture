@@ -24,7 +24,8 @@ const LoginForm = () => {
         // Get the user data from the login response
         const user = result.user || JSON.parse(localStorage.getItem('user')) || null;
         
-        // If user is refugee, check for existing profile
+        // Route users based on their role
+        console.log('User role:', user?.role); // Debug log
         if (user && user.role === 'refugee') {
           try {
             const profileRes = await axios.get(`http://localhost:5001/api/profiles?email=${user.email}`);
@@ -40,8 +41,14 @@ const LoginForm = () => {
             // If we can't check the profile, default to create profile form
             navigate('/create-profile');
           }
+        } else if (user && user.role === 'provider') {
+          // Provider users go to provider dashboard
+          navigate('/provider-dashboard');
+        } else if (user && user.role === 'admin') {
+          // Admin users go to admin dashboard
+          navigate('/admin-dashboard');
         } else {
-          // For non-refugee users, use the default redirect
+          // For any other role or fallback, use the default redirect
           navigate(result.redirectTo || '/');
         }
       } else {
@@ -162,6 +169,31 @@ const LoginForm = () => {
               >
                 Create new account
               </button>
+            </div>
+            
+            {/* Debug links for testing */}
+            <div className="mt-4 text-center">
+              <p className="text-xs text-gray-500 mb-2">Debug Links:</p>
+              <div className="flex justify-center space-x-2">
+                <button
+                  onClick={() => navigate('/admin-dashboard')}
+                  className="text-xs text-blue-600 hover:text-blue-800"
+                >
+                  Admin Dashboard
+                </button>
+                <button
+                  onClick={() => navigate('/provider-dashboard')}
+                  className="text-xs text-blue-600 hover:text-blue-800"
+                >
+                  Provider Dashboard
+                </button>
+                <button
+                  onClick={() => navigate('/refugee-dashboard')}
+                  className="text-xs text-blue-600 hover:text-blue-800"
+                >
+                  Refugee Dashboard
+                </button>
+              </div>
             </div>
           </div>
         </div>
