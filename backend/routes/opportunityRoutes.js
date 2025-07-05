@@ -18,7 +18,7 @@ router.get('/:id', getOpportunityById);
 router.get('/provider/:providerId', getOpportunitiesByProvider);
 
 // Protected routes (Providers and Admins)
-router.post('/', protect, provider, upload.array('attachments', 5), createOpportunity);
+router.post('/', protect, upload.array('attachments', 5), createOpportunity);
 router.put('/:id', protect, upload.array('attachments', 5), updateOpportunity);
 router.delete('/:id', protect, deleteOpportunity);
 

@@ -23,7 +23,7 @@ router.post('/signup', async (req, res) => {
     }
     const user = new User({ email, password, firstName, lastName, role, hasProfile: false });
     await user.save();
-    const token = generateToken(user._id);
+    const token = generateToken(user._id, user.role);
     res.status(201).json({
       success: true,
       message: 'User created successfully',
@@ -57,7 +57,7 @@ router.post('/login', async (req, res) => {
     }
     user.lastLogin = new Date();
     await user.save();
-    const token = generateToken(user._id);
+    const token = generateToken(user._id, user.role);
     res.json({
       success: true,
       message: 'Login successful',

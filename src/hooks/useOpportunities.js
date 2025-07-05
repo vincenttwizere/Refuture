@@ -96,7 +96,7 @@ export const useOpportunities = (filters = {}) => {
         abortControllerRef.current.abort();
       }
     };
-  }, [JSON.stringify(filters), user?._id]);
+  }, [user?._id]);
 
   return {
     opportunities,

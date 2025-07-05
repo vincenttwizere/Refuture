@@ -24,7 +24,7 @@ const registerUser = async (req, res) => {
     });
 
     if (user) {
-      const token = generateToken(user._id);
+      const token = generateToken(user._id, user.role);
       
       // Determine redirect based on role
       let redirectTo = '/';
@@ -70,7 +70,7 @@ const loginUser = async (req, res) => {
     user.lastLogin = new Date();
     await user.save();
 
-    const token = generateToken(user._id);
+    const token = generateToken(user._id, user.role);
     
     // Determine redirect based on role
     let redirectTo = '/';

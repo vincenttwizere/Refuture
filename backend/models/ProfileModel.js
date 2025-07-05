@@ -47,6 +47,32 @@ const ProfileSchema = new mongoose.Schema({
   document: {
     type: String 
   },
+  photoUrl: {
+    type: String
+  },
+  education: {
+    type: [{
+      school: String,
+      degree: String,
+      field: String,
+      start: String,
+      end: String,
+      duration: String
+    }],
+    default: []
+  },
+  experience: {
+    type: [{
+      company: String,
+      title: String,
+      type: String,
+      start: String,
+      end: String,
+      duration: String,
+      description: String
+    }],
+    default: []
+  },
   isPublic: {
     type: Boolean,
     default: false

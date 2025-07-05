@@ -11,6 +11,7 @@ import opportunityRoutes from './routes/opportunityRoutes.js';
 import interviewRoutes from './routes/interviews.js';
 import notificationRoutes from './routes/notificationRoutes.js';
 import messageRoutes from './routes/messageRoutes.js';
+import userRoutes from './routes/userRoutes.js';
 
 dotenv.config();
 
@@ -35,6 +36,7 @@ app.use('/api/opportunities', opportunityRoutes);
 app.use('/api/interviews', interviewRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/messages', messageRoutes);
+app.use('/api/users', userRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

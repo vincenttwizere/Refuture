@@ -2,6 +2,14 @@ import React from 'react';
 
 const ProfileView = ({ profile, onEdit }) => {
   if (!profile) return <div className="p-8 text-gray-500">No profile found.</div>;
+  
+  // Construct full URL for profile image
+  const getProfileImageUrl = (photoUrl) => {
+    if (!photoUrl) return '/default-avatar.png';
+    if (photoUrl.startsWith('http')) return photoUrl;
+    return `http://localhost:5001/${photoUrl}`;
+  };
+
   return (
     <div className="max-w-4xl mx-auto p-6 bg-white rounded shadow mt-8">
       {/* Banner */}
@@ -12,7 +20,14 @@ const ProfileView = ({ profile, onEdit }) => {
       </div>
       {/* Profile Header */}
       <div className="flex flex-col md:flex-row items-center md:items-end mb-6">
-        <img src={profile.photoUrl || '/default-avatar.png'} alt="Profile" className="w-28 h-28 rounded-full border-4 border-white shadow-md object-cover -mt-16 md:mt-0" />
+        <img 
+          src={getProfileImageUrl(profile.photoUrl)} 
+          alt="Profile" 
+          className="w-28 h-28 rounded-full border-4 border-white shadow-md object-cover -mt-16 md:mt-0" 
+          onError={(e) => {
+            e.target.src = '/default-avatar.png';
+          }}
+        />
         <div className="ml-0 md:ml-6 mt-4 md:mt-0 text-center md:text-left flex-1">
           <div className="flex items-center justify-center md:justify-start">
             <h1 className="text-2xl font-bold mr-2">{profile.fullName || profile.name}</h1>

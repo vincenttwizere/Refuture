@@ -33,4 +33,13 @@ const upload = multer({
   }
 });
 
+// Create specific upload handlers
+const uploadDocument = upload.single('document');
+const uploadProfileImage = upload.single('profileImage');
+const uploadMultiple = upload.fields([
+  { name: 'document', maxCount: 1 },
+  { name: 'profileImage', maxCount: 1 }
+]);
+
+export { upload, uploadDocument, uploadProfileImage, uploadMultiple };
 export default upload; 

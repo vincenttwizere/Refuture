@@ -1,191 +1,200 @@
-# Refuture - Empowering Refugee Students
+# Refuture Platform
 
-A modern React TypeScript platform designed to track refugee students' performance and connect them to educational support, jobs, and mentors. Built with a human-centered design approach and accessibility in mind.
+A comprehensive platform connecting refugees with opportunities for employment, education, and community integration.
 
-## 🎯 Mission
+## Features
 
-Refuture is dedicated to empowering refugee talents by providing a comprehensive platform that bridges the gap between education, mentorship, and career opportunities. Our platform helps refugee students track their academic progress, discover relevant opportunities, and connect with mentors who can guide their journey.
+### For Refugees
+- Create detailed profiles showcasing skills and experience
+- Browse and apply for opportunities (jobs, internships, scholarships)
+- Manage applications and track progress
+- Receive notifications and messages
 
-## 🚀 Features
+### For Providers (Employers/Organizations)
+- Post opportunities (jobs, internships, scholarships, mentorship)
+- Browse refugee talent profiles
+- Manage applications and interviews
+- Communicate with candidates
 
-### Landing Page
-- **Compelling Hero Section** - Clear value proposition and call-to-action
-- **Feature Showcase** - Highlighting key platform capabilities
-- **Success Stories** - Testimonials from refugee students
-- **Statistics Dashboard** - Platform impact metrics
-- **About Section** - Mission and values
-- **Professional Footer** - Complete site navigation
+### For Administrators
+- User management and approval system
+- Platform analytics and reporting
+- Content moderation
+- System monitoring
 
-### Student Dashboard
-- **Academic Progress Tracking** - Monitor course completion and performance metrics
-- **Opportunity Discovery** - Find internships, fellowships, and training programs
-- **Mentor Connection** - Connect with industry professionals and educators
-- **Career Guidance** - Access resources and events for career development
-- **Profile Management** - Maintain comprehensive academic and professional profiles
+## Tech Stack
 
-### For Mentors & Organizations
-- **Student Matching** - Connect with refugee students based on expertise and interests
-- **Progress Monitoring** - Track mentee progress and provide guidance
-- **Opportunity Posting** - Share internships, jobs, and educational programs
-- **Community Building** - Participate in events and networking opportunities
+- **Frontend**: React 18, Vite, Tailwind CSS, Lucide React Icons
+- **Backend**: Node.js, Express.js, MongoDB, JWT Authentication
+- **Database**: MongoDB (local or Atlas)
 
-## 🎨 Design System
+## Prerequisites
 
-### Color Palette
-- **Primary Blue** (#3B82F6) - Trust and professionalism
-- **Emerald Green** (#10B981) - Success and growth
-- **Amber Yellow** (#F59E0B) - Call-to-action and highlights
-- **Purple Accent** (#8B5CF6) - Creativity and innovation
-- **Neutral Grays** - Clean backgrounds and text
+- Node.js (v16 or higher)
+- MongoDB (local installation or MongoDB Atlas account)
+- npm or yarn package manager
 
-### Typography
-- **Font Stack**: "Inter", "Helvetica Neue", Helvetica, Arial, sans-serif
-- **Clean, modern, and highly readable design**
-- **WCAG accessibility compliant**
+## Quick Start
 
-### Icons
-- **Lucide React** - Clean, outline-style icons
-- **Geometric consistency** with the typography
-- **Key icons**: User, BarChart3, GraduationCap, Mail, Search, Bell, Settings, BookOpen, Briefcase, Users, Award, Calendar, MapPin, Star
+### Option 1: Using the Batch Script (Windows)
+1. Clone the repository
+2. Install dependencies: `npm install`
+3. Run `start-dev.bat` to start both servers
 
-## 🛠️ Tech Stack
+### Option 2: Manual Setup
 
-- **React 18** - UI library with TypeScript
-- **Tailwind CSS** - Utility-first CSS framework
-- **Vite** - Fast build tool and development server
-- **Lucide React** - Beautiful, customizable icons
-- **TypeScript** - Type safety and better developer experience
-
-## 🚀 Getting Started
-
-### Prerequisites
-
-- Node.js (version 16 or higher)
-- npm or yarn
-
-### Installation
-
-1. Clone the repository:
+#### 1. Install Dependencies
 ```bash
-git clone https://github.com/vincenttwizere/Refuture.git
-cd Refuture
-```
-
-2. Install dependencies:
-```bash
+# Install frontend dependencies
 npm install
+
+# Install backend dependencies
+cd backend
+npm install
+cd ..
 ```
 
-3. Start the development server:
+#### 2. Database Setup
+You have two options:
+
+**Option A: Local MongoDB**
+- Install MongoDB locally
+- Start MongoDB service
+- The app will connect to `mongodb://localhost:27017/refuture`
+
+**Option B: MongoDB Atlas**
+- Create a MongoDB Atlas account
+- Create a cluster and get your connection string
+- Create a `.env` file in the backend directory with:
+```
+MONGODB_URI=your_mongodb_atlas_connection_string
+JWT_SECRET=your_super_secret_jwt_key
+PORT=5001
+NODE_ENV=development
+```
+
+#### 3. Start the Servers
+
+**Terminal 1 - Backend:**
+```bash
+cd backend
+npm start
+```
+
+**Terminal 2 - Frontend:**
 ```bash
 npm run dev
 ```
 
-The application will be available at `http://localhost:3000`
+#### 4. Access the Application
+- Frontend: http://localhost:5173
+- Backend API: http://localhost:5001
 
-### Navigation
+## API Endpoints
 
-- **Landing Page**: Visit `http://localhost:3000` to see the main landing page
-- **Dashboard**: Visit `http://localhost:3000?page=dashboard` to access the student dashboard
-- **Navigation**: Use the "Go to Dashboard" button on the landing page or "Back to Landing" button on the dashboard
+### Authentication
+- `POST /api/auth/signup` - User registration
+- `POST /api/auth/login` - User login
+- `GET /api/auth/me` - Get current user
 
-## 📦 Available Scripts
+### Opportunities
+- `GET /api/opportunities` - Get all opportunities
+- `POST /api/opportunities` - Create opportunity (Provider/Admin)
+- `PUT /api/opportunities/:id` - Update opportunity
+- `DELETE /api/opportunities/:id` - Delete opportunity
 
-- `npm run dev` - Start the development server
-- `npm run build` - Build the application for production
-- `npm run preview` - Preview the production build locally
-- `npm run lint` - Run ESLint for code quality checks
+### Profiles
+- `GET /api/profiles` - Get all profiles
+- `POST /api/profiles` - Create profile
+- `PUT /api/profiles/:id` - Update profile
 
-## 📁 Project Structure
+### Users (Admin only)
+- `GET /api/users` - Get all users
+- `GET /api/users/stats` - Get platform statistics
+- `PUT /api/users/:id/status` - Update user status
+
+## User Roles
+
+### Refugee
+- Can create and manage profiles
+- Browse and apply for opportunities
+- Receive notifications and messages
+
+### Provider
+- Can post opportunities
+- Browse refugee profiles
+- Manage applications and interviews
+
+### Admin
+- Full platform management
+- User approval and moderation
+- Analytics and reporting
+
+## Troubleshooting
+
+### Common Issues
+
+**1. MongoDB Connection Error**
+```
+Error: MongoDB connection error
+```
+**Solution**: Ensure MongoDB is running locally or your Atlas connection string is correct.
+
+**2. Port Already in Use**
+```
+Error: listen EADDRINUSE: address already in use :::5001
+```
+**Solution**: Kill the process using port 5001 or change the port in backend/.env
+
+**3. CORS Errors**
+```
+Access to fetch at 'http://localhost:5001/api/...' from origin 'http://localhost:5173' has been blocked by CORS policy
+```
+**Solution**: The backend is configured to allow CORS from the frontend. Ensure both servers are running.
+
+**4. JWT Token Issues**
+```
+Error: Not authorized, token failed
+```
+**Solution**: Clear browser localStorage and log in again.
+
+### Development Tips
+
+1. **Check Console Logs**: Both frontend and backend have detailed logging
+2. **Network Tab**: Use browser dev tools to inspect API requests
+3. **Database**: Use MongoDB Compass to inspect your database
+4. **Environment Variables**: Ensure all required env vars are set
+
+## File Structure
 
 ```
 Refuture/
-├── src/
-│   ├── App.tsx          # Student dashboard component
-│   ├── LandingPage.tsx  # Landing page component
-│   ├── main.tsx         # Application entry point with routing
-│   └── index.css        # Global styles with Tailwind
-├── index.html           # HTML template
-├── vite.config.ts       # Vite configuration
-├── tailwind.config.js   # Tailwind CSS configuration
-├── tsconfig.json        # TypeScript configuration
-└── package.json         # Dependencies and scripts
+├── backend/                 # Backend API
+│   ├── config/             # Database configuration
+│   ├── controllers/        # API controllers
+│   ├── middleware/         # Authentication & validation
+│   ├── models/            # MongoDB schemas
+│   ├── routes/            # API routes
+│   └── server.js          # Main server file
+├── src/                   # Frontend React app
+│   ├── components/        # React components
+│   │   ├── auth/         # Authentication components
+│   │   ├── dashboard/    # Dashboard components
+│   │   └── profiles/     # Profile components
+│   ├── contexts/         # React contexts
+│   ├── hooks/            # Custom React hooks
+│   └── services/         # API services
+└── uploads/              # File uploads
 ```
 
-## 🎯 Key Components
-
-### Landing Page
-- **Hero Section** with compelling headline and CTAs
-- **Statistics Overview** showing platform impact
-- **Feature Cards** highlighting key capabilities
-- **About Section** with mission statement
-- **Testimonials Carousel** with success stories
-- **Call-to-Action Section** for user conversion
-- **Professional Footer** with site navigation
-
-### Dashboard
-- **Student Profile Overview** with progress metrics
-- **Academic Progress Tracking** with visual indicators
-- **Opportunity Recommendations** with detailed cards
-- **Mentor Connections** with availability status
-- **Quick Actions** for common tasks
-- **Upcoming Events** calendar
-
-### Navigation
-- **Clean, accessible navigation bars**
-- **Search functionality** for opportunities and mentors
-- **User profile management** with notifications
-- **Seamless page transitions** between landing and dashboard
-
-### Cards & UI Elements
-- **Consistent card design** with soft shadows and hover effects
-- **Accessible button components** with proper focus states
-- **Responsive grid layouts** for all screen sizes
-- **Progress indicators** and interactive metrics
-
-## ♿ Accessibility Features
-
-- **WCAG 2.1 AA compliant** color contrast ratios
-- **Keyboard navigation** support throughout the application
-- **Screen reader** friendly markup and semantic HTML
-- **Focus management** and visible focus indicators
-- **Responsive design** for all devices and screen sizes
-- **Alternative text** for all images and icons
-
-## 🤝 Contributing
-
-We welcome contributions from the community! Please follow these steps:
+## Contributing
 
 1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add some amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+2. Create a feature branch
+3. Make your changes
+4. Test thoroughly
+5. Submit a pull request
 
-### Development Guidelines
+## License
 
-- Follow the established design system and color palette
-- Ensure accessibility compliance for all new components
-- Write clean, documented code with TypeScript
-- Test across different devices and screen sizes
-- Maintain responsive design principles
-- Use semantic HTML and proper ARIA labels
-
-## 📄 License
-
-This project is licensed under the MIT License.
-
-## 🙏 Acknowledgments
-
-- Refugee students and communities for inspiration and feedback
-- Educational institutions and mentors supporting refugee education
-- React, Tailwind CSS, and Vite communities for excellent tools
-- All contributors and supporters of refugee education initiatives
-
-## 📞 Contact
-
-For questions, suggestions, or collaboration opportunities, please reach out to our team.
-
----
-
-**Refuture** - Building bridges to brighter futures for refugee students worldwide. 
+MIT License - see LICENSE file for details 
