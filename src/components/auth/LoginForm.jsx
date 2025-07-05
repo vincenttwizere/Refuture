@@ -21,36 +21,8 @@ const LoginForm = () => {
     try {
       const result = await login(email, password);
       if (result.success) {
-        // Get the user data from the login response
-        const user = result.user || JSON.parse(localStorage.getItem('user')) || null;
-        
-        // Route users based on their role
-        console.log('User role:', user?.role); // Debug log
-        if (user && user.role === 'refugee') {
-          try {
-            const profileRes = await axios.get(`http://localhost:5001/api/profiles?email=${user.email}`);
-            if (profileRes.data.profiles && profileRes.data.profiles.length > 0) {
-              // User has a profile, go directly to dashboard
-              navigate('/refugee-dashboard');
-            } else {
-              // User doesn't have a profile, go to create profile form
-              navigate('/create-profile');
-            }
-          } catch (profileError) {
-            console.error('Error checking profile:', profileError);
-            // If we can't check the profile, default to create profile form
-            navigate('/create-profile');
-          }
-        } else if (user && user.role === 'provider') {
-          // Provider users go to provider dashboard
-          navigate('/provider-dashboard');
-        } else if (user && user.role === 'admin') {
-          // Admin users go to admin dashboard
-          navigate('/admin-dashboard');
-        } else {
-          // For any other role or fallback, use the default redirect
-          navigate(result.redirectTo || '/');
-        }
+        // Use the redirect path provided by the backend
+        navigate(result.redirectTo || '/');
       } else {
         setError(result.message || 'Login failed');
       }

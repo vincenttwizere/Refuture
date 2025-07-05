@@ -1,4 +1,5 @@
 import Profile from '../models/ProfileModel.js';
+import mongoose from 'mongoose';
 
 // Create a new profile or update existing one
 const createProfile = async (req, res) => {
@@ -135,6 +136,14 @@ const createProfile = async (req, res) => {
       console.log('Creating new profile');
       profile = new Profile(profileData);
       await profile.save();
+      
+      // Update user's hasProfile field
+      const User = mongoose.model('User');
+      await User.findOneAndUpdate(
+        { email: profileData.email },
+        { hasProfile: true }
+      );
+      
       message = 'Profile created successfully';
     }
 
@@ -156,7 +165,7 @@ const createProfile = async (req, res) => {
 // Get all profiles
 const getAllProfiles = async (req, res) => {
   try {
-    const { email } = req.query;
+    const { email, option } = req.query;
     let query = {};
     
     // If email is provided, filter by email
@@ -164,10 +173,28 @@ const getAllProfiles = async (req, res) => {
       query.email = email;
     }
     
+    // If option is provided, filter by option (student, job seeker, undocumented_talent)
+    if (option) {
+      query.option = option;
+    }
+    
     console.log('Fetching profiles with query:', query);
+    
+    // First, get all active refugee users who have profiles
+    const User = mongoose.model('User');
+    const activeRefugeeUsers = await User.find({ 
+      role: 'refugee', 
+      status: 'active',
+      hasProfile: true 
+    }).select('email');
+    
+    const refugeeEmails = activeRefugeeUsers.map(user => user.email);
+    
+    // Then get profiles that match the query AND belong to active refugee users
+    query.email = { $in: refugeeEmails };
+    
     const profiles = await Profile.find(query);
     console.log('Found profiles:', profiles.length);
-    console.log('Profile data:', profiles);
     
     res.status(200).json({
       success: true,

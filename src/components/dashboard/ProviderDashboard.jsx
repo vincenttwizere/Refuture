@@ -64,7 +64,7 @@ const ProviderDashboard = () => {
     refetch: refetchOpportunities
   } = useOpportunities();
 
-  const { 
+  const {
     interviews, 
     loading: interviewsLoading, 
     error: interviewsError 
@@ -138,6 +138,8 @@ const ProviderDashboard = () => {
     { id: 'overview', label: 'Dashboard Overview', icon: Home },
     { id: 'talent', label: 'Talent Discovery', icon: Users },
     { id: 'opportunities', label: 'Create Opportunity', icon: FileText },
+    { id: 'my-opportunities', label: 'My Opportunities', icon: Briefcase },
+    { id: 'talents', label: 'Available Talents', icon: Users },
     { id: 'applications', label: 'Applications', icon: FileText },
     { id: 'communications', label: 'Communications', icon: MessageCircle },
     { id: 'analytics', label: 'Analytics', icon: BarChart3 },
@@ -153,7 +155,13 @@ const ProviderDashboard = () => {
     return (
       <div key={item.id} className="mb-1">
         <button
-          onClick={() => setActiveItem(item.id)}
+          onClick={() => {
+            if (item.id === 'opportunities') {
+              setShowCreateModal(true);
+            } else {
+              setActiveItem(item.id);
+            }
+          }}
           className={`w-full flex items-center justify-between px-3 py-2 text-left text-sm rounded-lg transition-colors ${
             isActive 
               ? 'bg-blue-50 text-blue-700 border-r-2 border-blue-500' 
@@ -250,7 +258,7 @@ const ProviderDashboard = () => {
     }
   };
 
-  const handleFormSubmit = async (e) => {
+    const handleFormSubmit = async (e) => {
     e.preventDefault();
     setFormLoading(true);
     setFormError(null);
@@ -259,32 +267,32 @@ const ProviderDashboard = () => {
     try {
       const opportunityData = {
         ...formData,
-        tags: formData.tags.split(',').map(tag => tag.trim()).filter(Boolean),
+        tags: formData.tags ? formData.tags.split(',').map(tag => tag.trim()).filter(Boolean) : [],
         requirements: {
           ...formData.requirements,
           skills: Array.isArray(formData.requirements.skills) 
             ? formData.requirements.skills 
-            : formData.requirements.skills.split(',').map(skill => skill.trim()).filter(Boolean),
+            : (formData.requirements.skills ? formData.requirements.skills.split(',').map(skill => skill.trim()).filter(Boolean) : []),
           languages: Array.isArray(formData.requirements.languages) 
             ? formData.requirements.languages 
-            : formData.requirements.languages.split(',').map(lang => lang.trim()).filter(Boolean)
+            : (formData.requirements.languages ? formData.requirements.languages.split(',').map(lang => lang.trim()).filter(Boolean) : [])
         },
         benefits: Array.isArray(formData.benefits) 
           ? formData.benefits 
-          : formData.benefits.split(',').map(benefit => benefit.trim()).filter(Boolean)
+          : (formData.benefits ? formData.benefits.split(',').map(benefit => benefit.trim()).filter(Boolean) : [])
       };
 
       if (showEditModal && editingOpportunity) {
         await updateOpportunity(editingOpportunity._id, opportunityData);
         setFormSuccess('Opportunity updated successfully!');
       } else {
-      await createOpportunity(opportunityData);
+        await createOpportunity(opportunityData);
         setFormSuccess('Opportunity created successfully!');
       }
 
       setTimeout(() => {
         closeModal();
-      refetchOpportunities();
+        refetchOpportunities();
       }, 1500);
     } catch (error) {
       setFormError(error.response?.data?.message || 'An error occurred. Please try again.');
@@ -516,13 +524,147 @@ const ProviderDashboard = () => {
       );
     }
 
-    if (activeItem === 'opportunities') {
+    if (activeItem === 'talents') {
       return (
         <div className="space-y-6">
           {/* Header */}
           <div className="flex justify-between items-center">
             <div>
-              <h2 className="text-2xl font-bold text-gray-900">Opportunities</h2>
+              <h2 className="text-2xl font-bold text-gray-900">Available Talents</h2>
+              <p className="text-gray-600">Browse refugee talent profiles by category</p>
+            </div>
+          </div>
+
+          {/* Talent Category Filter */}
+          <div className="bg-white p-6 rounded-lg border">
+            <div className="flex space-x-4">
+              <button
+                onClick={() => fetchProfiles({ option: 'student' })}
+                className="px-4 py-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition-colors"
+              >
+                Students
+              </button>
+              <button
+                onClick={() => fetchProfiles({ option: 'job seeker' })}
+                className="px-4 py-2 bg-green-100 text-green-700 rounded-lg hover:bg-green-200 transition-colors"
+              >
+                Job Seekers
+              </button>
+              <button
+                onClick={() => fetchProfiles({ option: 'undocumented_talent' })}
+                className="px-4 py-2 bg-purple-100 text-purple-700 rounded-lg hover:bg-purple-200 transition-colors"
+              >
+                Undocumented Talents
+              </button>
+              <button
+                onClick={() => fetchProfiles()}
+                className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
+              >
+                All Talents
+              </button>
+            </div>
+          </div>
+
+          {/* Talents List */}
+          {profilesLoading ? (
+            <div className="space-y-4">
+              {[1, 2, 3].map(i => (
+                <div key={i} className="bg-white p-6 rounded-lg border animate-pulse">
+                  <div className="h-4 bg-gray-200 rounded w-3/4 mb-2"></div>
+                  <div className="h-3 bg-gray-200 rounded w-1/2"></div>
+                </div>
+              ))}
+            </div>
+          ) : profilesError ? (
+            <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+              <div className="flex items-center">
+                <AlertCircle className="h-5 w-5 text-red-400 mr-2" />
+                <p className="text-red-800">{profilesError}</p>
+              </div>
+            </div>
+          ) : profiles.length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {profiles.map(profile => (
+                <div key={profile._id} className="bg-white p-6 rounded-lg border hover:shadow-lg transition-shadow">
+                  <div className="flex items-center mb-4">
+                    <div className="w-12 h-12 bg-gray-300 rounded-full flex items-center justify-center mr-4">
+                      {profile.photoUrl ? (
+                        <img src={profile.photoUrl} alt={profile.fullName} className="w-12 h-12 rounded-full object-cover" />
+                      ) : (
+                        <span className="text-lg font-medium text-gray-700">
+                          {profile.fullName?.split(' ').map(n => n[0]).join('')}
+                        </span>
+                      )}
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-gray-900">{profile.fullName}</h3>
+                      <p className="text-sm text-gray-500">{profile.age} years old • {profile.gender}</p>
+                    </div>
+                  </div>
+                  
+                  <div className="space-y-3">
+                    <div>
+                      <p className="text-sm text-gray-600 mb-1">Location</p>
+                      <p className="text-sm font-medium">{profile.currentLocation}</p>
+                    </div>
+                    
+                    <div>
+                      <p className="text-sm text-gray-600 mb-1">Skills</p>
+                      <div className="flex flex-wrap gap-1">
+                        {profile.skills?.slice(0, 3).map((skill, index) => (
+                          <span key={index} className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
+                            {skill}
+                          </span>
+                        ))}
+                        {profile.skills?.length > 3 && (
+                          <span className="text-xs text-gray-500">+{profile.skills.length - 3} more</span>
+                        )}
+                      </div>
+                    </div>
+                    
+                    <div>
+                      <p className="text-sm text-gray-600 mb-1">Languages</p>
+                      <div className="flex flex-wrap gap-1">
+                        {profile.language?.slice(0, 2).map((lang, index) => (
+                          <span key={index} className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded">
+                            {lang}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="mt-4 pt-4 border-t border-gray-100">
+                    <div className="flex space-x-2">
+                      <button className="flex-1 bg-blue-600 text-white px-3 py-2 rounded text-sm hover:bg-blue-700 transition-colors">
+                        View Profile
+                      </button>
+                      <button className="flex-1 bg-gray-100 text-gray-700 px-3 py-2 rounded text-sm hover:bg-gray-200 transition-colors">
+                        Contact
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-12">
+              <Users className="h-16 w-16 mx-auto text-gray-300 mb-4" />
+              <h3 className="text-lg font-medium text-gray-900 mb-2">No talents found</h3>
+              <p className="text-gray-600">Try selecting a different category or check back later</p>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    if (activeItem === 'my-opportunities') {
+      return (
+        <div className="space-y-6">
+          {/* Header */}
+          <div className="flex justify-between items-center">
+            <div>
+              <h2 className="text-2xl font-bold text-gray-900">My Opportunities</h2>
               <p className="text-gray-600">Manage your posted opportunities</p>
             </div>
             <button
@@ -612,6 +754,12 @@ const ProviderDashboard = () => {
           )}
         </div>
       );
+    }
+
+    if (activeItem === 'opportunities') {
+      // Redirect to create opportunity modal
+      setShowCreateModal(true);
+      return null;
     }
 
     // Placeholder for other sections

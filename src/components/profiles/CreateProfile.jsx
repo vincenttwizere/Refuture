@@ -36,7 +36,7 @@ const genders = [
 ];
 
 const CreateProfile = () => {
-  const { user } = useAuth();
+  const { user, refreshUser } = useAuth();
   const navigate = useNavigate();
   const [option, setOption] = useState('');
   const [form, setForm] = useState({});
@@ -232,9 +232,12 @@ const CreateProfile = () => {
       
       setSuccess(true);
       
-      // Redirect to dashboard after successful save
+      // Refresh user data to get updated hasProfile status
+      await refreshUser();
+      
+      // Redirect to refugee dashboard after successful save
       setTimeout(() => {
-        navigate('/dashboard');
+        navigate('/refugee-dashboard');
       }, 2000);
       
     } catch (error) {
@@ -265,7 +268,7 @@ const CreateProfile = () => {
         {success && (
           <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg flex items-center">
             <CheckCircle className="h-5 w-5 text-green-500 mr-2" />
-            <span className="text-green-700">Profile saved successfully! Redirecting to dashboard...</span>
+            <span className="text-green-700">Profile saved successfully! Redirecting to refugee dashboard...</span>
         </div>
       )}
 

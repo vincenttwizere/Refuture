@@ -99,12 +99,29 @@ export const AuthProvider = ({ children }) => {
     delete axios.defaults.headers.common['Authorization'];
   };
 
+  const refreshUser = async () => {
+    if (token) {
+      try {
+        const response = await axios.get('http://localhost:5001/api/auth/me');
+        if (response.data.success && response.data.user) {
+          setUser(response.data.user);
+          return { success: true, user: response.data.user };
+        }
+      } catch (error) {
+        console.error('Error refreshing user data:', error);
+        return { success: false, error: error.message };
+      }
+    }
+    return { success: false, error: 'No token available' };
+  };
+
   const value = {
     user,
     token,
     login,
     signup,
     logout,
+    refreshUser,
     loading,
     isAuthenticated: !!user && !!token
   };
