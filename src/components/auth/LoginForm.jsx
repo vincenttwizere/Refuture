@@ -20,7 +20,10 @@ const LoginForm = () => {
     setError('');
     try {
       const result = await login(email, password);
+      console.log('Login result:', result); // Debug log
+      
       if (result.success) {
+        console.log('Login successful, redirecting to:', result.redirectTo); // Debug log
         // Use the redirect path provided by the backend
         navigate(result.redirectTo || '/');
       } else {

@@ -1,5 +1,7 @@
 import User from '../models/UserModel.js';
+import Profile from '../models/ProfileModel.js';
 import generateToken from '../utils/generateToken.js';
+import sendEmail from '../utils/sendEmail.js';
 
 // @desc    Register user
 // @route   POST /api/auth/signup
@@ -24,13 +26,25 @@ const registerUser = async (req, res) => {
     });
 
     if (user) {
+      // Send welcome email
+      try {
+        await sendEmail(
+          user.email,
+          'Welcome to Refuture!',
+          `Hi ${user.firstName || ''},\n\nThank you for registering at Refuture. We are excited to have you on board!\n\nBest regards,\nThe Refuture Team`
+        );
+      } catch (emailError) {
+        console.error('Failed to send welcome email:', emailError);
+      }
       const token = generateToken(user._id, user.role);
       
       // Determine redirect based on role
       let redirectTo = '/';
       if (role === 'admin') redirectTo = '/admin-dashboard';
       else if (role === 'provider') redirectTo = '/provider-dashboard';
-      else if (role === 'refugee') redirectTo = '/create-profile';
+      else if (role === 'refugee') {
+        redirectTo = '/refugee-dashboard';
+      }
 
       res.status(201).json({
         success: true,
@@ -76,7 +90,9 @@ const loginUser = async (req, res) => {
     let redirectTo = '/';
     if (user.role === 'admin') redirectTo = '/admin-dashboard';
     else if (user.role === 'provider') redirectTo = '/provider-dashboard';
-    else if (user.role === 'refugee') redirectTo = '/create-profile';
+    else if (user.role === 'refugee') {
+      redirectTo = '/refugee-dashboard';
+    }
 
     res.json({
       success: true,

@@ -54,6 +54,11 @@ export const opportunitiesAPI = {
   update: (id, data) => api.put(`/opportunities/${id}`, data),
   delete: (id) => api.delete(`/opportunities/${id}`),
   getByProvider: (providerId) => api.get(`/opportunities/provider/${providerId}`),
+  // Saved opportunities
+  getSaved: () => api.get('/opportunities/saved'),
+  checkIfSaved: (id) => api.get(`/opportunities/${id}/saved`),
+  save: (id) => api.post(`/opportunities/${id}/save`),
+  unsave: (id) => api.delete(`/opportunities/${id}/save`)
 };
 
 // Profiles API

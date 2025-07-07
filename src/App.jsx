@@ -25,7 +25,7 @@ import {
   Download,
   Share2
 } from 'lucide-react'
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
+import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import LandingPage from './LandingPage'
 import LoginForm from './components/auth/LoginForm'
@@ -33,6 +33,9 @@ import SignupForm from './components/auth/SignupForm'
 import RefugeeDashboard from './components/dashboard/RefugeeDashboard'
 import ProviderDashboard from './components/dashboard/ProviderDashboard'
 import AdminDashboard from './components/dashboard/AdminDashboard'
+
+import OpportunityDetails from './components/opportunities/OpportunityDetails'
+import ProfileViewPage from './components/profiles/ProfileViewPage'
 import CreateProfile from './components/profiles/CreateProfile'
 
 function AppRouter() {
@@ -67,11 +70,28 @@ function AppRouter() {
               </ProtectedRoute>
             }
           />
+
           <Route
             path="/create-profile"
             element={
               <ProtectedRoute role="refugee">
                 <CreateProfile />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/opportunity/:id"
+            element={
+              <ProtectedRoute role="refugee">
+                <OpportunityDetails />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/profile/:id"
+            element={
+              <ProtectedRoute>
+                <ProfileViewPage />
               </ProtectedRoute>
             }
           />
@@ -85,10 +105,11 @@ function AppRouter() {
 
 // Protected route component
 function ProtectedRoute({ children, role }) {
-  const { user, loading, isAuthenticated } = useAuth()
+  const { user, loading, isAuthenticated, getRedirectPath } = useAuth()
+  const navigate = useNavigate()
   
   // Debug logging
-  console.log('ProtectedRoute:', { role, userRole: user?.role, isAuthenticated, loading });
+  console.log('ProtectedRoute:', { role, userRole: user?.role, isAuthenticated, loading, hasProfile: user?.hasProfile });
   
   if (loading) return <div className="min-h-screen flex items-center justify-center">Loading...</div>
   if (!isAuthenticated) return <Navigate to="/login" replace />
@@ -96,6 +117,9 @@ function ProtectedRoute({ children, role }) {
     console.log('Role mismatch:', { expected: role, actual: user?.role });
     return <Navigate to="/" replace />
   }
+  
+
+  
   return <>{children}</>
 }
 

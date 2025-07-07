@@ -25,7 +25,7 @@ export const AuthProvider = ({ children }) => {
           const response = await axios.get('http://localhost:5001/api/auth/me');
           console.log('Auth check response:', response.data); // Debug log
           if (response.data.success && response.data.user) {
-          setUser(response.data.user);
+            setUser(response.data.user);
           } else {
             throw new Error('Invalid response format');
           }
@@ -115,6 +115,22 @@ export const AuthProvider = ({ children }) => {
     return { success: false, error: 'No token available' };
   };
 
+  // Function to check if user should be redirected based on their profile status
+  const getRedirectPath = (user) => {
+    if (!user) return '/login';
+    
+    switch (user.role) {
+      case 'refugee':
+        return user.hasProfile ? '/refugee-dashboard' : '/create-profile';
+      case 'provider':
+        return '/provider-dashboard';
+      case 'admin':
+        return '/admin-dashboard';
+      default:
+        return '/';
+    }
+  };
+
   const value = {
     user,
     token,
@@ -123,7 +139,8 @@ export const AuthProvider = ({ children }) => {
     logout,
     refreshUser,
     loading,
-    isAuthenticated: !!user && !!token
+    isAuthenticated: !!user && !!token,
+    getRedirectPath
   };
 
   return (

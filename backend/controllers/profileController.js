@@ -1,4 +1,5 @@
 import Profile from '../models/ProfileModel.js';
+import User from '../models/UserModel.js';
 import mongoose from 'mongoose';
 
 // Create a new profile or update existing one
@@ -20,7 +21,16 @@ const createProfile = async (req, res) => {
       tags,
       education,
       experience,
-      isPublic
+      isPublic,
+      // Student-specific fields
+      highSchoolSubjects,
+      desiredField,
+      academicRecords,
+      // Undocumented talent-specific fields
+      talentCategory,
+      talentExperience,
+      talentDescription,
+      portfolio
     } = req.body;
 
     // Parse JSON strings back to arrays
@@ -75,6 +85,32 @@ const createProfile = async (req, res) => {
       experienceArray = []; // Set empty array if not provided
     }
 
+    // Handle academic records - make it optional
+    let academicRecordsArray = [];
+    if (academicRecords) {
+      try {
+        academicRecordsArray = typeof academicRecords === 'string' ? JSON.parse(academicRecords) : academicRecords || [];
+      } catch (e) {
+        console.log('Error parsing academic records:', e);
+        academicRecordsArray = [];
+      }
+    } else {
+      academicRecordsArray = []; // Set empty array if not provided
+    }
+
+    // Handle portfolio - make it optional
+    let portfolioArray = [];
+    if (portfolio) {
+      try {
+        portfolioArray = typeof portfolio === 'string' ? JSON.parse(portfolio) : portfolio || [];
+      } catch (e) {
+        console.log('Error parsing portfolio:', e);
+        portfolioArray = [];
+      }
+    } else {
+      portfolioArray = []; // Set empty array if not provided
+    }
+
     const profileData = {
       option,
       fullName,
@@ -88,7 +124,16 @@ const createProfile = async (req, res) => {
       tags: tagsArray,
       education: educationArray,
       experience: experienceArray,
-      isPublic: isPublic === 'true' || isPublic === true
+      isPublic: isPublic === 'true' || isPublic === true,
+      // Student-specific fields
+      highSchoolSubjects,
+      desiredField,
+      academicRecords: academicRecordsArray,
+      // Undocumented talent-specific fields
+      talentCategory,
+      talentExperience,
+      talentDescription,
+      portfolio: portfolioArray
     };
 
     // Handle file uploads
@@ -101,6 +146,12 @@ const createProfile = async (req, res) => {
       // Handle profile image upload
       if (req.files.profileImage && req.files.profileImage[0]) {
         profileData.photoUrl = req.files.profileImage[0].path;
+      }
+
+      // Handle supporting documents
+      if (req.files.supportingDocuments) {
+        const supportingDocsPaths = req.files.supportingDocuments.map(file => file.path);
+        profileData.supportingDocuments = supportingDocsPaths;
       }
     } else if (req.file) {
       // Handle single file upload (backward compatibility)
@@ -138,7 +189,6 @@ const createProfile = async (req, res) => {
       await profile.save();
       
       // Update user's hasProfile field
-      const User = mongoose.model('User');
       await User.findOneAndUpdate(
         { email: profileData.email },
         { hasProfile: true }
@@ -180,19 +230,7 @@ const getAllProfiles = async (req, res) => {
     
     console.log('Fetching profiles with query:', query);
     
-    // First, get all active refugee users who have profiles
-    const User = mongoose.model('User');
-    const activeRefugeeUsers = await User.find({ 
-      role: 'refugee', 
-      status: 'active',
-      hasProfile: true 
-    }).select('email');
-    
-    const refugeeEmails = activeRefugeeUsers.map(user => user.email);
-    
-    // Then get profiles that match the query AND belong to active refugee users
-    query.email = { $in: refugeeEmails };
-    
+    // Get profiles that match the query
     const profiles = await Profile.find(query);
     console.log('Found profiles:', profiles.length);
     
@@ -237,8 +275,10 @@ const getProfileById = async (req, res) => {
 // Update profile by ID
 const updateProfile = async (req, res) => {
   try {
-    console.log('Updating profile with ID:', req.params.id);
-    console.log('Update data:', req.body);
+    console.log('=== UPDATE PROFILE REQUEST ===');
+    console.log('Profile ID:', req.params.id);
+    console.log('Request body keys:', Object.keys(req.body));
+    console.log('Files:', req.files ? Object.keys(req.files) : 'No files');
     
     const updateData = { ...req.body };
     
@@ -246,6 +286,7 @@ const updateProfile = async (req, res) => {
     if (req.body.skills) {
       try {
         updateData.skills = typeof req.body.skills === 'string' ? JSON.parse(req.body.skills) : req.body.skills;
+        console.log('Parsed skills:', updateData.skills);
       } catch (e) {
         console.log('Error parsing skills in update:', e);
         updateData.skills = [];
@@ -254,6 +295,7 @@ const updateProfile = async (req, res) => {
     if (req.body.language) {
       try {
         updateData.language = typeof req.body.language === 'string' ? JSON.parse(req.body.language) : req.body.language;
+        console.log('Parsed language:', updateData.language);
       } catch (e) {
         console.log('Error parsing language in update:', e);
         updateData.language = [];
@@ -262,6 +304,7 @@ const updateProfile = async (req, res) => {
     if (req.body.tags) {
       try {
         updateData.tags = typeof req.body.tags === 'string' ? JSON.parse(req.body.tags) : req.body.tags;
+        console.log('Parsed tags:', updateData.tags);
       } catch (e) {
         console.log('Error parsing tags in update:', e);
         updateData.tags = [];
@@ -270,6 +313,7 @@ const updateProfile = async (req, res) => {
     if (req.body.education) {
       try {
         updateData.education = typeof req.body.education === 'string' ? JSON.parse(req.body.education) : req.body.education;
+        console.log('Parsed education:', updateData.education);
       } catch (e) {
         console.log('Error parsing education in update:', e);
         updateData.education = [];
@@ -280,6 +324,7 @@ const updateProfile = async (req, res) => {
     if (req.body.experience) {
       try {
         updateData.experience = typeof req.body.experience === 'string' ? JSON.parse(req.body.experience) : req.body.experience;
+        console.log('Parsed experience:', updateData.experience);
       } catch (e) {
         console.log('Error parsing experience in update:', e);
         updateData.experience = [];
@@ -290,16 +335,20 @@ const updateProfile = async (req, res) => {
 
     // Handle file uploads
     if (req.files) {
+      console.log('Processing uploaded files...');
       // Handle document upload
       if (req.files.document && req.files.document[0]) {
         updateData.document = req.files.document[0].path;
+        console.log('Document uploaded:', updateData.document);
       }
       
       // Handle profile image upload
       if (req.files.profileImage && req.files.profileImage[0]) {
         updateData.photoUrl = req.files.profileImage[0].path;
+        console.log('Profile image uploaded:', updateData.photoUrl);
       }
     } else if (req.file) {
+      console.log('Processing single file upload...');
       // Handle single file upload (backward compatibility)
       if (req.file.fieldname === 'document') {
         updateData.document = req.file.path;
@@ -308,7 +357,8 @@ const updateProfile = async (req, res) => {
       }
     }
 
-    console.log('Final update data:', updateData);
+    console.log('Final update data keys:', Object.keys(updateData));
+    console.log('About to update profile in database...');
 
     const profile = await Profile.findByIdAndUpdate(
       req.params.id,
@@ -317,11 +367,22 @@ const updateProfile = async (req, res) => {
     );
 
     if (!profile) {
+      console.log('Profile not found for ID:', req.params.id);
       return res.status(404).json({
         success: false,
         message: 'Profile not found'
       });
     }
+
+    console.log('Profile updated successfully:', profile._id);
+
+    // Ensure user's hasProfile field is set to true
+    await User.findOneAndUpdate(
+      { email: profile.email },
+      { hasProfile: true }
+    );
+
+    console.log('User hasProfile status updated for:', profile.email);
 
     res.status(200).json({
       success: true,
@@ -329,6 +390,7 @@ const updateProfile = async (req, res) => {
       profile
     });
   } catch (error) {
+    console.error('=== UPDATE PROFILE ERROR ===');
     console.error('Error updating profile:', error);
     console.error('Error details:', {
       name: error.name,
@@ -346,13 +408,23 @@ const updateProfile = async (req, res) => {
 // Delete profile by ID
 const deleteProfile = async (req, res) => {
   try {
-    const profile = await Profile.findByIdAndDelete(req.params.id);
+    const profile = await Profile.findById(req.params.id);
     if (!profile) {
       return res.status(404).json({
         success: false,
         message: 'Profile not found'
       });
     }
+
+    // Delete the profile
+    await Profile.findByIdAndDelete(req.params.id);
+
+    // Update user's hasProfile status to false
+    await User.findOneAndUpdate(
+      { email: profile.email },
+      { hasProfile: false }
+    );
+
     res.status(200).json({
       success: true,
       message: 'Profile deleted successfully'

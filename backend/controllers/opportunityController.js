@@ -1,4 +1,5 @@
 import Opportunity from '../models/OpportunityModel.js';
+import SavedOpportunity from '../models/SavedOpportunityModel.js';
 
 // @desc    Create new opportunity
 // @route   POST /api/opportunities
@@ -256,11 +257,161 @@ const getOpportunitiesByProvider = async (req, res) => {
   }
 };
 
+// @desc    Save opportunity for user
+// @route   POST /api/opportunities/:id/save
+// @access  Private (Refugees)
+const saveOpportunity = async (req, res) => {
+  try {
+    const opportunityId = req.params.id;
+    const userId = req.user._id;
+
+    // Check if opportunity exists
+    const opportunity = await Opportunity.findById(opportunityId);
+    if (!opportunity) {
+      return res.status(404).json({
+        success: false,
+        message: 'Opportunity not found'
+      });
+    }
+
+    // Check if already saved
+    const existingSave = await SavedOpportunity.findOne({
+      user: userId,
+      opportunity: opportunityId
+    });
+
+    if (existingSave) {
+      return res.status(400).json({
+        success: false,
+        message: 'Opportunity already saved'
+      });
+    }
+
+    // Save the opportunity
+    const savedOpportunity = new SavedOpportunity({
+      user: userId,
+      opportunity: opportunityId
+    });
+
+    await savedOpportunity.save();
+
+    res.status(201).json({
+      success: true,
+      message: 'Opportunity saved successfully'
+    });
+  } catch (error) {
+    console.error('Save opportunity error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error saving opportunity',
+      error: error.message
+    });
+  }
+};
+
+// @desc    Unsave opportunity for user
+// @route   DELETE /api/opportunities/:id/save
+// @access  Private (Refugees)
+const unsaveOpportunity = async (req, res) => {
+  try {
+    const opportunityId = req.params.id;
+    const userId = req.user._id;
+
+    const result = await SavedOpportunity.findOneAndDelete({
+      user: userId,
+      opportunity: opportunityId
+    });
+
+    if (!result) {
+      return res.status(404).json({
+        success: false,
+        message: 'Saved opportunity not found'
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'Opportunity unsaved successfully'
+    });
+  } catch (error) {
+    console.error('Unsave opportunity error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error unsaving opportunity',
+      error: error.message
+    });
+  }
+};
+
+// @desc    Get saved opportunities for user
+// @route   GET /api/opportunities/saved
+// @access  Private (Refugees)
+const getSavedOpportunities = async (req, res) => {
+  try {
+    const userId = req.user._id;
+
+    const savedOpportunities = await SavedOpportunity.find({ user: userId })
+      .populate({
+        path: 'opportunity',
+        populate: {
+          path: 'provider',
+          select: 'firstName lastName email'
+        }
+      })
+      .sort({ savedAt: -1 });
+
+    const opportunities = savedOpportunities.map(saved => saved.opportunity).filter(Boolean);
+
+    res.json({
+      success: true,
+      opportunities
+    });
+  } catch (error) {
+    console.error('Get saved opportunities error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching saved opportunities',
+      error: error.message
+    });
+  }
+};
+
+// @desc    Check if opportunity is saved by user
+// @route   GET /api/opportunities/:id/saved
+// @access  Private (Refugees)
+const checkIfSaved = async (req, res) => {
+  try {
+    const opportunityId = req.params.id;
+    const userId = req.user._id;
+
+    const savedOpportunity = await SavedOpportunity.findOne({
+      user: userId,
+      opportunity: opportunityId
+    });
+
+    res.json({
+      success: true,
+      isSaved: !!savedOpportunity
+    });
+  } catch (error) {
+    console.error('Check saved opportunity error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error checking saved opportunity',
+      error: error.message
+    });
+  }
+};
+
 export {
   createOpportunity,
   getAllOpportunities,
   getOpportunityById,
   updateOpportunity,
   deleteOpportunity,
-  getOpportunitiesByProvider
+  getOpportunitiesByProvider,
+  saveOpportunity,
+  unsaveOpportunity,
+  getSavedOpportunities,
+  checkIfSaved
 }; 

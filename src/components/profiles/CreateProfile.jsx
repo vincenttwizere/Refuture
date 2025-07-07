@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
@@ -20,13 +20,19 @@ import {
   GraduationCap,
   Briefcase,
   Plus,
-  Trash2
+  Trash2,
+  BookOpen,
+  Palette,
+  Music,
+  Code,
+  Heart,
+  Star
 } from 'lucide-react';
 
 const talentTracks = [
-  { value: 'student', label: 'Student' },
-  { value: 'job seeker', label: 'Job Seeker' },
-  { value: 'undocumented_talent', label: 'Undocumented Talent' },
+  { value: 'student', label: 'Student', icon: GraduationCap },
+  { value: 'job seeker', label: 'Job Seeker', icon: Briefcase },
+  { value: 'undocumented_talent', label: 'Undocumented Talent', icon: Star },
 ];
 
 const genders = [
@@ -35,8 +41,40 @@ const genders = [
   { value: 'other', label: 'Other' },
 ];
 
-const CreateProfile = () => {
-  const { user, refreshUser } = useAuth();
+const academicLevels = [
+  { value: 'senior_four', label: 'Senior Four' },
+  { value: 'senior_five', label: 'Senior Five' },
+  { value: 'senior_six', label: 'Senior Six' },
+  { value: 'national_exam', label: 'National Exam' },
+  { value: 'university', label: 'University' },
+];
+
+const gradeScales = [
+  { value: 'A', label: 'A (Excellent)', color: 'text-green-600' },
+  { value: 'B', label: 'B (Good)', color: 'text-blue-600' },
+  { value: 'C', label: 'C (Average)', color: 'text-yellow-600' },
+  { value: 'D', label: 'D (Below Average)', color: 'text-orange-600' },
+  { value: 'E', label: 'E (Poor)', color: 'text-red-600' },
+  { value: 'F', label: 'F (Fail)', color: 'text-red-700' },
+];
+
+const commonSubjects = [
+  'Mathematics', 'Physics', 'Chemistry', 'Biology', 'English', 
+  'History', 'Geography', 'Economics', 'Computer Science', 'Art',
+  'Music', 'Physical Education', 'Literature', 'Philosophy'
+];
+
+const talentCategories = [
+  { value: 'artist', label: 'Artist', icon: Palette },
+  { value: 'musician', label: 'Musician', icon: Music },
+  { value: 'programmer', label: 'Programmer', icon: Code },
+  { value: 'writer', label: 'Writer', icon: FileText },
+  { value: 'designer', label: 'Designer', icon: Palette },
+  { value: 'other', label: 'Other', icon: Star },
+];
+
+const CreateProfile = ({ onProfileUpdated }) => {
+  const { user } = useAuth();
   const navigate = useNavigate();
   const [option, setOption] = useState('');
   const [form, setForm] = useState({});
@@ -49,6 +87,9 @@ const CreateProfile = () => {
   const [existingProfile, setExistingProfile] = useState(null);
   const [education, setEducation] = useState([]);
   const [experience, setExperience] = useState([]);
+  const [academicRecords, setAcademicRecords] = useState([]);
+  const [portfolio, setPortfolio] = useState([]);
+  const [supportingDocuments, setSupportingDocuments] = useState([]);
 
   // Check for existing profile when component loads
   useEffect(() => {
@@ -111,7 +152,8 @@ const CreateProfile = () => {
   };
 
   const handleArrayChange = (name, value) => {
-    setForm({ ...form, [name]: value.split(',').map((s) => s.trim()).filter(Boolean) });
+    // Store the raw value for display, but process it for the form state
+    setForm({ ...form, [name]: value.split(',').map((s) => s.trim()).filter(Boolean), [`${name}Raw`]: value });
   };
 
   const handleFileChange = (e) => {
@@ -202,6 +244,68 @@ const CreateProfile = () => {
     setExperience(experience.filter((_, i) => i !== index));
   };
 
+  // Academic records management functions (for students)
+  const addAcademicRecord = () => {
+    setAcademicRecords([...academicRecords, {
+      level: '',
+      year: '',
+      school: '',
+      percentage: '',
+      // Special fields for National Exam
+      subjectGrades: '',
+      certificate: null,
+      supportingDocuments: []
+    }]);
+  };
+
+  const updateAcademicRecord = (index, field, value) => {
+    const updatedRecords = [...academicRecords];
+    updatedRecords[index] = { ...updatedRecords[index], [field]: value };
+    setAcademicRecords(updatedRecords);
+  };
+
+  const handleSupportingDocumentUpload = (recordIndex, e) => {
+    const files = Array.from(e.target.files);
+    const updatedRecords = [...academicRecords];
+    if (!updatedRecords[recordIndex].supportingDocuments) {
+      updatedRecords[recordIndex].supportingDocuments = [];
+    }
+    updatedRecords[recordIndex].supportingDocuments.push(...files);
+    setAcademicRecords(updatedRecords);
+  };
+
+  const removeSupportingDocument = (recordIndex, docIndex) => {
+    const updatedRecords = [...academicRecords];
+    updatedRecords[recordIndex].supportingDocuments.splice(docIndex, 1);
+    setAcademicRecords(updatedRecords);
+  };
+
+  const removeAcademicRecord = (index) => {
+    setAcademicRecords(academicRecords.filter((_, i) => i !== index));
+  };
+
+  // Portfolio management functions (for undocumented talent)
+  const addPortfolioItem = () => {
+    setPortfolio([...portfolio, {
+      title: '',
+      description: '',
+      category: '',
+      year: '',
+      media: null,
+      link: ''
+    }]);
+  };
+
+  const updatePortfolioItem = (index, field, value) => {
+    const updatedPortfolio = [...portfolio];
+    updatedPortfolio[index] = { ...updatedPortfolio[index], [field]: value };
+    setPortfolio(updatedPortfolio);
+  };
+
+  const removePortfolioItem = (index) => {
+    setPortfolio(portfolio.filter((_, i) => i !== index));
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
@@ -222,23 +326,35 @@ const CreateProfile = () => {
       data.append('tags', JSON.stringify(form.tags || []));
       data.append('education', JSON.stringify(education));
       data.append('experience', JSON.stringify(experience));
+      data.append('academicRecords', JSON.stringify(academicRecords));
+      data.append('portfolio', JSON.stringify(portfolio));
       if (typeof form.isPublic !== 'undefined') data.append('isPublic', form.isPublic);
       if (files.document) data.append('document', files.document);
       if (profileImage) data.append('profileImage', profileImage);
       
+      // Add supporting documents
+      supportingDocuments.forEach((doc, index) => {
+        data.append('supportingDocuments', doc);
+      });
+      
       const response = await axios.post('http://localhost:5001/api/profiles', data, {
-        headers: { 'Content-Type': 'multipart/form-data' }
+        headers: { 
+          'Content-Type': 'multipart/form-data',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
       });
       
       setSuccess(true);
       
-      // Refresh user data to get updated hasProfile status
-      await refreshUser();
-      
-      // Redirect to refugee dashboard after successful save
-      setTimeout(() => {
-        navigate('/refugee-dashboard');
-      }, 2000);
+      // Call the onProfileUpdated callback if provided
+      if (onProfileUpdated) {
+        await onProfileUpdated();
+      } else {
+        // Redirect to refugee dashboard after successful save
+        setTimeout(() => {
+          navigate('/refugee-dashboard');
+        }, 2000);
+      }
       
     } catch (error) {
       console.error('Error saving profile:', error);
@@ -268,7 +384,7 @@ const CreateProfile = () => {
         {success && (
           <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg flex items-center">
             <CheckCircle className="h-5 w-5 text-green-500 mr-2" />
-            <span className="text-green-700">Profile saved successfully! Redirecting to refugee dashboard...</span>
+            <span className="text-green-700">Profile saved successfully! Redirecting to dashboard...</span>
         </div>
       )}
 
@@ -448,7 +564,7 @@ const CreateProfile = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-2">Skills</label>
                 <input 
                   name="skills" 
-                  value={form.skills?.join(', ') || ''} 
+                  value={form.skillsRaw || form.skills?.join(', ') || ''} 
                   onChange={e => handleArrayChange('skills', e.target.value)} 
                   placeholder="e.g., JavaScript, React, Python (comma separated)" 
                   className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500" 
@@ -459,7 +575,7 @@ const CreateProfile = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-2">Languages</label>
                 <input 
                   name="language" 
-                  value={form.language?.join(', ') || ''} 
+                  value={form.languageRaw || form.language?.join(', ') || ''} 
                   onChange={e => handleArrayChange('language', e.target.value)} 
                   placeholder="e.g., English, Spanish, French (comma separated)" 
                   className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500" 
@@ -469,8 +585,224 @@ const CreateProfile = () => {
             </div>
           </div>
 
+          {/* Dynamic Template Sections Based on Refugee Type */}
+          
+          {/* Student Template */}
+          {option === 'student' && (
+            <>
+              {/* Academic Information Section */}
+              <div className="bg-blue-50 rounded-lg p-6 border border-blue-200">
+                <h3 className="text-lg font-semibold text-blue-900 mb-4 flex items-center">
+                  <BookOpen className="h-5 w-5 mr-2 text-blue-600" />
+                  Academic Information
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                  <div>
+                    <label className="block text-sm font-medium text-blue-800 mb-2">High School Subjects</label>
+                    <input 
+                      name="highSchoolSubjects" 
+                      value={form.highSchoolSubjects || ''} 
+                      onChange={handleChange} 
+                      placeholder="e.g., Mathematics, Physics, Chemistry, Biology" 
+                      className="w-full border border-blue-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500" 
+                    />
+                    <p className="text-xs text-blue-600 mt-1">List the subjects you studied in high school</p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-blue-800 mb-2">Desired Field of Study</label>
+                    <input 
+                      name="desiredField" 
+                      value={form.desiredField || ''} 
+                      onChange={handleChange} 
+                      placeholder="e.g., Computer Science, Medicine, Engineering" 
+                      className="w-full border border-blue-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500" 
+                    />
+                    <p className="text-xs text-blue-600 mt-1">What would you like to study at university?</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Academic Records Section */}
+              <div className="bg-gray-50 rounded-lg p-6 border border-gray-200">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-semibold text-gray-900 flex items-center">
+                    <Award className="h-5 w-5 mr-2 text-blue-500" />
+                    Annual Academic Records
+                  </h3>
+                  <button
+                    type="button"
+                    onClick={addAcademicRecord}
+                    className="flex items-center text-sm text-blue-600 hover:text-blue-700"
+                  >
+                    <Plus className="h-4 w-4 mr-1" />
+                    Add Annual Record
+                  </button>
+                </div>
+                
+                {academicRecords.length === 0 ? (
+                  <div className="text-center py-8 text-gray-500">
+                    <Award className="h-12 w-12 mx-auto mb-2 text-gray-300" />
+                    <p>No academic records added yet</p>
+                    <p className="text-sm">Add your annual academic records (Senior Four, Senior Five, Senior Six, National Exam)</p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {academicRecords.map((record, index) => (
+                      <div key={index} className="bg-white rounded-lg p-4 border border-gray-200">
+                        <div className="flex justify-between items-start mb-3">
+                          <h4 className="font-medium text-gray-900">Academic Record #{index + 1}</h4>
+                          <button
+                            type="button"
+                            onClick={() => removeAcademicRecord(index)}
+                            className="text-red-500 hover:text-red-700"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Academic Level</label>
+                            <select
+                              value={record.level || ''}
+                              onChange={(e) => updateAcademicRecord(index, 'level', e.target.value)}
+                              className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            >
+                              <option value="">Select level...</option>
+                              {academicLevels.map(level => (
+                                <option key={level.value} value={level.value}>{level.label}</option>
+                              ))}
+                            </select>
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Year</label>
+                            <input
+                              type="text"
+                              value={record.year || ''}
+                              onChange={(e) => updateAcademicRecord(index, 'year', e.target.value)}
+                              placeholder="e.g., 2023"
+                              className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            />
+                          </div>
+                          {record.level !== 'national_exam' && (
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-1">School</label>
+                              <input
+                                type="text"
+                                value={record.school || ''}
+                                onChange={(e) => updateAcademicRecord(index, 'school', e.target.value)}
+                                placeholder="School name"
+                                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                              />
+                            </div>
+                          )}
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Percentage Score</label>
+                            <input
+                              type="number"
+                              min="0"
+                              max="100"
+                              value={record.percentage || ''}
+                              onChange={(e) => updateAcademicRecord(index, 'percentage', e.target.value)}
+                              placeholder="e.g., 85"
+                              className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            />
+                          </div>
+                        </div>
+
+                        {/* Special National Exam Fields */}
+                        {record.level === 'national_exam' && (
+                          <div className="mt-4">
+                            <h5 className="font-medium text-gray-700 mb-3">Subject Grades</h5>
+                            <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                              <label className="block text-sm font-medium text-gray-600 mb-2">
+                                Enter your subject grades (e.g., Physics: A, Chemistry: B, Mathematics: A)
+                              </label>
+                              <textarea
+                                value={record.subjectGrades || ''}
+                                onChange={(e) => updateAcademicRecord(index, 'subjectGrades', e.target.value)}
+                                placeholder="Physics: A, Chemistry: B, Mathematics: A, Biology: A, English: B"
+                                rows="3"
+                                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                              />
+                              <p className="text-xs text-gray-500 mt-1">
+                                Format: Subject: Grade (separate multiple subjects with commas)
+                              </p>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Supporting Documents Section */}
+              <div className="bg-gray-50 rounded-lg p-6 border border-gray-200">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                  <FileText className="h-5 w-5 mr-2 text-blue-500" />
+                  Transcripts and Certificates
+                </h3>
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <p className="text-sm text-gray-700">Upload certificates, transcripts, and other supporting documents</p>
+                    <input
+                      type="file"
+                      multiple
+                      onChange={(e) => {
+                        const files = Array.from(e.target.files);
+                        setSupportingDocuments(prev => [...prev, ...files]);
+                      }}
+                      className="hidden"
+                      id="supporting-docs"
+                    />
+                    <label
+                      htmlFor="supporting-docs"
+                      className="flex items-center text-sm text-blue-600 hover:text-blue-700 cursor-pointer"
+                    >
+                      <Plus className="h-4 w-4 mr-1" />
+                      Upload Documents
+                    </label>
+                  </div>
+                  
+                  {supportingDocuments.length > 0 ? (
+                    <div className="space-y-2">
+                      {supportingDocuments.map((doc, docIndex) => (
+                        <div key={docIndex} className="flex items-center justify-between p-2 bg-white rounded border border-gray-200">
+                          <div className="flex items-center space-x-2">
+                            <FileText className="h-4 w-4 text-blue-500" />
+                            <span className="text-sm text-gray-700">{doc.name}</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSupportingDocuments(prev => prev.filter((_, i) => i !== docIndex));
+                            }}
+                            className="text-red-500 hover:text-red-700"
+                          >
+                            <X className="h-4 w-4" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-4 text-gray-500">
+                      <FileText className="h-8 w-8 mx-auto mb-2 text-gray-300" />
+                      <p className="text-sm">No supporting documents uploaded yet</p>
+                      <p className="text-xs">Upload your certificates and transcripts</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+
+            </>
+          )}
+
+          {/* Job Seeker Template */}
+          {option === 'job seeker' && (
+            <>
           {/* Education Section */}
-          <div className="bg-gray-50 rounded-lg p-6">
+              <div className="bg-gray-50 rounded-lg p-6 border border-gray-200 mb-6">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold text-gray-900 flex items-center">
                 <GraduationCap className="h-5 w-5 mr-2 text-blue-500" />
@@ -574,8 +906,8 @@ const CreateProfile = () => {
             )}
           </div>
 
-          {/* Experience Section */}
-          <div className="bg-gray-50 rounded-lg p-6">
+              {/* Work Experience Section */}
+              <div className="bg-gray-50 rounded-lg p-6 border border-gray-200">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold text-gray-900 flex items-center">
                 <Briefcase className="h-5 w-5 mr-2 text-blue-500" />
@@ -618,7 +950,7 @@ const CreateProfile = () => {
                           type="text"
                           value={exp.company || ''}
                           onChange={(e) => updateExperience(index, 'company', e.target.value)}
-                          placeholder="Enter company name"
+                              placeholder="Company name"
                           className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                         />
                       </div>
@@ -633,37 +965,12 @@ const CreateProfile = () => {
                         />
                       </div>
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Employment Type</label>
-                        <select
-                          value={exp.type || ''}
-                          onChange={(e) => updateExperience(index, 'type', e.target.value)}
-                          className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        >
-                          <option value="">Select type</option>
-                          <option value="Full-time">Full-time</option>
-                          <option value="Part-time">Part-time</option>
-                          <option value="Contract">Contract</option>
-                          <option value="Internship">Internship</option>
-                          <option value="Freelance">Freelance</option>
-                        </select>
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Duration</label>
-                        <input
-                          type="text"
-                          value={exp.duration || ''}
-                          onChange={(e) => updateExperience(index, 'duration', e.target.value)}
-                          placeholder="e.g., 2 years"
-                          className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        />
-                      </div>
-                      <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
                         <input
                           type="text"
                           value={exp.start || ''}
                           onChange={(e) => updateExperience(index, 'start', e.target.value)}
-                          placeholder="e.g., Jan 2020"
+                              placeholder="e.g., January 2022"
                           className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                         />
                       </div>
@@ -673,7 +980,7 @@ const CreateProfile = () => {
                           type="text"
                           value={exp.end || ''}
                           onChange={(e) => updateExperience(index, 'end', e.target.value)}
-                          placeholder="e.g., Dec 2022 (or Present)"
+                              placeholder="e.g., Present or December 2023"
                           className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                         />
                       </div>
@@ -682,7 +989,7 @@ const CreateProfile = () => {
                         <textarea
                           value={exp.description || ''}
                           onChange={(e) => updateExperience(index, 'description', e.target.value)}
-                          placeholder="Describe your role, responsibilities, and achievements"
+                              placeholder="Describe your responsibilities and achievements"
                           rows="3"
                           className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                         />
@@ -693,38 +1000,164 @@ const CreateProfile = () => {
               </div>
             )}
           </div>
+            </>
+          )}
 
-          {/* Additional Information Section */}
-          <div className="bg-gray-50 rounded-lg p-6">
+          {/* Undocumented Talent Template */}
+          {option === 'undocumented_talent' && (
+            <>
+              {/* Talent Information Section */}
+              <div className="bg-gray-50 rounded-lg p-6 border border-gray-200">
             <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
-              <Tag className="h-5 w-5 mr-2 text-blue-500" />
-              Additional Information
+                  <Star className="h-5 w-5 mr-2 text-blue-500" />
+                  Talent Information
             </h3>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Tags</label>
-                <input 
-                  name="tags" 
-                  value={form.tags?.join(', ') || ''} 
-                  onChange={e => handleArrayChange('tags', e.target.value)} 
-                  placeholder="e.g., remote work, part-time, entry-level (comma separated)" 
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500" 
-                />
-                <p className="text-xs text-gray-500 mt-1">Add tags to help providers find you</p>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Document Upload</label>
-                <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center">
-                  <Upload className="h-8 w-8 text-gray-400 mx-auto mb-2" />
-                  <input 
-                    name="document" 
-                    type="file" 
-                    onChange={handleFileChange} 
-                    className="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100" 
-                  />
-                  <p className="text-xs text-gray-500 mt-1">Upload your resume, portfolio, or other relevant documents</p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Talent Category</label>
+                    <select 
+                      name="talentCategory" 
+                      value={form.talentCategory || ''} 
+                      onChange={handleChange} 
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    >
+                      <option value="">Select your talent category...</option>
+                      {talentCategories.map(cat => (
+                        <option key={cat.value} value={cat.value}>{cat.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Years of Experience</label>
+                    <input 
+                      name="talentExperience" 
+                      value={form.talentExperience || ''} 
+                      onChange={handleChange} 
+                      placeholder="e.g., 5 years" 
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500" 
+                    />
+                  </div>
+                  <div className="md:col-span-2">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Talent Description</label>
+                    <textarea 
+                      name="talentDescription" 
+                      value={form.talentDescription || ''} 
+                      onChange={handleChange} 
+                      placeholder="Describe your talent, style, and what makes you unique..." 
+                      rows="3"
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500" 
+                    />
+                  </div>
                 </div>
               </div>
+
+              {/* Portfolio Section */}
+              <div className="bg-gray-50 rounded-lg p-6 border border-gray-200">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-semibold text-gray-900 flex items-center">
+                    <Palette className="h-5 w-5 mr-2 text-blue-500" />
+                    Portfolio & Work Samples
+                  </h3>
+                  <button
+                    type="button"
+                    onClick={addPortfolioItem}
+                    className="flex items-center text-sm text-blue-600 hover:text-blue-700"
+                  >
+                    <Plus className="h-4 w-4 mr-1" />
+                    Add Portfolio Item
+                  </button>
+                </div>
+                
+                {portfolio.length === 0 ? (
+                  <div className="text-center py-8 text-gray-500">
+                    <Palette className="h-12 w-12 mx-auto mb-2 text-gray-300" />
+                    <p>No portfolio items added yet</p>
+                    <p className="text-sm">Showcase your best work to attract opportunities</p>
+                  </div>
+                ) : (
+            <div className="space-y-4">
+                    {portfolio.map((item, index) => (
+                      <div key={index} className="bg-white rounded-lg p-4 border border-gray-200">
+                        <div className="flex justify-between items-start mb-3">
+                          <h4 className="font-medium text-gray-900">Portfolio Item #{index + 1}</h4>
+                          <button
+                            type="button"
+                            onClick={() => removePortfolioItem(index)}
+                            className="text-red-500 hover:text-red-700"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Title</label>
+                <input 
+                              type="text"
+                              value={item.title || ''}
+                              onChange={(e) => updatePortfolioItem(index, 'title', e.target.value)}
+                              placeholder="Project or work title"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500" 
+                />
+              </div>
+              <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
+                            <select
+                              value={item.category || ''}
+                              onChange={(e) => updatePortfolioItem(index, 'category', e.target.value)}
+                              className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            >
+                              <option value="">Select category...</option>
+                              {talentCategories.map(cat => (
+                                <option key={cat.value} value={cat.value}>{cat.label}</option>
+                              ))}
+                            </select>
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Year Created</label>
+                  <input 
+                              type="text"
+                              value={item.year || ''}
+                              onChange={(e) => updatePortfolioItem(index, 'year', e.target.value)}
+                              placeholder="e.g., 2023"
+                              className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Link (Optional)</label>
+                            <input
+                              type="url"
+                              value={item.link || ''}
+                              onChange={(e) => updatePortfolioItem(index, 'link', e.target.value)}
+                              placeholder="https://example.com"
+                              className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            />
+              </div>
+                          <div className="md:col-span-2">
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                            <textarea
+                              value={item.description || ''}
+                              onChange={(e) => updatePortfolioItem(index, 'description', e.target.value)}
+                              placeholder="Describe this work, your role, and what makes it special"
+                              rows="3"
+                              className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+
+
+
+
+
+          {/* Profile Visibility and Submit Button */}
+          <div className="bg-gray-50 rounded-lg p-6 mb-6">
+            <div className="flex items-center justify-between">
               <div className="flex items-center">
                 <input
                   id="isPublic"
@@ -737,12 +1170,8 @@ const CreateProfile = () => {
                 <label htmlFor="isPublic" className="ml-2 block text-sm text-gray-900">
                   Make my profile public
         </label>
-              </div>
-            </div>
           </div>
 
-          {/* Submit Button */}
-          <div className="flex justify-end">
             <button
               type="submit"
               disabled={loading}
@@ -760,6 +1189,7 @@ const CreateProfile = () => {
                 </>
               )}
         </button>
+            </div>
           </div>
       </form>
       </div>

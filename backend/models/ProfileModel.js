@@ -50,6 +50,10 @@ const ProfileSchema = new mongoose.Schema({
   photoUrl: {
     type: String
   },
+  supportingDocuments: {
+    type: [String],
+    default: []
+  },
   education: {
     type: [{
       school: String,
@@ -70,6 +74,48 @@ const ProfileSchema = new mongoose.Schema({
       end: String,
       duration: String,
       description: String
+    }],
+    default: []
+  },
+  // Student-specific fields
+  highSchoolSubjects: {
+    type: String
+  },
+  desiredField: {
+    type: String
+  },
+  academicRecords: {
+    type: [{
+      level: String,
+      year: String,
+      school: String,
+      percentage: Number,
+      // Special fields for National Exam
+      subjectGrades: String,
+      certificate: String,
+      supportingDocuments: [String]
+    }],
+    default: []
+  },
+  // Undocumented talent-specific fields
+  talentCategory: {
+    type: String,
+    enum: ['artist', 'musician', 'programmer', 'writer', 'designer', 'other']
+  },
+  talentExperience: {
+    type: String
+  },
+  talentDescription: {
+    type: String
+  },
+  portfolio: {
+    type: [{
+      title: String,
+      description: String,
+      category: String,
+      year: String,
+      media: String,
+      link: String
     }],
     default: []
   },

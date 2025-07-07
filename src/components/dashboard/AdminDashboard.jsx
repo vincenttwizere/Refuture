@@ -45,13 +45,16 @@ import {
   Heart,
   Share2,
   Plus,
-  AlertCircle
+  AlertCircle,
+  Phone
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { useNotifications } from '../../hooks/useNotifications';
 import { useMessages } from '../../hooks/useMessages';
 import { useUsers } from '../../hooks/useUsers';
+import { useProfiles } from '../../hooks/useProfiles';
+import { useOpportunities } from '../../hooks/useOpportunities';
 import { usePlatformStats } from '../../hooks/usePlatformStats';
 
 const AdminDashboard = () => {
@@ -68,6 +71,8 @@ const AdminDashboard = () => {
   const { notifications } = useNotifications();
   const { messages } = useMessages();
   const { users, loading: usersLoading, error: usersError, fetchUsers, updateUserStatus, deleteUser, refetchUsers } = useUsers();
+  const { profiles, loading: profilesLoading, error: profilesError, fetchProfiles, deleteProfile, refetchProfiles } = useProfiles();
+  const { opportunities, loading: opportunitiesLoading, error: opportunitiesError, fetchOpportunities, deleteOpportunity, refetchOpportunities } = useOpportunities();
   const { stats, loading: statsLoading, error: statsError, refetchStats } = usePlatformStats();
 
   // User management state
@@ -92,62 +97,42 @@ const AdminDashboard = () => {
 
   // Sidebar main categories only
   const navigationItems = [
-    {
-      id: 'overview',
-      label: 'Overview',
-      icon: BarChart3,
-      description: 'Platform statistics and analytics'
-    },
-    {
-      id: 'users',
-      label: 'User Management',
-      icon: Users,
-      description: 'Manage platform users and permissions'
-    },
-    {
-      id: 'opportunities',
-      label: 'Opportunities',
-      icon: Briefcase,
-      description: 'Monitor and manage opportunities'
-    },
-    {
-      id: 'profiles',
-      label: 'Profiles',
-      icon: User,
-      description: 'Review and manage user profiles'
-    },
-    {
-      id: 'reports',
-      label: 'Reports',
-      icon: TrendingUp,
-      description: 'Generate platform reports'
-    },
-    {
-      id: 'settings',
-      label: 'Settings',
-      icon: Settings,
-      description: 'Platform configuration'
-    }
+    { id: 'overview', label: 'Dashboard Overview', icon: BarChart3 },
+    { id: 'users', label: 'User Management', icon: Users },
+    { id: 'opportunities', label: 'Opportunities', icon: Briefcase },
+    { id: 'profiles', label: 'Profiles', icon: User },
+    { id: 'reports', label: 'Reports', icon: TrendingUp },
+    { id: 'settings', label: 'Settings', icon: Settings },
+    { id: 'support', label: 'Help & Support', icon: HelpCircle }
   ];
 
   // Sidebar rendering (no dropdowns)
-  const renderMenuItem = (item) => (
+  const renderMenuItem = (item) => {
+    const Icon = item.icon;
+    const isActive = activeItem === item.id;
+    return (
+      <div key={item.id} className="mb-1">
         <button
-      key={item.id}
           onClick={() => setActiveItem(item.id)}
-      className={`w-full flex items-center px-3 py-2 text-left text-sm rounded-lg transition-colors ${
-        activeItem === item.id
-          ? 'bg-blue-50 text-blue-700 border border-blue-200'
-          : 'text-gray-700 hover:bg-gray-100'
+          className={`w-full flex items-center justify-between px-3 py-2 text-left text-sm rounded-lg transition-colors ${
+            isActive 
+              ? 'bg-blue-50 text-blue-700 border-r-2 border-blue-500' 
+              : 'text-gray-700 hover:bg-gray-50'
           }`}
         >
-      <item.icon className="h-5 w-5 mr-3" />
-      <div>
+          <div className="flex items-center">
+            <Icon className={`h-5 w-5 mr-3 ${isActive ? 'text-blue-600' : 'text-gray-500'}`} />
             <div className="font-medium">{item.label}</div>
-        <div className="text-xs text-gray-500">{item.description}</div>
       </div>
+          {item.badge && (
+            <span className="bg-red-100 text-red-800 text-xs font-medium px-2 py-1 rounded-full">
+              {item.badge}
+            </span>
+          )}
     </button>
+      </div>
     );
+  };
 
   // Handle user status update
   const handleUserStatusUpdate = async (userId, newStatus) => {
@@ -171,10 +156,40 @@ const AdminDashboard = () => {
     }
   };
 
+  // Handle profile deletion
+  const handleProfileDelete = async (profileId) => {
+    if (window.confirm('Are you sure you want to delete this profile? This action cannot be undone.')) {
+      try {
+        await deleteProfile(profileId);
+        refetchProfiles();
+      } catch (error) {
+        console.error('Error deleting profile:', error);
+      }
+    }
+  };
+
+  // Handle opportunity deletion
+  const handleOpportunityDelete = async (opportunityId) => {
+    if (window.confirm('Are you sure you want to delete this opportunity? This action cannot be undone.')) {
+      try {
+        await deleteOpportunity(opportunityId);
+        refetchOpportunities();
+      } catch (error) {
+        console.error('Error deleting opportunity:', error);
+      }
+    }
+  };
+
   // Apply filters
   useEffect(() => {
     fetchUsers(filters);
   }, [filters, fetchUsers]);
+
+  // Load profiles and opportunities once when component mounts
+  useEffect(() => {
+    fetchProfiles();
+    fetchOpportunities();
+  }, [fetchProfiles, fetchOpportunities]);
 
   // Main content area
   const renderMainContent = () => {
@@ -302,13 +317,8 @@ const AdminDashboard = () => {
     if (activeItem === 'users') {
       return (
         <div className="space-y-6">
-          {/* Header */}
-          <div className="flex justify-between items-center">
-            <div>
-              <h2 className="text-2xl font-bold text-gray-900">User Management</h2>
+          {/* Description */}
               <p className="text-gray-600">Manage platform users and their permissions</p>
-            </div>
-          </div>
 
           {/* Filters */}
           <div className="bg-white p-6 rounded-lg border">
@@ -504,10 +514,588 @@ const AdminDashboard = () => {
       );
     }
 
-    // Placeholder for other sections
+    if (activeItem === 'profiles') {
     return (
       <div className="space-y-6">
-        <div className="bg-white p-6 rounded-lg border">
+          {/* Description */}
+          <p className="text-gray-600">Review and manage user profiles</p>
+
+          {/* Profiles Grid */}
+          {profilesError ? (
+            <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+              <div className="flex items-center">
+                <AlertCircle className="h-5 w-5 text-red-400 mr-2" />
+                <p className="text-red-800">{profilesError}</p>
+        </div>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {profiles.map((profile) => (
+                <div key={profile._id} className="bg-gray-50 rounded-lg p-6 border border-gray-200 hover:shadow-md transition-shadow">
+                  <div className="flex items-center space-x-3 mb-4">
+                    <div className="w-12 h-12 rounded-full bg-gray-300 flex items-center justify-center">
+                      {profile.photoUrl ? (
+                        <img 
+                          src={profile.photoUrl} 
+                          alt="Profile" 
+                          className="w-12 h-12 rounded-full object-cover"
+                          onError={(e) => {
+                            e.target.style.display = 'none';
+                            e.target.nextSibling.style.display = 'flex';
+                          }}
+                        />
+                      ) : null}
+                      <div className="w-12 h-12 rounded-full bg-gray-300 flex items-center justify-center text-gray-600 font-medium">
+                        {profile.fullName?.[0] || 'U'}
+                      </div>
+                    </div>
+                    <div className="flex-1">
+                      <h3 className="font-medium text-gray-900">{profile.fullName}</h3>
+                      <p className="text-sm text-gray-500">{profile.email}</p>
+                    </div>
+                  </div>
+                  
+                  <div className="space-y-2 mb-4">
+                    <div className="flex items-center text-sm">
+                      <span className="text-gray-500 w-20">Type:</span>
+                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                        profile.option === 'student' ? 'bg-blue-100 text-blue-800' :
+                        profile.option === 'job seeker' ? 'bg-green-100 text-green-800' :
+                        'bg-purple-100 text-purple-800'
+                      }`}>
+                        {profile.option}
+                      </span>
+                    </div>
+                    <div className="flex items-center text-sm">
+                      <span className="text-gray-500 w-20">Age:</span>
+                      <span className="text-gray-900">{profile.age} years old</span>
+                    </div>
+                    <div className="flex items-center text-sm">
+                      <span className="text-gray-500 w-20">Location:</span>
+                      <span className="text-gray-900">{profile.currentLocation}</span>
+                    </div>
+                    <div className="flex items-center text-sm">
+                      <span className="text-gray-500 w-20">Status:</span>
+                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                        profile.isPublic ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
+                      }`}>
+                        {profile.isPublic ? 'Public' : 'Private'}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="flex space-x-2">
+                    <button
+                      onClick={() => window.open(`/profile/${profile._id}`, '_blank')}
+                      className="flex-1 bg-blue-600 text-white px-3 py-2 rounded text-sm hover:bg-blue-700 transition-colors flex items-center justify-center"
+                    >
+                      <Eye className="h-4 w-4 mr-1" />
+                      View
+                    </button>
+                    <button
+                      onClick={() => handleProfileDelete(profile._id)}
+                      className="bg-red-50 text-red-700 px-3 py-2 rounded text-sm hover:bg-red-100 transition-colors flex items-center"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+              
+              {profiles.length === 0 && (
+                <div className="col-span-full text-center py-12">
+                  <User className="h-16 w-16 mx-auto mb-4 text-gray-300" />
+                  <h3 className="text-lg font-medium text-gray-900 mb-2">No profiles found</h3>
+                  <p className="text-gray-600">No profiles match your current filters</p>
+                </div>
+              )}
+            </div>
+          )}
+      </div>
+    );
+    }
+
+    if (activeItem === 'opportunities') {
+  return (
+        <div className="space-y-6">
+          {/* Description */}
+          <p className="text-gray-600">Review and manage job opportunities posted by providers</p>
+
+          {/* Opportunities Grid */}
+          {opportunitiesError ? (
+            <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+            <div className="flex items-center">
+                <AlertCircle className="h-5 w-5 text-red-400 mr-2" />
+                <p className="text-red-800">{opportunitiesError}</p>
+        </div>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {opportunities.map((opportunity) => (
+                <div key={opportunity._id} className="bg-gray-50 rounded-lg p-6 border border-gray-200 hover:shadow-md transition-shadow">
+                  <div className="flex items-center space-x-3 mb-4">
+                    <div className="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center">
+                      <Briefcase className="h-6 w-6 text-blue-600" />
+                    </div>
+                    <div className="flex-1">
+                      <h3 className="font-medium text-gray-900">{opportunity.title}</h3>
+                      <p className="text-sm text-gray-500">{opportunity.company}</p>
+                    </div>
+                  </div>
+                  
+                  <div className="space-y-2 mb-4">
+                    <div className="flex items-center text-sm">
+                      <span className="text-gray-500 w-20">Type:</span>
+                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                        opportunity.type === 'full-time' ? 'bg-green-100 text-green-800' :
+                        opportunity.type === 'part-time' ? 'bg-blue-100 text-blue-800' :
+                        'bg-purple-100 text-purple-800'
+                      }`}>
+                        {opportunity.type}
+                      </span>
+                    </div>
+                    <div className="flex items-center text-sm">
+                      <span className="text-gray-500 w-20">Location:</span>
+                      <span className="text-gray-900">{opportunity.location}</span>
+                    </div>
+                    <div className="flex items-center text-sm">
+                      <span className="text-gray-500 w-20">Salary:</span>
+                      <span className="text-gray-900">{opportunity.salary || 'Not specified'}</span>
+                    </div>
+                    <div className="flex items-center text-sm">
+                      <span className="text-gray-500 w-20">Status:</span>
+                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                        opportunity.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
+                      }`}>
+                        {opportunity.status}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="flex space-x-2">
+              <button
+                      onClick={() => window.open(`/opportunity/${opportunity._id}`, '_blank')}
+                      className="flex-1 bg-blue-600 text-white px-3 py-2 rounded text-sm hover:bg-blue-700 transition-colors flex items-center justify-center"
+              >
+                      <Eye className="h-4 w-4 mr-1" />
+                      View
+              </button>
+          <button
+                      onClick={() => handleOpportunityDelete(opportunity._id)}
+                      className="bg-red-50 text-red-700 px-3 py-2 rounded text-sm hover:bg-red-100 transition-colors flex items-center"
+          >
+                      <Trash2 className="h-4 w-4" />
+          </button>
+            </div>
+          </div>
+              ))}
+              
+              {opportunities.length === 0 && (
+                <div className="col-span-full text-center py-12">
+                  <Briefcase className="h-16 w-16 mx-auto mb-4 text-gray-300" />
+                  <h3 className="text-lg font-medium text-gray-900 mb-2">No opportunities found</h3>
+                  <p className="text-gray-600">No opportunities match your current filters</p>
+        </div>
+              )}
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    if (activeItem === 'reports') {
+      return (
+        <div className="space-y-6">
+          {/* Description */}
+          <p className="text-gray-600">View platform analytics and generate reports</p>
+
+          {/* Reports Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* User Growth Report */}
+            <div className="bg-white p-6 rounded-lg border border-gray-200">
+              <div className="flex items-center mb-4">
+                <div className="p-2 bg-blue-100 rounded-lg">
+                  <TrendingUp className="h-6 w-6 text-blue-600" />
+                </div>
+                <div className="ml-3">
+                  <h3 className="font-medium text-gray-900">User Growth</h3>
+                  <p className="text-sm text-gray-500">Monthly user registration trends</p>
+                </div>
+              </div>
+              <div className="space-y-3">
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600">Total Users:</span>
+                  <span className="font-medium">{stats?.totalUsers || 0}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600">Active Users:</span>
+                  <span className="font-medium">{stats?.activeUsers || 0}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600">New This Month:</span>
+                  <span className="font-medium">{stats?.newUsersThisMonth || 0}</span>
+                </div>
+              </div>
+              <button className="w-full mt-4 bg-blue-600 text-white px-4 py-2 rounded text-sm hover:bg-blue-700 transition-colors">
+                <Download className="h-4 w-4 inline mr-2" />
+                Download Report
+              </button>
+            </div>
+
+            {/* Opportunity Analytics */}
+            <div className="bg-white p-6 rounded-lg border border-gray-200">
+              <div className="flex items-center mb-4">
+                <div className="p-2 bg-green-100 rounded-lg">
+                  <Briefcase className="h-6 w-6 text-green-600" />
+                </div>
+                <div className="ml-3">
+                  <h3 className="font-medium text-gray-900">Opportunity Analytics</h3>
+                  <p className="text-sm text-gray-500">Job posting and application metrics</p>
+                </div>
+              </div>
+              <div className="space-y-3">
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600">Total Opportunities:</span>
+                  <span className="font-medium">{opportunities.length}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600">Active Postings:</span>
+                  <span className="font-medium">{opportunities.filter(opp => opp.status === 'active').length}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600">Avg. Applications:</span>
+                  <span className="font-medium">12</span>
+                </div>
+              </div>
+              <button className="w-full mt-4 bg-green-600 text-white px-4 py-2 rounded text-sm hover:bg-green-700 transition-colors">
+                <Download className="h-4 w-4 inline mr-2" />
+                Download Report
+              </button>
+            </div>
+
+            {/* Profile Statistics */}
+            <div className="bg-white p-6 rounded-lg border border-gray-200">
+              <div className="flex items-center mb-4">
+                <div className="p-2 bg-purple-100 rounded-lg">
+                  <User className="h-6 w-6 text-purple-600" />
+                </div>
+                <div className="ml-3">
+                  <h3 className="font-medium text-gray-900">Profile Statistics</h3>
+                  <p className="text-sm text-gray-500">User profile completion rates</p>
+                </div>
+              </div>
+              <div className="space-y-3">
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600">Total Profiles:</span>
+                  <span className="font-medium">{profiles.length}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600">Public Profiles:</span>
+                  <span className="font-medium">{profiles.filter(p => p.isPublic).length}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600">Completion Rate:</span>
+                  <span className="font-medium">85%</span>
+                </div>
+              </div>
+              <button className="w-full mt-4 bg-purple-600 text-white px-4 py-2 rounded text-sm hover:bg-purple-700 transition-colors">
+                <Download className="h-4 w-4 inline mr-2" />
+                Download Report
+              </button>
+            </div>
+
+            {/* System Health */}
+            <div className="bg-white p-6 rounded-lg border border-gray-200">
+              <div className="flex items-center mb-4">
+                <div className="p-2 bg-yellow-100 rounded-lg">
+                  <Activity className="h-6 w-6 text-yellow-600" />
+                </div>
+                <div className="ml-3">
+                  <h3 className="font-medium text-gray-900">System Health</h3>
+                  <p className="text-sm text-gray-500">Platform performance metrics</p>
+                </div>
+              </div>
+              <div className="space-y-3">
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600">Uptime:</span>
+                  <span className="font-medium text-green-600">99.9%</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600">Response Time:</span>
+                  <span className="font-medium">120ms</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600">Error Rate:</span>
+                  <span className="font-medium text-green-600">0.1%</span>
+                </div>
+              </div>
+              <button className="w-full mt-4 bg-yellow-600 text-white px-4 py-2 rounded text-sm hover:bg-yellow-700 transition-colors">
+                <Download className="h-4 w-4 inline mr-2" />
+                Download Report
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    if (activeItem === 'settings') {
+      return (
+        <div className="space-y-6">
+          {/* Description */}
+          <p className="text-gray-600">Manage platform settings and configurations</p>
+
+          {/* Settings Sections */}
+          <div className="space-y-6">
+            {/* General Settings */}
+            <div className="bg-white p-6 rounded-lg border border-gray-200">
+              <h3 className="text-lg font-medium text-gray-900 mb-4 flex items-center">
+                <Settings className="h-5 w-5 mr-2 text-gray-500" />
+                General Settings
+              </h3>
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <label className="text-sm font-medium text-gray-700">Platform Name</label>
+                    <p className="text-xs text-gray-500">Display name for the platform</p>
+                  </div>
+                  <input
+                    type="text"
+                    defaultValue="Refuture"
+                    className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <label className="text-sm font-medium text-gray-700">Contact Email</label>
+                    <p className="text-xs text-gray-500">Support email address</p>
+                  </div>
+                  <input
+                    type="email"
+                    defaultValue="support@refuture.com"
+                    className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <label className="text-sm font-medium text-gray-700">Maintenance Mode</label>
+                    <p className="text-xs text-gray-500">Temporarily disable platform access</p>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input type="checkbox" className="sr-only peer" />
+                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            {/* Security Settings */}
+            <div className="bg-white p-6 rounded-lg border border-gray-200">
+              <h3 className="text-lg font-medium text-gray-900 mb-4 flex items-center">
+                <Shield className="h-5 w-5 mr-2 text-gray-500" />
+                Security Settings
+              </h3>
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <label className="text-sm font-medium text-gray-700">Two-Factor Authentication</label>
+                    <p className="text-xs text-gray-500">Require 2FA for all users</p>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input type="checkbox" className="sr-only peer" defaultChecked />
+                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                  </label>
+                </div>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <label className="text-sm font-medium text-gray-700">Session Timeout</label>
+                    <p className="text-xs text-gray-500">Auto-logout after inactivity</p>
+                  </div>
+                  <select className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <option>30 minutes</option>
+                    <option>1 hour</option>
+                    <option>2 hours</option>
+                    <option>4 hours</option>
+                  </select>
+                </div>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <label className="text-sm font-medium text-gray-700">Password Policy</label>
+                    <p className="text-xs text-gray-500">Minimum password requirements</p>
+                  </div>
+                  <select className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <option>8 characters minimum</option>
+                    <option>10 characters minimum</option>
+                    <option>12 characters minimum</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            {/* Notification Settings */}
+            <div className="bg-white p-6 rounded-lg border border-gray-200">
+              <h3 className="text-lg font-medium text-gray-900 mb-4 flex items-center">
+                <Bell className="h-5 w-5 mr-2 text-gray-500" />
+                Notification Settings
+              </h3>
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <label className="text-sm font-medium text-gray-700">Email Notifications</label>
+                    <p className="text-xs text-gray-500">Send email alerts for important events</p>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input type="checkbox" className="sr-only peer" defaultChecked />
+                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                  </label>
+                </div>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <label className="text-sm font-medium text-gray-700">Admin Alerts</label>
+                    <p className="text-xs text-gray-500">Notify admins of system issues</p>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input type="checkbox" className="sr-only peer" defaultChecked />
+                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            {/* Save Button */}
+            <div className="flex justify-end">
+              <button className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition-colors">
+                Save Settings
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    if (activeItem === 'support') {
+      return (
+        <div className="space-y-6">
+          {/* Description */}
+          <p className="text-gray-600">Help and support resources for administrators</p>
+
+          {/* Support Sections */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Documentation */}
+            <div className="bg-white p-6 rounded-lg border border-gray-200">
+              <div className="flex items-center mb-4">
+                <div className="p-2 bg-blue-100 rounded-lg">
+                  <FileText className="h-6 w-6 text-blue-600" />
+                </div>
+                <div className="ml-3">
+                  <h3 className="font-medium text-gray-900">Documentation</h3>
+                  <p className="text-sm text-gray-500">Admin guides and tutorials</p>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <a href="#" className="block text-sm text-blue-600 hover:text-blue-800">Getting Started Guide</a>
+                <a href="#" className="block text-sm text-blue-600 hover:text-blue-800">User Management</a>
+                <a href="#" className="block text-sm text-blue-600 hover:text-blue-800">Security Best Practices</a>
+                <a href="#" className="block text-sm text-blue-600 hover:text-blue-800">API Documentation</a>
+              </div>
+            </div>
+
+            {/* Contact Support */}
+            <div className="bg-white p-6 rounded-lg border border-gray-200">
+              <div className="flex items-center mb-4">
+                <div className="p-2 bg-green-100 rounded-lg">
+                  <MessageCircle className="h-6 w-6 text-green-600" />
+                </div>
+                <div className="ml-3">
+                  <h3 className="font-medium text-gray-900">Contact Support</h3>
+                  <p className="text-sm text-gray-500">Get help from our team</p>
+                </div>
+              </div>
+              <div className="space-y-3">
+                <div className="flex items-center text-sm">
+                  <Mail className="h-4 w-4 mr-2 text-gray-500" />
+                  <span>support@refuture.com</span>
+                </div>
+                <div className="flex items-center text-sm">
+                  <Phone className="h-4 w-4 mr-2 text-gray-500" />
+                  <span>+1 (555) 123-4567</span>
+                </div>
+                <div className="flex items-center text-sm">
+                  <Clock className="h-4 w-4 mr-2 text-gray-500" />
+                  <span>24/7 Support Available</span>
+                </div>
+              </div>
+              <button className="w-full mt-4 bg-green-600 text-white px-4 py-2 rounded text-sm hover:bg-green-700 transition-colors">
+                Open Support Ticket
+              </button>
+            </div>
+
+            {/* System Status */}
+            <div className="bg-white p-6 rounded-lg border border-gray-200">
+              <div className="flex items-center mb-4">
+                <div className="p-2 bg-yellow-100 rounded-lg">
+                  <Activity className="h-6 w-6 text-yellow-600" />
+                </div>
+                <div className="ml-3">
+                  <h3 className="font-medium text-gray-900">System Status</h3>
+                  <p className="text-sm text-gray-500">Current platform status</p>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between text-sm">
+                  <span>Platform Status:</span>
+                  <span className="text-green-600 font-medium">Operational</span>
+                </div>
+                <div className="flex items-center justify-between text-sm">
+                  <span>Database:</span>
+                  <span className="text-green-600 font-medium">Healthy</span>
+                </div>
+                <div className="flex items-center justify-between text-sm">
+                  <span>API Services:</span>
+                  <span className="text-green-600 font-medium">Online</span>
+                </div>
+                <div className="flex items-center justify-between text-sm">
+                  <span>Last Updated:</span>
+                  <span className="text-gray-500">2 minutes ago</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Quick Actions */}
+            <div className="bg-white p-6 rounded-lg border border-gray-200">
+              <div className="flex items-center mb-4">
+                <div className="p-2 bg-purple-100 rounded-lg">
+                  <Settings className="h-6 w-6 text-purple-600" />
+                </div>
+                <div className="ml-3">
+                  <h3 className="font-medium text-gray-900">Quick Actions</h3>
+                  <p className="text-sm text-gray-500">Common admin tasks</p>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <button className="w-full text-left text-sm text-blue-600 hover:text-blue-800 py-1">
+                  Backup Database
+                </button>
+                <button className="w-full text-left text-sm text-blue-600 hover:text-blue-800 py-1">
+                  Clear Cache
+                </button>
+                <button className="w-full text-left text-sm text-blue-600 hover:text-blue-800 py-1">
+                  Update System
+                </button>
+                <button className="w-full text-left text-sm text-blue-600 hover:text-blue-800 py-1">
+                  View Logs
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // Default placeholder for any other sections
+    return (
+      <div className="space-y-6">
+        <div className="bg-gray-50 rounded-lg p-6 border border-gray-200">
           <h2 className="text-lg font-medium text-gray-900 mb-4">{navigationItems.find(item => item.id === activeItem)?.label}</h2>
           <p className="text-gray-600">This section is under development. Coming soon!</p>
         </div>
@@ -516,45 +1104,44 @@ const AdminDashboard = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="flex h-screen bg-gray-50">
+      {/* Sidebar - Fixed */}
+      <div className="w-80 bg-white shadow-lg fixed h-full overflow-y-auto">
         {/* Header */}
-      <header className="bg-white shadow-sm border-b">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center py-4">
-            <div className="flex items-center">
-              <h1 className="text-2xl font-bold text-gray-900">Admin Dashboard</h1>
+        <div className="p-6 border-b border-gray-200">
+          <h1 className="text-xl font-bold text-gray-900">Admin Dashboard</h1>
+          <p className="text-sm text-gray-600 mt-1">Platform administration and management</p>
         </div>
-            <div className="flex items-center space-x-4">
-              <button
-                onClick={() => refetchStats()}
-                className="p-2 text-gray-400 hover:text-gray-600"
-              >
-                <RefreshCw className="h-5 w-5" />
-              </button>
-          <button
-                onClick={logout}
-                className="flex items-center text-gray-700 hover:text-gray-900"
-          >
-                <LogOut className="h-5 w-5 mr-2" />
-              Logout
-          </button>
-            </div>
-          </div>
-        </div>
-      </header>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="flex gap-8">
-          {/* Sidebar */}
-          <div className="w-64 flex-shrink-0">
-            <nav className="space-y-1">
-              {navigationItems.map(renderMenuItem)}
+        {/* Navigation */}
+        <nav className="p-4">
+          {navigationItems.map(item => renderMenuItem(item))}
+          <button
+            onClick={() => { logout(); navigate('/'); }}
+            className="w-full flex items-center justify-between px-3 py-2 text-left text-sm rounded-lg transition-colors text-gray-700 hover:bg-gray-100 mt-4 border-t border-gray-200"
+          >
+            <span className="flex items-center">
+              <LogOut className="h-5 w-5 mr-3 text-gray-500" />
+              Logout
+            </span>
+          </button>
         </nav>
       </div>
 
-          {/* Main Content */}
-          <div className="flex-1">
+      {/* Main Content Area - Scrollable */}
+      <div className="flex-1 ml-80 overflow-y-auto">
+        <div className="p-8">
+          <div className="max-w-4xl mx-auto">
+            <div className="bg-white rounded-lg shadow-sm p-6">
+              <div className="mb-4">
+                <h2 className="text-2xl font-bold text-gray-900">
+                  {navigationItems.find(item => item.id === activeItem)?.label || 'Dashboard Overview'}
+                </h2>
+              </div>
+              <div className="text-gray-600">
             {renderMainContent()}
+              </div>
+            </div>
           </div>
         </div>
       </div>

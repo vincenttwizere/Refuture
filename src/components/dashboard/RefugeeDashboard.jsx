@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import { 
   Home, 
   User, 
@@ -16,13 +16,12 @@ import {
   Calendar,
   Settings,
   HelpCircle,
-  ChevronRight,
-  ChevronDown,
   LogOut,
   AlertCircle,
   MapPin,
   Eye,
-  Filter
+  Filter,
+  Globe
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
@@ -63,7 +62,8 @@ const RefugeeDashboard = () => {
   const { 
     profiles, 
     loading: profileLoading, 
-    error: profileError 
+    error: profileError,
+    refetch: refetchProfile 
   } = useProfiles({ email: user?.email });
   const profile = profiles && profiles.length > 0 ? profiles[0] : null;
 
@@ -73,6 +73,16 @@ const RefugeeDashboard = () => {
   // Defensive loading state (must be after all hooks)
   if (loading) return <div className="min-h-screen flex items-center justify-center">Loading user...</div>;
   if (!user) return <div className="min-h-screen flex items-center justify-center text-red-600">User not found. Please log in again.</div>;
+  if (profileLoading) return <div className="min-h-screen flex items-center justify-center">Loading profile...</div>;
+  
+  // Check if user has profile after loading is complete
+  if (!profileLoading && !profile) {
+    // Redirect to create profile if no profile exists
+    useEffect(() => {
+      navigate('/create-profile', { replace: true });
+    }, [navigate]);
+    return <div className="min-h-screen flex items-center justify-center">No profile found. Redirecting to create profile...</div>;
+  }
 
   const toggleSection = (section) => {
     setExpandedSections(prev => ({
@@ -86,9 +96,9 @@ const RefugeeDashboard = () => {
     { id: 'overview', label: 'Dashboard Overview', icon: Home },
     { id: 'profile', label: 'My Profile', icon: User },
     { id: 'opportunities', label: 'Opportunities', icon: Search },
-    { id: 'applications', label: 'My Applications', icon: Send },
+    { id: 'mentors', label: 'Mentors', icon: Users },
+    { id: 'investors', label: 'Investors', icon: DollarSign },
     { id: 'messages', label: 'Messages', icon: MessageCircle },
-    { id: 'learning', label: 'Learning Resources', icon: BookOpen },
     { id: 'notifications', label: 'Notifications', icon: Bell },
     { id: 'settings', label: 'Settings', icon: Settings },
     { id: 'support', label: 'Help & Support', icon: HelpCircle }
@@ -96,22 +106,23 @@ const RefugeeDashboard = () => {
 
   // Subitems for each main category
   const subItems = {
-    profile: [
-      { label: 'View Profile', icon: User },
-      { label: 'Edit Profile', icon: FileText },
-      { label: 'Documents', icon: FileText }
-    ],
+    profile: [],
     opportunities: [
       { label: 'Browse All', icon: Search },
       { label: 'Scholarships', icon: Award },
       { label: 'Job Opportunities', icon: Briefcase },
-      { label: 'Mentorships', icon: Users },
-      { label: 'Funding', icon: DollarSign }
+      { label: 'Internships', icon: Calendar },
+      { label: 'Training Programs', icon: BookOpen }
     ],
-    applications: [
-      { label: 'Application Status', icon: Clock },
-      { label: 'Saved Opportunities', icon: BookOpen },
-      { label: 'Interviews', icon: Calendar }
+    mentors: [
+      { label: 'Find Mentors', icon: Search },
+      { label: 'My Mentors', icon: Users },
+      { label: 'Mentorship Requests', icon: Send }
+    ],
+    investors: [
+      { label: 'Browse Investors', icon: Search },
+      { label: 'My Connections', icon: Users },
+      { label: 'Investment Opportunities', icon: DollarSign }
     ]
   };
 
@@ -339,12 +350,15 @@ const RefugeeDashboard = () => {
                         </div>
                       </div>
                       <div className="flex space-x-2">
-                        <button className="flex-1 bg-blue-600 text-white px-3 py-2 rounded text-sm hover:bg-blue-700 transition-colors">
+                        <button 
+                          onClick={() => navigate(`/opportunity/${opportunity._id}`)}
+                          className="flex-1 bg-blue-600 text-white px-3 py-2 rounded text-sm hover:bg-blue-700 transition-colors"
+                        >
                           <Eye className="h-4 w-4 inline mr-1" />
                           View Details
                         </button>
                         <button className="flex-1 bg-gray-50 text-gray-700 px-3 py-2 rounded text-sm hover:bg-gray-100 transition-colors">
-                          <BookOpen className="h-4 w-4 inline mr-1" />
+                            <BookOpen className="h-4 w-4 inline mr-1" />
                           Save
                         </button>
                       </div>
@@ -467,34 +481,701 @@ const RefugeeDashboard = () => {
       );
     }
 
+    if (activeItem === 'mentors') {
+      return (
+        <div className="space-y-6">
+          <div className="flex justify-between items-center">
+            <h3 className="text-lg font-semibold text-gray-900">Mentors</h3>
+            <div className="flex space-x-2">
+              <button className="bg-gray-100 text-gray-700 px-3 py-2 rounded-lg text-sm hover:bg-gray-200 transition-colors">
+                <Filter className="h-4 w-4 inline mr-1" />
+                Filter
+              </button>
+              <button className="bg-blue-600 text-white px-3 py-2 rounded-lg text-sm hover:bg-blue-700 transition-colors">
+                <Search className="h-4 w-4 inline mr-1" />
+                Find Mentors
+              </button>
+            </div>
+          </div>
+
+          {/* Mentors Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {/* Available Mentors */}
+            <div className="bg-white rounded-lg shadow border border-gray-200 p-6">
+              <div className="flex items-center mb-4">
+                <div className="p-2 bg-blue-100 rounded-lg">
+                  <Users className="h-6 w-6 text-blue-600" />
+                </div>
+                <div className="ml-3">
+                  <h4 className="font-semibold text-gray-900">Available Mentors</h4>
+                  <p className="text-sm text-gray-600">Connect with experienced professionals</p>
+                </div>
+              </div>
+              <div className="space-y-2 mb-4">
+                <div className="flex items-center text-sm text-gray-600">
+                  <span className="w-2 h-2 bg-blue-500 rounded-full mr-2"></span>
+                  Career guidance
+                </div>
+                <div className="flex items-center text-sm text-gray-600">
+                  <span className="w-2 h-2 bg-blue-500 rounded-full mr-2"></span>
+                  Industry insights
+                </div>
+                <div className="flex items-center text-sm text-gray-600">
+                  <span className="w-2 h-2 bg-blue-500 rounded-full mr-2"></span>
+                  Skill development
+                </div>
+              </div>
+              <button className="w-full bg-blue-600 text-white px-4 py-2 rounded text-sm hover:bg-blue-700 transition-colors">
+                Browse Mentors
+              </button>
+            </div>
+
+            {/* My Mentors */}
+            <div className="bg-white rounded-lg shadow border border-gray-200 p-6">
+              <div className="flex items-center mb-4">
+                <div className="p-2 bg-green-100 rounded-lg">
+                  <Users className="h-6 w-6 text-green-600" />
+                </div>
+                <div className="ml-3">
+                  <h4 className="font-semibold text-gray-900">My Mentors</h4>
+                  <p className="text-sm text-gray-600">Your current mentorship connections</p>
+                </div>
+              </div>
+              <div className="space-y-2 mb-4">
+                <div className="flex items-center text-sm text-gray-600">
+                  <span className="w-2 h-2 bg-green-500 rounded-full mr-2"></span>
+                  Active mentorships
+                </div>
+                <div className="flex items-center text-sm text-gray-600">
+                  <span className="w-2 h-2 bg-green-500 rounded-full mr-2"></span>
+                  Scheduled sessions
+                </div>
+                <div className="flex items-center text-sm text-gray-600">
+                  <span className="w-2 h-2 bg-green-500 rounded-full mr-2"></span>
+                  Progress tracking
+                </div>
+              </div>
+              <button className="w-full bg-green-600 text-white px-4 py-2 rounded text-sm hover:bg-green-700 transition-colors">
+                View My Mentors
+              </button>
+            </div>
+
+            {/* Mentorship Requests */}
+            <div className="bg-white rounded-lg shadow border border-gray-200 p-6">
+              <div className="flex items-center mb-4">
+                <div className="p-2 bg-purple-100 rounded-lg">
+                  <Send className="h-6 w-6 text-purple-600" />
+                </div>
+                <div className="ml-3">
+                  <h4 className="font-semibold text-gray-900">Mentorship Requests</h4>
+                  <p className="text-sm text-gray-600">Manage your mentorship applications</p>
+                </div>
+              </div>
+              <div className="space-y-2 mb-4">
+                <div className="flex items-center text-sm text-gray-600">
+                  <span className="w-2 h-2 bg-purple-500 rounded-full mr-2"></span>
+                  Pending requests
+                </div>
+                <div className="flex items-center text-sm text-gray-600">
+                  <span className="w-2 h-2 bg-purple-500 rounded-full mr-2"></span>
+                  Accepted mentorships
+                </div>
+                <div className="flex items-center text-sm text-gray-600">
+                  <span className="w-2 h-2 bg-purple-500 rounded-full mr-2"></span>
+                  Request history
+                </div>
+              </div>
+              <button className="w-full bg-purple-600 text-white px-4 py-2 rounded text-sm hover:bg-purple-700 transition-colors">
+                View Requests
+              </button>
+            </div>
+          </div>
+
+          {/* Featured Mentors */}
+          <div className="bg-white rounded-lg shadow border border-gray-200 p-6">
+            <h4 className="font-semibold text-gray-900 mb-4">Featured Mentors</h4>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {/* Mentor Card 1 */}
+              <div className="border border-gray-200 rounded-lg p-4">
+                <div className="flex items-center mb-3">
+                  <div className="w-12 h-12 bg-gray-300 rounded-full flex items-center justify-center mr-3">
+                    <Users className="h-6 w-6 text-gray-600" />
+                  </div>
+                  <div>
+                    <h5 className="font-medium text-gray-900">Sarah Johnson</h5>
+                    <p className="text-sm text-gray-600">Software Engineer</p>
+                  </div>
+                </div>
+                <p className="text-sm text-gray-600 mb-3">10+ years experience in tech industry. Specializes in career transitions and skill development.</p>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">Tech</span>
+                  <button className="text-blue-600 text-sm hover:text-blue-800">Connect</button>
+                </div>
+              </div>
+
+              {/* Mentor Card 2 */}
+              <div className="border border-gray-200 rounded-lg p-4">
+                <div className="flex items-center mb-3">
+                  <div className="w-12 h-12 bg-gray-300 rounded-full flex items-center justify-center mr-3">
+                    <Users className="h-6 w-6 text-gray-600" />
+                  </div>
+                  <div>
+                    <h5 className="font-medium text-gray-900">Michael Chen</h5>
+                    <p className="text-sm text-gray-600">Business Consultant</p>
+                  </div>
+                </div>
+                <p className="text-sm text-gray-600 mb-3">Former refugee, now successful entrepreneur. Helps with business development and cultural integration.</p>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded">Business</span>
+                  <button className="text-blue-600 text-sm hover:text-blue-800">Connect</button>
+                </div>
+              </div>
+
+              {/* Mentor Card 3 */}
+              <div className="border border-gray-200 rounded-lg p-4">
+                <div className="flex items-center mb-3">
+                  <div className="w-12 h-12 bg-gray-300 rounded-full flex items-center justify-center mr-3">
+                    <Users className="h-6 w-6 text-gray-600" />
+                  </div>
+                  <div>
+                    <h5 className="font-medium text-gray-900">Dr. Maria Rodriguez</h5>
+                    <p className="text-sm text-gray-600">Education Specialist</p>
+                  </div>
+                </div>
+                <p className="text-sm text-gray-600 mb-3">PhD in Education. Specializes in helping refugees access educational opportunities and navigate academic systems.</p>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs bg-purple-100 text-purple-800 px-2 py-1 rounded">Education</span>
+                  <button className="text-blue-600 text-sm hover:text-blue-800">Connect</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    if (activeItem === 'investors') {
+      return (
+        <div className="space-y-6">
+          <div className="flex justify-between items-center">
+            <h3 className="text-lg font-semibold text-gray-900">Investors</h3>
+            <div className="flex space-x-2">
+              <button className="bg-gray-100 text-gray-700 px-3 py-2 rounded-lg text-sm hover:bg-gray-200 transition-colors">
+                <Filter className="h-4 w-4 inline mr-1" />
+                Filter
+              </button>
+              <button className="bg-blue-600 text-white px-3 py-2 rounded-lg text-sm hover:bg-blue-700 transition-colors">
+                <Search className="h-4 w-4 inline mr-1" />
+                Find Investors
+              </button>
+            </div>
+          </div>
+
+          {/* Investors Overview */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {/* Browse Investors */}
+            <div className="bg-white rounded-lg shadow border border-gray-200 p-6">
+              <div className="flex items-center mb-4">
+                <div className="p-2 bg-blue-100 rounded-lg">
+                  <Search className="h-6 w-6 text-blue-600" />
+                </div>
+                <div className="ml-3">
+                  <h4 className="font-semibold text-gray-900">Browse Investors</h4>
+                  <p className="text-sm text-gray-600">Find potential investors</p>
+                </div>
+              </div>
+              <div className="space-y-2 mb-4">
+                <div className="flex items-center text-sm text-gray-600">
+                  <span className="w-2 h-2 bg-blue-500 rounded-full mr-2"></span>
+                  Angel investors
+                </div>
+                <div className="flex items-center text-sm text-gray-600">
+                  <span className="w-2 h-2 bg-blue-500 rounded-full mr-2"></span>
+                  Venture capitalists
+                </div>
+                <div className="flex items-center text-sm text-gray-600">
+                  <span className="w-2 h-2 bg-blue-500 rounded-full mr-2"></span>
+                  Impact investors
+                </div>
+              </div>
+              <button className="w-full bg-blue-600 text-white px-4 py-2 rounded text-sm hover:bg-blue-700 transition-colors">
+                Browse Investors
+              </button>
+            </div>
+
+            {/* My Connections */}
+            <div className="bg-white rounded-lg shadow border border-gray-200 p-6">
+              <div className="flex items-center mb-4">
+                <div className="p-2 bg-green-100 rounded-lg">
+                  <Users className="h-6 w-6 text-green-600" />
+                </div>
+                <div className="ml-3">
+                  <h4 className="font-semibold text-gray-900">My Connections</h4>
+                  <p className="text-sm text-gray-600">Your investor network</p>
+                </div>
+              </div>
+              <div className="space-y-2 mb-4">
+                <div className="flex items-center text-sm text-gray-600">
+                  <span className="w-2 h-2 bg-green-500 rounded-full mr-2"></span>
+                  Connected investors
+                </div>
+                <div className="flex items-center text-sm text-gray-600">
+                  <span className="w-2 h-2 bg-green-500 rounded-full mr-2"></span>
+                  Investment discussions
+                </div>
+                <div className="flex items-center text-sm text-gray-600">
+                  <span className="w-2 h-2 bg-green-500 rounded-full mr-2"></span>
+                  Partnership opportunities
+                </div>
+              </div>
+              <button className="w-full bg-green-600 text-white px-4 py-2 rounded text-sm hover:bg-green-700 transition-colors">
+                View Connections
+              </button>
+            </div>
+
+            {/* Investment Opportunities */}
+            <div className="bg-white p-6 border-b border-gray-200">
+              <div className="flex items-center mb-4">
+                <div className="p-2 bg-purple-100 rounded-lg">
+                  <DollarSign className="h-6 w-6 text-purple-600" />
+                </div>
+                <div className="ml-3">
+                  <h4 className="font-semibold text-gray-900">Investment Opportunities</h4>
+                  <p className="text-sm text-gray-600">Funding and support programs</p>
+                </div>
+              </div>
+              <div className="space-y-2 mb-4">
+                <div className="flex items-center text-sm text-gray-600">
+                  <span className="w-2 h-2 bg-purple-500 rounded-full mr-2"></span>
+                  Startup funding
+                </div>
+                <div className="flex items-center text-sm text-gray-600">
+                  <span className="w-2 h-2 bg-purple-500 rounded-full mr-2"></span>
+                  Business grants
+                </div>
+                <div className="flex items-center text-sm text-gray-600">
+                  <span className="w-2 h-2 bg-purple-500 rounded-full mr-2"></span>
+                  Microfinance options
+                </div>
+              </div>
+              <button className="w-full bg-purple-600 text-white px-4 py-2 rounded text-sm hover:bg-purple-700 transition-colors">
+                View Opportunities
+              </button>
+            </div>
+          </div>
+
+          {/* Featured Investors */}
+          <div className="bg-white rounded-lg shadow border border-gray-200 p-6">
+            <h4 className="font-semibold text-gray-900 mb-4">Featured Investors</h4>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {/* Investor 1 */}
+              <div className="border border-gray-200 rounded-lg p-4">
+                <div className="flex items-center mb-3">
+                  <div className="w-12 h-12 bg-gray-300 rounded-full flex items-center justify-center mr-3">
+                    <DollarSign className="h-6 w-6 text-gray-600" />
+                  </div>
+                  <div>
+                    <h5 className="font-medium text-gray-900">Refugee Impact Fund</h5>
+                    <p className="text-sm text-gray-600">Impact Investment Fund</p>
+                  </div>
+                </div>
+                <p className="text-sm text-gray-600 mb-3">Dedicated to supporting refugee entrepreneurs and businesses. Focus on social impact and sustainable growth.</p>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded">$50K-$500K</span>
+                  <button className="text-blue-600 text-sm hover:text-blue-800">Connect</button>
+                </div>
+              </div>
+
+              {/* Investor 2 */}
+              <div className="border border-gray-200 rounded-lg p-4">
+                <div className="flex items-center mb-3">
+                  <div className="w-12 h-12 bg-gray-300 rounded-full flex items-center justify-center mr-3">
+                    <DollarSign className="h-6 w-6 text-gray-600" />
+                  </div>
+                  <div>
+                    <h5 className="font-medium text-gray-900">Global Ventures</h5>
+                    <p className="text-sm text-gray-600">Venture Capital</p>
+                  </div>
+                </div>
+                <p className="text-sm text-gray-600 mb-3">Early-stage venture capital firm with a focus on diverse founders and innovative solutions.</p>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">$100K-$2M</span>
+                  <button className="text-blue-600 text-sm hover:text-blue-800">Connect</button>
+                </div>
+              </div>
+
+              {/* Investor 3 */}
+              <div className="border border-gray-200 rounded-lg p-4">
+                <div className="flex items-center mb-3">
+                  <div className="w-12 h-12 bg-gray-300 rounded-full flex items-center justify-center mr-3">
+                    <DollarSign className="h-6 w-6 text-gray-600" />
+                  </div>
+                  <div>
+                    <h5 className="font-medium text-gray-900">Community Angels</h5>
+                    <p className="text-sm text-gray-600">Angel Investment Network</p>
+                  </div>
+                </div>
+                <p className="text-sm text-gray-600 mb-3">Network of angel investors supporting refugee entrepreneurs with mentorship and funding.</p>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs bg-purple-100 text-purple-800 px-2 py-1 rounded">$10K-$100K</span>
+                  <button className="text-blue-600 text-sm hover:text-blue-800">Connect</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Investment Resources */}
+          <div className="bg-white rounded-lg shadow border border-gray-200 p-6">
+            <h4 className="font-semibold text-gray-900 mb-4">Investment Resources</h4>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-3">
+                <h5 className="font-medium text-gray-900">Getting Started</h5>
+                <div className="space-y-2">
+                  <a href="#" className="block text-sm text-blue-600 hover:text-blue-800">How to Pitch Your Business</a>
+                  <a href="#" className="block text-sm text-blue-600 hover:text-blue-800">Business Plan Template</a>
+                  <a href="#" className="block text-sm text-blue-600 hover:text-blue-800">Financial Projections Guide</a>
+                </div>
+              </div>
+              <div className="space-y-3">
+                <h5 className="font-medium text-gray-900">Support Programs</h5>
+                <div className="space-y-2">
+                  <a href="#" className="block text-sm text-blue-600 hover:text-blue-800">Incubator Programs</a>
+                  <a href="#" className="block text-sm text-blue-600 hover:text-blue-800">Accelerator Applications</a>
+                  <a href="#" className="block text-sm text-blue-600 hover:text-blue-800">Grant Opportunities</a>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    if (activeItem === 'notifications') {
+      return (
+        <div className="space-y-6">
+          <div className="flex justify-between items-center">
+            <h3 className="text-lg font-semibold text-gray-900">Notifications</h3>
+            <div className="flex space-x-2">
+              <button className="bg-gray-100 text-gray-700 px-3 py-2 rounded-lg text-sm hover:bg-gray-200 transition-colors">
+                Mark all read
+              </button>
+              <button className="bg-gray-100 text-gray-700 px-3 py-2 rounded-lg text-sm hover:bg-gray-200 transition-colors">
+                <Filter className="h-4 w-4 inline mr-1" />
+                Filter
+              </button>
+            </div>
+          </div>
+
+          {/* Notifications List */}
+          <div className="space-y-4">
+            {notifications && notifications.length > 0 ? (
+              notifications.map((notification, index) => (
+                <div key={index} className="bg-white rounded-lg shadow border border-gray-200 p-4">
+                  <div className="flex items-start space-x-3">
+                    <div className={`p-2 rounded-full ${
+                      notification.type === 'opportunity' ? 'bg-blue-100' :
+                      notification.type === 'interview' ? 'bg-green-100' :
+                      notification.type === 'message' ? 'bg-purple-100' :
+                      'bg-gray-100'
+                    }`}>
+                      {notification.type === 'opportunity' && <Search className="h-4 w-4 text-blue-600" />}
+                      {notification.type === 'interview' && <Calendar className="h-4 w-4 text-green-600" />}
+                      {notification.type === 'message' && <MessageCircle className="h-4 w-4 text-purple-600" />}
+                      {notification.type === 'general' && <Bell className="h-4 w-4 text-gray-600" />}
+                    </div>
+                    <div className="flex-1">
+                      <h4 className="font-medium text-gray-900 mb-1">{notification.title}</h4>
+                      <p className="text-sm text-gray-600 mb-2">{notification.message}</p>
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-gray-500">
+                          {new Date(notification.createdAt || Date.now()).toLocaleDateString()}
+                        </span>
+                        {!notification.read && (
+                          <span className="w-2 h-2 bg-blue-500 rounded-full"></span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="text-center py-12">
+                <Bell className="h-16 w-16 mx-auto mb-4 text-gray-300" />
+                <h3 className="text-lg font-medium text-gray-900 mb-2">No notifications</h3>
+                <p className="text-gray-600">You're all caught up! New notifications will appear here</p>
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    if (activeItem === 'settings') {
+      return (
+        <div className="space-y-6">
+          <h3 className="text-lg font-semibold text-gray-900">Settings</h3>
+
+          {/* Settings Sections */}
+          <div className="space-y-6">
+            {/* Profile Settings */}
+            <div className="bg-white p-6 rounded-lg border border-gray-200">
+              <h4 className="text-lg font-medium text-gray-900 mb-4 flex items-center">
+                <User className="h-5 w-5 mr-2 text-gray-500" />
+                Profile Settings
+              </h4>
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <label className="text-sm font-medium text-gray-700">Profile Visibility</label>
+                    <p className="text-xs text-gray-500">Make your profile visible to providers</p>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input 
+                      type="checkbox" 
+                      className="sr-only peer" 
+                      defaultChecked={profile?.isPublic}
+                    />
+                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                  </label>
+                </div>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <label className="text-sm font-medium text-gray-700">Email Notifications</label>
+                    <p className="text-xs text-gray-500">Receive email updates about opportunities</p>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input type="checkbox" className="sr-only peer" defaultChecked />
+                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                  </label>
+                </div>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <label className="text-sm font-medium text-gray-700">Push Notifications</label>
+                    <p className="text-xs text-gray-500">Receive notifications in your browser</p>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input type="checkbox" className="sr-only peer" defaultChecked />
+                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            {/* Privacy Settings */}
+            <div className="bg-white p-6 rounded-lg border border-gray-200">
+              <h4 className="text-lg font-medium text-gray-900 mb-4 flex items-center">
+                <Settings className="h-5 w-5 mr-2 text-gray-500" />
+                Privacy Settings
+              </h4>
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <label className="text-sm font-medium text-gray-700">Show Contact Info</label>
+                    <p className="text-xs text-gray-500">Display your email and phone to providers</p>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input type="checkbox" className="sr-only peer" defaultChecked />
+                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                  </label>
+                </div>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <label className="text-sm font-medium text-gray-700">Show Location</label>
+                    <p className="text-xs text-gray-500">Display your current location</p>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input type="checkbox" className="sr-only peer" defaultChecked />
+                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            {/* Account Settings */}
+            <div className="bg-white p-6 rounded-lg border border-gray-200">
+              <h4 className="text-lg font-medium text-gray-900 mb-4 flex items-center">
+                <User className="h-5 w-5 mr-2 text-gray-500" />
+                Account Settings
+              </h4>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Email Address</label>
+                  <input
+                    type="email"
+                    defaultValue={user?.email}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Language</label>
+                  <select className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <option>English</option>
+                    <option>Spanish</option>
+                    <option>French</option>
+                    <option>Arabic</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Time Zone</label>
+                  <select className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <option>UTC-5 (Eastern Time)</option>
+                    <option>UTC-6 (Central Time)</option>
+                    <option>UTC-7 (Mountain Time)</option>
+                    <option>UTC-8 (Pacific Time)</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            {/* Save Button */}
+            <div className="flex justify-end">
+              <button className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition-colors">
+                Save Settings
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    if (activeItem === 'support') {
+      return (
+        <div className="space-y-6">
+          <h3 className="text-lg font-semibold text-gray-900">Help & Support</h3>
+
+          {/* Support Sections */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* FAQ */}
+            <div className="bg-white p-6 rounded-lg border border-gray-200">
+              <div className="flex items-center mb-4">
+                <div className="p-2 bg-blue-100 rounded-lg">
+                  <HelpCircle className="h-6 w-6 text-blue-600" />
+                </div>
+                <div className="ml-3">
+                  <h4 className="font-medium text-gray-900">Frequently Asked Questions</h4>
+                  <p className="text-sm text-gray-500">Find answers to common questions</p>
+                </div>
+              </div>
+              <div className="space-y-3">
+                <details className="group">
+                  <summary className="flex justify-between items-center cursor-pointer text-sm font-medium text-gray-700 hover:text-gray-900">
+                    How do I create my profile?
+                    <span className="text-gray-400 group-open:rotate-180 transition-transform">▼</span>
+                  </summary>
+                  <p className="mt-2 text-sm text-gray-600">
+                    Go to your profile section and click "Edit Profile" to fill out your information, skills, and experience.
+                  </p>
+                </details>
+                <details className="group">
+                  <summary className="flex justify-between items-center cursor-pointer text-sm font-medium text-gray-700 hover:text-gray-900">
+                    How do I apply for opportunities?
+                    <span className="text-gray-400 group-open:rotate-180 transition-transform">▼</span>
+                  </summary>
+                  <p className="mt-2 text-sm text-gray-600">
+                    Browse opportunities in the Opportunities section and click "View Details" to learn more and apply.
+                  </p>
+                </details>
+                <details className="group">
+                  <summary className="flex justify-between items-center cursor-pointer text-sm font-medium text-gray-700 hover:text-gray-900">
+                    How do I check my application status?
+                    <span className="text-gray-400 group-open:rotate-180 transition-transform">▼</span>
+                  </summary>
+                  <p className="mt-2 text-sm text-gray-600">
+                    Visit the "My Applications" section to see the status of all your applications and interviews.
+                  </p>
+                </details>
+              </div>
+            </div>
+
+            {/* Contact Support */}
+            <div className="bg-white p-6 rounded-lg border border-gray-200">
+              <div className="flex items-center mb-4">
+                <div className="p-2 bg-green-100 rounded-lg">
+                  <MessageCircle className="h-6 w-6 text-green-600" />
+                </div>
+                <div className="ml-3">
+                  <h4 className="font-medium text-gray-900">Contact Support</h4>
+                  <p className="text-sm text-gray-500">Get help from our team</p>
+                </div>
+              </div>
+              <div className="space-y-3">
+                <div className="flex items-center text-sm">
+                  <MessageCircle className="h-4 w-4 mr-2 text-gray-500" />
+                  <span>support@refuture.com</span>
+                </div>
+                <div className="flex items-center text-sm">
+                  <Clock className="h-4 w-4 mr-2 text-gray-500" />
+                  <span>24/7 Support Available</span>
+                </div>
+                <div className="flex items-center text-sm">
+                  <Users className="h-4 w-4 mr-2 text-gray-500" />
+                  <span>Live chat available</span>
+                </div>
+              </div>
+              <button className="w-full mt-4 bg-green-600 text-white px-4 py-2 rounded text-sm hover:bg-green-700 transition-colors">
+                Contact Support
+              </button>
+            </div>
+
+            {/* Resources */}
+            <div className="bg-white p-6 rounded-lg border border-gray-200">
+              <div className="flex items-center mb-4">
+                <div className="p-2 bg-purple-100 rounded-lg">
+                  <BookOpen className="h-6 w-6 text-purple-600" />
+                </div>
+                <div className="ml-3">
+                  <h4 className="font-medium text-gray-900">Resources</h4>
+                  <p className="text-sm text-gray-500">Helpful guides and tools</p>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <a href="#" className="block text-sm text-blue-600 hover:text-blue-800">Getting Started Guide</a>
+                <a href="#" className="block text-sm text-blue-600 hover:text-blue-800">Profile Optimization Tips</a>
+                <a href="#" className="block text-sm text-blue-600 hover:text-blue-800">Interview Preparation</a>
+                <a href="#" className="block text-sm text-blue-600 hover:text-blue-800">Resume Templates</a>
+                <a href="#" className="block text-sm text-blue-600 hover:text-blue-800">Community Guidelines</a>
+              </div>
+            </div>
+
+            {/* Community */}
+            <div className="bg-white p-6 rounded-lg border border-gray-200">
+              <div className="flex items-center mb-4">
+                <div className="p-2 bg-yellow-100 rounded-lg">
+                  <Users className="h-6 w-6 text-yellow-600" />
+                </div>
+                <div className="ml-3">
+                  <h4 className="font-medium text-gray-900">Community</h4>
+                  <p className="text-sm text-gray-500">Connect with others</p>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <a href="#" className="block text-sm text-blue-600 hover:text-blue-800">Community Forum</a>
+                <a href="#" className="block text-sm text-blue-600 hover:text-blue-800">Success Stories</a>
+                <a href="#" className="block text-sm text-blue-600 hover:text-blue-800">Mentorship Program</a>
+                <a href="#" className="block text-sm text-blue-600 hover:text-blue-800">Events & Workshops</a>
+                <a href="#" className="block text-sm text-blue-600 hover:text-blue-800">Volunteer Opportunities</a>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
     if (subItems[activeItem]) {
       // Profile section: handle view/edit
       if (activeItem === 'profile') {
+        // Callback to handle profile update
+        const handleProfileUpdated = async () => {
+          await refetchProfile();
+          setProfileMode('view');
+        };
         return (
           <div className="w-full">
             {profileMode === 'view' ? (
               <ProfileView profile={profile} onEdit={() => setProfileMode('edit')} />
             ) : (
-              <CreateProfile />
+              <CreateProfile onProfileUpdated={handleProfileUpdated} />
             )}
-            <div className="flex flex-row flex-wrap gap-4 mt-4">
-              {subItems[activeItem].map((sub, idx) => (
-                <div
-                  key={idx}
-                  className="flex items-center p-4 bg-white rounded-lg shadow border border-gray-100 min-w-[220px] cursor-pointer hover:bg-blue-50 transition"
-                  onClick={() => {
-                    if (sub.label === 'View Profile') setProfileMode('view');
-                    if (sub.label === 'Edit Profile') setProfileMode('edit');
-                  }}
-                >
-                  <sub.icon className="h-6 w-6 text-blue-500 mr-4" />
-                  <div className="font-medium text-gray-900">{sub.label}</div>
-                  {sub.badge && (
-                    <span className="ml-auto bg-red-100 text-red-800 text-xs font-medium px-2 py-1 rounded-full">{sub.badge}</span>
-                  )}
-                </div>
-              ))}
-            </div>
           </div>
         );
       }
@@ -504,11 +1185,6 @@ const RefugeeDashboard = () => {
             <div
               key={idx}
               className="flex items-center p-4 bg-white rounded-lg shadow border border-gray-100 min-w-[220px] cursor-pointer hover:bg-blue-50 transition"
-              onClick={() => {
-                if (activeItem === 'profile' && (sub.label === 'View Profile' || sub.label === 'Edit Profile')) {
-                  navigate('/create-profile');
-                }
-              }}
             >
               <sub.icon className="h-6 w-6 text-blue-500 mr-4" />
               <div className="font-medium text-gray-900">{sub.label}</div>

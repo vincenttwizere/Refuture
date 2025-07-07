@@ -15,7 +15,6 @@ export const usePlatformStats = () => {
       const response = await axios.get('http://localhost:5001/api/users/stats', {
         headers: { Authorization: `Bearer ${token}` }
       });
-      
       setStats(response.data.stats);
     } catch (err) {
       setError(err.response?.data?.message || 'Error fetching platform statistics');

@@ -1,5 +1,6 @@
 import express from 'express';
 import User from '../models/UserModel.js';
+import Profile from '../models/ProfileModel.js';
 import { protect } from '../middleware/authMiddleware.js';
 import generateToken from '../utils/generateToken.js';
 
@@ -24,12 +25,20 @@ router.post('/signup', async (req, res) => {
     const user = new User({ email, password, firstName, lastName, role, hasProfile: false });
     await user.save();
     const token = generateToken(user._id, user.role);
+    
+    // Check if refugee has a profile
+    let hasProfile = false;
+    if (role === 'refugee') {
+      const profile = await Profile.findOne({ email });
+      hasProfile = !!profile;
+    }
+    
     res.status(201).json({
       success: true,
       message: 'User created successfully',
       token,
       user: user.toPublicJSON(),
-      redirectTo: getRedirectPath(user.role, user.hasProfile)
+      redirectTo: getRedirectPath(user.role, hasProfile)
     });
   } catch (error) {
     console.error('Signup error:', error);
@@ -58,12 +67,26 @@ router.post('/login', async (req, res) => {
     user.lastLogin = new Date();
     await user.save();
     const token = generateToken(user._id, user.role);
+    
+    // Check if refugee has a profile by querying the Profile model
+    let hasProfile = false;
+    if (user.role === 'refugee') {
+      const profile = await Profile.findOne({ email: user.email });
+      hasProfile = !!profile;
+      
+      // Update user's hasProfile field if it's out of sync
+      if (user.hasProfile !== hasProfile) {
+        user.hasProfile = hasProfile;
+        await user.save();
+      }
+    }
+    
     res.json({
       success: true,
       message: 'Login successful',
       token,
       user: user.toPublicJSON(),
-      redirectTo: getRedirectPath(user.role, user.hasProfile)
+      redirectTo: getRedirectPath(user.role, hasProfile)
     });
   } catch (error) {
     console.error('Login error:', error);
@@ -74,10 +97,23 @@ router.post('/login', async (req, res) => {
 // Get current user
 router.get('/me', protect, async (req, res) => {
   try {
+    // Check if refugee has a profile by querying the Profile model
+    let hasProfile = req.user.hasProfile;
+    if (req.user.role === 'refugee') {
+      const profile = await Profile.findOne({ email: req.user.email });
+      hasProfile = !!profile;
+      
+      // Update user's hasProfile field if it's out of sync
+      if (req.user.hasProfile !== hasProfile) {
+        req.user.hasProfile = hasProfile;
+        await req.user.save();
+      }
+    }
+    
     res.json({
       success: true,
       user: req.user.toPublicJSON(),
-      redirectTo: getRedirectPath(req.user.role, req.user.hasProfile)
+      redirectTo: getRedirectPath(req.user.role, hasProfile)
     });
   } catch (error) {
     console.error('Get user error:', error);

@@ -79,6 +79,10 @@ backend/
    MONGODB_URI=mongodb://localhost:27017/refuture
    JWT_SECRET=your_secret_key_here
    NODE_ENV=development
+   GMAIL_USER=your_gmail_address@gmail.com
+   GMAIL_PASS=your_gmail_app_password
+   SENDGRID_API_KEY=your_sendgrid_api_key
+   SENDGRID_FROM=your_verified_sender@example.com
    ```
 
 3. **Start the server**:
@@ -111,4 +115,28 @@ The server runs on port 5001 by default. Make sure MongoDB is running locally or
 - Role-based access control
 - Input validation and sanitization
 - CORS protection
-- File upload restrictions 
+- File upload restrictions
+
+## Email Delivery Setup (SendGrid)
+
+To enable real email notifications (e.g., for signup), add the following environment variables to your `.env` file in the backend directory:
+
+```
+SENDGRID_API_KEY=your_sendgrid_api_key
+SENDGRID_FROM=your_verified_sender@example.com
+```
+- You must use a verified sender address in your SendGrid account.
+- For more info, see: https://docs.sendgrid.com/for-developers/sending-email/api-getting-started
+
+## Email Delivery Setup
+
+To enable real email notifications (e.g., for signup), add the following environment variables to your `.env` file in the backend directory:
+
+```
+GMAIL_USER=your_gmail_address@gmail.com
+GMAIL_PASS=your_gmail_app_password
+```
+
+- You must use an App Password if you have 2-Step Verification enabled on your Google account.
+- Never use your main Gmail password directly.
+- For more info, see: https://support.google.com/accounts/answer/185833 
