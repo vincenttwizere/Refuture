@@ -165,15 +165,28 @@ const ProfileViewPage = () => {
       {/* Header */}
       <div className="bg-white border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
-            <div className="flex items-center">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between h-16">
+            <div className="flex items-center mb-2 sm:mb-0">
               <button
-                onClick={() => navigate(-1)}
-                className="mr-4 p-2 rounded-lg hover:bg-gray-100 transition-colors"
+                onClick={() => {
+                  let user = null;
+                  try {
+                    user = JSON.parse(localStorage.getItem('user'));
+                  } catch {}
+                  if (user?.role === 'admin') {
+                    navigate('/admin-dashboard');
+                  } else if (user?.role === 'provider') {
+                    navigate('/provider-dashboard');
+                  } else {
+                    navigate('/refugee-dashboard');
+                  }
+                }}
+                className="flex items-center text-gray-600 hover:text-gray-800 transition-colors"
               >
-                <ArrowLeft className="h-5 w-5 text-gray-600" />
+                <ArrowLeft className="h-5 w-5 mr-2" />
+                Back to Dashboard
               </button>
-              <h1 className="text-xl font-semibold text-gray-900">Profile Details</h1>
+              <h1 className="text-xl font-semibold text-gray-900 ml-4">Profile Details</h1>
             </div>
             <div className="flex space-x-3">
               <button 

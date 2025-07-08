@@ -70,38 +70,50 @@ const createOpportunity = async (req, res) => {
 // @access  Public
 const getAllOpportunities = async (req, res) => {
   try {
+    console.log('getAllOpportunities: request received');
     const {
       type,
       category,
       location,
       isRemote,
       search,
+      status, // add status
       page = 1,
       limit = 10
     } = req.query;
 
-    const query = { isActive: true };
+    let query = {};
+
+    // If not admin, only show active
+    if (!req.user || req.user.role !== 'admin') {
+      query.isActive = true;
+    }
 
     // Apply filters
     if (type) query.type = type;
     if (category) query.category = category;
     if (location) query.location = { $regex: location, $options: 'i' };
     if (isRemote !== undefined) query.isRemote = isRemote === 'true';
+    if (status) query.status = status; // allow status filter for admin
 
     // Text search
     if (search) {
       query.$text = { $search: search };
     }
 
+    console.log('getAllOpportunities: built query:', query);
     const skip = (page - 1) * limit;
 
+    console.log('getAllOpportunities: starting Opportunity.find');
     const opportunities = await Opportunity.find(query)
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(parseInt(limit))
       .populate('provider', 'firstName lastName email');
+    console.log('getAllOpportunities: Opportunity.find complete, found', opportunities.length);
 
     const total = await Opportunity.countDocuments(query);
+    console.log('getAllOpportunities: countDocuments complete, total', total);
 
     res.json({
       success: true,
@@ -113,6 +125,7 @@ const getAllOpportunities = async (req, res) => {
         itemsPerPage: parseInt(limit)
       }
     });
+    console.log('getAllOpportunities: response sent');
   } catch (error) {
     console.error('Get opportunities error:', error);
     res.status(500).json({

@@ -149,7 +149,19 @@ const OpportunityDetails = () => {
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
           <button
-            onClick={() => navigate('/refugee-dashboard')}
+            onClick={() => {
+              let user = null;
+              try {
+                user = JSON.parse(localStorage.getItem('user'));
+              } catch {}
+              if (user?.role === 'admin') {
+                navigate('/admin-dashboard');
+              } else if (user?.role === 'provider') {
+                navigate('/provider-dashboard');
+              } else {
+                navigate('/refugee-dashboard');
+              }
+            }}
             className="flex items-center text-gray-600 hover:text-gray-800 transition-colors"
           >
             <ArrowLeft className="h-5 w-5 mr-2" />

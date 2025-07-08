@@ -84,6 +84,14 @@ const AdminDashboard = () => {
     search: ''
   });
 
+  // Opportunity management state
+  const [opportunityFilters, setOpportunityFilters] = useState({
+    type: '',
+    status: '',
+    search: ''
+  });
+  const [editingOpportunity, setEditingOpportunity] = useState(null); // Placeholder for edit modal
+
   // Defensive loading state (must be after all hooks)
   if (loading) return <div className="min-h-screen flex items-center justify-center">Loading user...</div>;
   if (!user) return <div className="min-h-screen flex items-center justify-center text-red-600">User not found. Please log in again.</div>;
@@ -180,10 +188,32 @@ const AdminDashboard = () => {
     }
   };
 
+  // Handle opportunity status update
+  const handleOpportunityStatusUpdate = async (opportunityId, newStatus) => {
+    try {
+      // You may need to implement updateOpportunityStatus in your useOpportunities hook
+      if (typeof updateOpportunityStatus === 'function') {
+        await updateOpportunityStatus(opportunityId, newStatus);
+        refetchOpportunities();
+      } else {
+        alert('Status update not implemented.');
+      }
+    } catch (error) {
+      console.error('Error updating opportunity status:', error);
+    }
+  };
+
   // Apply filters
   useEffect(() => {
     fetchUsers(filters);
   }, [filters, fetchUsers]);
+
+  // Apply opportunity filters
+  useEffect(() => {
+    if (typeof fetchOpportunities === 'function') {
+      fetchOpportunities(opportunityFilters);
+    }
+  }, [opportunityFilters, fetchOpportunities]);
 
   // Load profiles and opportunities once when component mounts
   useEffect(() => {
@@ -586,7 +616,7 @@ const AdminDashboard = () => {
 
                   <div className="flex space-x-2">
                     <button
-                      onClick={() => window.open(`/profile/${profile._id}`, '_blank')}
+                      onClick={() => navigate(`/profile/${profile._id}`)}
                       className="flex-1 bg-blue-600 text-white px-3 py-2 rounded text-sm hover:bg-blue-700 transition-colors flex items-center justify-center"
                     >
                       <Eye className="h-4 w-4 mr-1" />
@@ -621,6 +651,58 @@ const AdminDashboard = () => {
           {/* Description */}
           <p className="text-gray-600">Review and manage job opportunities posted by providers</p>
 
+          {/* Filters */}
+          <div className="bg-white p-6 rounded-lg border mb-4">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Search</label>
+                <input
+                  type="text"
+                  placeholder="Search opportunities..."
+                  value={opportunityFilters.search}
+                  onChange={(e) => setOpportunityFilters(prev => ({ ...prev, search: e.target.value }))}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Type</label>
+                <select
+                  value={opportunityFilters.type}
+                  onChange={(e) => setOpportunityFilters(prev => ({ ...prev, type: e.target.value }))}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                >
+                  <option value="">All Types</option>
+                  <option value="part-time job">Part-time Job</option>
+                  <option value="full-time job">Full-time Job</option>
+                  <option value="internship">Internship</option>
+                  <option value="scholarship">Scholarship</option>
+                  <option value="funds">Funds</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+                <select
+                  value={opportunityFilters.status}
+                  onChange={(e) => setOpportunityFilters(prev => ({ ...prev, status: e.target.value }))}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                >
+                  <option value="">All Status</option>
+                  <option value="active">Active</option>
+                  <option value="pending">Pending</option>
+                  <option value="suspended">Suspended</option>
+                </select>
+              </div>
+              <div className="flex items-end">
+                <button
+                  onClick={() => setOpportunityFilters({ type: '', status: '', search: '' })}
+                  className="w-full bg-gray-100 text-gray-700 px-4 py-2 rounded-lg text-sm hover:bg-gray-200"
+                >
+                  Clear Filters
+                </button>
+              </div>
+            </div>
+          </div>
+
           {/* Opportunities Grid */}
           {opportunitiesError ? (
             <div className="bg-red-50 border border-red-200 rounded-lg p-4">
@@ -631,7 +713,16 @@ const AdminDashboard = () => {
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {opportunities.map((opportunity) => (
+              {opportunities
+                .filter(opp =>
+                  (!opportunityFilters.type || opp.type === opportunityFilters.type) &&
+                  (!opportunityFilters.status || opp.status === opportunityFilters.status) &&
+                  (!opportunityFilters.search ||
+                    opp.title?.toLowerCase().includes(opportunityFilters.search.toLowerCase()) ||
+                    opp.company?.toLowerCase().includes(opportunityFilters.search.toLowerCase())
+                  )
+                )
+                .map((opportunity) => (
                 <div key={opportunity._id} className="bg-gray-50 rounded-lg p-6 border border-gray-200 hover:shadow-md transition-shadow">
                   <div className="flex items-center space-x-3 mb-4">
                     <div className="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center">
@@ -642,16 +733,20 @@ const AdminDashboard = () => {
                       <p className="text-sm text-gray-500">{opportunity.company}</p>
                     </div>
                   </div>
-                  
                   <div className="space-y-2 mb-4">
                     <div className="flex items-center text-sm">
                       <span className="text-gray-500 w-20">Type:</span>
                       <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                        opportunity.type === 'full-time' ? 'bg-green-100 text-green-800' :
-                        opportunity.type === 'part-time' ? 'bg-blue-100 text-blue-800' :
-                        'bg-purple-100 text-purple-800'
+                          opportunity.type === 'full-time job' ? 'bg-green-100 text-green-800' :
+                          opportunity.type === 'part-time job' ? 'bg-blue-100 text-blue-800' :
+                          opportunity.type === 'internship' ? 'bg-yellow-100 text-yellow-800' :
+                          opportunity.type === 'scholarship' ? 'bg-purple-100 text-purple-800' :
+                          opportunity.type === 'funds' ? 'bg-pink-100 text-pink-800' :
+                          'bg-gray-100 text-gray-800'
                       }`}>
-                        {opportunity.type}
+                          {opportunity.type === 'full-time job' ? 'Full-time Job' :
+                            opportunity.type === 'part-time job' ? 'Part-time Job' :
+                            opportunity.type.charAt(0).toUpperCase() + opportunity.type.slice(1)}
                       </span>
                     </div>
                     <div className="flex items-center text-sm">
@@ -660,25 +755,66 @@ const AdminDashboard = () => {
                     </div>
                     <div className="flex items-center text-sm">
                       <span className="text-gray-500 w-20">Salary:</span>
-                      <span className="text-gray-900">{opportunity.salary || 'Not specified'}</span>
+                        <span className="text-gray-900">
+                          {opportunity.salary && typeof opportunity.salary === 'object'
+                            ? `${opportunity.salary.min} - ${opportunity.salary.max} ${opportunity.salary.currency || ''}`
+                            : opportunity.salary || 'Not specified'}
+                        </span>
                     </div>
                     <div className="flex items-center text-sm">
                       <span className="text-gray-500 w-20">Status:</span>
                       <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                        opportunity.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
+                          opportunity.status === 'active' ? 'bg-green-100 text-green-800' :
+                          opportunity.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
+                          'bg-red-100 text-red-800'
                       }`}>
                         {opportunity.status}
                       </span>
                     </div>
                   </div>
-
-                  <div className="flex space-x-2">
+                    <div className="flex space-x-2 flex-wrap">
               <button
-                      onClick={() => window.open(`/opportunity/${opportunity._id}`, '_blank')}
+                      onClick={() => navigate(`/opportunity/${opportunity._id}`)}
                       className="flex-1 bg-blue-600 text-white px-3 py-2 rounded text-sm hover:bg-blue-700 transition-colors flex items-center justify-center"
               >
                       <Eye className="h-4 w-4 mr-1" />
                       View
+              </button>
+                      {/* Status management actions */}
+                      {opportunity.status === 'pending' && (
+                        <button
+                          onClick={() => handleOpportunityStatusUpdate(opportunity._id, 'active')}
+                          className="bg-green-100 text-green-700 px-3 py-2 rounded text-sm hover:bg-green-200 flex items-center"
+                        >
+                          <CheckCircle className="h-4 w-4 mr-1" />
+                          Approve
+                        </button>
+                      )}
+                      {opportunity.status === 'active' && (
+                        <button
+                          onClick={() => handleOpportunityStatusUpdate(opportunity._id, 'suspended')}
+                          className="bg-yellow-100 text-yellow-700 px-3 py-2 rounded text-sm hover:bg-yellow-200 flex items-center"
+                        >
+                          <XCircle className="h-4 w-4 mr-1" />
+                          Suspend
+                        </button>
+                      )}
+                      {opportunity.status === 'suspended' && (
+                        <button
+                          onClick={() => handleOpportunityStatusUpdate(opportunity._id, 'active')}
+                          className="bg-green-100 text-green-700 px-3 py-2 rounded text-sm hover:bg-green-200 flex items-center"
+                        >
+                          <CheckCircle className="h-4 w-4 mr-1" />
+                          Activate
+                        </button>
+                      )}
+                      {/* Edit button (placeholder) */}
+                      <button
+                        onClick={() => setEditingOpportunity(opportunity)}
+                        className="bg-gray-100 text-gray-700 px-3 py-2 rounded text-sm hover:bg-gray-200 flex items-center"
+                      >
+                        <Edit className="h-4 w-4 mr-1" />
+                        Edit
               </button>
           <button
                       onClick={() => handleOpportunityDelete(opportunity._id)}
@@ -689,7 +825,6 @@ const AdminDashboard = () => {
             </div>
           </div>
               ))}
-              
               {opportunities.length === 0 && (
                 <div className="col-span-full text-center py-12">
                   <Briefcase className="h-16 w-16 mx-auto mb-4 text-gray-300" />

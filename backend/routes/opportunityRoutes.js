@@ -16,8 +16,8 @@ import upload from '../middleware/uploadMiddleware.js';
 
 const router = express.Router();
 
-// Public routes
-router.get('/', getAllOpportunities);
+// Authenticated route (so req.user is available for admin filtering)
+router.get('/', protect, getAllOpportunities);
 router.get('/provider/:providerId', getOpportunitiesByProvider);
 
 // Saved opportunities routes (Refugees) - must come before /:id routes

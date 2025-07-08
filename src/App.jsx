@@ -82,7 +82,7 @@ function AppRouter() {
           <Route
             path="/opportunity/:id"
             element={
-              <ProtectedRoute role="refugee">
+              <ProtectedRoute>
                 <OpportunityDetails />
               </ProtectedRoute>
             }
