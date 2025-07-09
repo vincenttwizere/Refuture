@@ -11,8 +11,10 @@ export const useMessages = () => {
       setLoading(true);
       setError(null);
       const response = await messagesAPI.getAll();
+      console.log('Messages API response:', response.data);
       setMessages(response.data.messages || []);
     } catch (err) {
+      console.error('Error fetching messages:', err);
       setError(err.response?.data?.message || 'Failed to fetch messages');
     } finally {
       setLoading(false);

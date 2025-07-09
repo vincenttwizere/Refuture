@@ -15,10 +15,39 @@ import {
   Star,
   Palette
 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 const ProfileView = ({ profile, onEdit }) => {
-  if (!profile) return <div className="p-8 text-gray-500">No profile found.</div>;
-  
+  const navigate = useNavigate();
+
+  // Function to expand common degree abbreviations
+  const expandDegreeAbbreviation = (degree) => {
+    if (!degree) return degree;
+    
+    const abbreviations = {
+      'BD': 'Bachelor Degree',
+      'BS': 'Bachelor of Science',
+      'BA': 'Bachelor of Arts',
+      'BSc': 'Bachelor of Science',
+      'BEng': 'Bachelor of Engineering',
+      'BBA': 'Bachelor of Business Administration',
+      'MD': 'Master Degree',
+      'MS': 'Master of Science',
+      'MA': 'Master of Arts',
+      'MSc': 'Master of Science',
+      'MBA': 'Master of Business Administration',
+      'PhD': 'Doctor of Philosophy',
+      'Ph.D': 'Doctor of Philosophy',
+      'DBA': 'Doctor of Business Administration',
+      'JD': 'Juris Doctor',
+      'LLB': 'Bachelor of Laws',
+      'LLM': 'Master of Laws'
+    };
+    
+    const upperDegree = degree.toUpperCase().trim();
+    return abbreviations[upperDegree] || degree;
+  };
+
   // Construct full URL for profile image
   const getProfileImageUrl = (photoUrl) => {
     if (!photoUrl) return '/default-avatar.png';
@@ -227,14 +256,19 @@ const ProfileView = ({ profile, onEdit }) => {
                 </h3>
                 {profile.supportingDocuments && profile.supportingDocuments.length > 0 ? (
                   <div className="space-y-2">
-                    {profile.supportingDocuments.map((doc, index) => (
-                      <div key={index} className="flex items-center justify-between p-3 bg-white rounded border">
-                        <div className="flex items-center">
-                          <FileText className="h-4 w-4 text-blue-500 mr-2" />
-                          <span className="text-gray-700">{doc.name || `Document ${index + 1}`}</span>
+                    {profile.supportingDocuments.map((doc, index) => {
+                      const isObj = typeof doc === 'object' && doc !== null;
+                      const path = isObj ? doc.path : doc;
+                      const name = isObj ? doc.originalname : `Document ${index + 1}`;
+                      return (
+                        <div key={index} className="flex items-center justify-between p-3 bg-white rounded border">
+                          <div className="flex items-center">
+                            <FileText className="h-4 w-4 text-blue-500 mr-2" />
+                            <a href={`/${path}`} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">{name}</a>
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 ) : (
                   <p className="text-gray-400 italic">No supporting documents uploaded yet</p>
@@ -263,7 +297,7 @@ const ProfileView = ({ profile, onEdit }) => {
                           </div>
                           <div>
                             <span className="text-sm font-medium text-gray-500">Degree</span>
-                            <p className="text-gray-900">{edu.degree}</p>
+                            <p className="text-gray-900">{expandDegreeAbbreviation(edu.degree)}</p>
                           </div>
                           <div>
                             <span className="text-sm font-medium text-gray-500">Field of Study</span>

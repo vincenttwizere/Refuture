@@ -51,7 +51,10 @@ const ProfileSchema = new mongoose.Schema({
     type: String
   },
   supportingDocuments: {
-    type: [String],
+    type: [{
+      path: String,
+      originalname: String
+    }],
     default: []
   },
   education: {

@@ -1,5 +1,7 @@
 import Opportunity from '../models/OpportunityModel.js';
 import SavedOpportunity from '../models/SavedOpportunityModel.js';
+import Notification from '../models/NotificationModel.js';
+import User from '../models/UserModel.js';
 
 // @desc    Create new opportunity
 // @route   POST /api/opportunities
@@ -49,6 +51,32 @@ const createOpportunity = async (req, res) => {
     });
 
     const savedOpportunity = await opportunity.save();
+
+    // Create notifications for all refugee users
+    try {
+      const refugeeUsers = await User.find({ role: 'refugee' });
+      
+      const notificationPromises = refugeeUsers.map(user => {
+        const notification = new Notification({
+          user: user._id,
+          type: 'new_opportunity',
+          message: `New ${type} opportunity: ${title}`,
+          metadata: {
+            opportunityId: savedOpportunity._id,
+            opportunityTitle: title,
+            opportunityType: type,
+            providerName: `${req.user.firstName} ${req.user.lastName}`
+          }
+        });
+        return notification.save();
+      });
+
+      await Promise.all(notificationPromises);
+      console.log(`Created notifications for ${refugeeUsers.length} refugee users`);
+    } catch (notificationError) {
+      console.error('Error creating notifications:', notificationError);
+      // Don't fail the opportunity creation if notifications fail
+    }
 
     res.status(201).json({
       success: true,

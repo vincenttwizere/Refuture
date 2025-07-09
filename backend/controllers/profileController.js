@@ -150,8 +150,11 @@ const createProfile = async (req, res) => {
 
       // Handle supporting documents
       if (req.files.supportingDocuments) {
-        const supportingDocsPaths = req.files.supportingDocuments.map(file => file.path);
-        profileData.supportingDocuments = supportingDocsPaths;
+        const supportingDocs = req.files.supportingDocuments.map(file => ({
+          path: file.path,
+          originalname: file.originalname
+        }));
+        profileData.supportingDocuments = supportingDocs;
       }
     } else if (req.file) {
       // Handle single file upload (backward compatibility)
@@ -234,6 +237,19 @@ const getAllProfiles = async (req, res) => {
     const profiles = await Profile.find(query);
     console.log('Found profiles:', profiles.length);
     
+    // After fetching profile(s), ensure supportingDocuments is always array of {path, originalname}
+    if (profiles && Array.isArray(profiles)) {
+      profiles.forEach(profile => {
+        if (Array.isArray(profile.supportingDocuments)) {
+          profile.supportingDocuments = profile.supportingDocuments.map(doc => {
+            if (typeof doc === 'object' && doc !== null && doc.path && doc.originalname) return doc;
+            if (typeof doc === 'string') return { path: doc, originalname: doc.split('/').pop() };
+            return null;
+          }).filter(Boolean);
+        }
+      });
+    }
+
     res.status(200).json({
       success: true,
       profiles
@@ -257,6 +273,14 @@ const getProfileById = async (req, res) => {
         success: false,
         message: 'Profile not found'
       });
+    }
+    // After fetching profile, ensure supportingDocuments is always array of {path, originalname}
+    if (Array.isArray(profile.supportingDocuments)) {
+      profile.supportingDocuments = profile.supportingDocuments.map(doc => {
+        if (typeof doc === 'object' && doc !== null && doc.path && doc.originalname) return doc;
+        if (typeof doc === 'string') return { path: doc, originalname: doc.split('/').pop() };
+        return null;
+      }).filter(Boolean);
     }
     res.status(200).json({
       success: true,
@@ -347,6 +371,28 @@ const updateProfile = async (req, res) => {
         updateData.photoUrl = req.files.profileImage[0].path;
         console.log('Profile image uploaded:', updateData.photoUrl);
       }
+      // Handle supporting documents merging
+      let existingDocs = [];
+      if (req.body.existingSupportingDocuments) {
+        try {
+          const parsed = JSON.parse(req.body.existingSupportingDocuments);
+          existingDocs = parsed.map(doc => {
+            if (typeof doc === 'object' && doc !== null && doc.path && doc.originalname) return doc;
+            if (typeof doc === 'string') return { path: doc, originalname: doc.split('/').pop() };
+            return null;
+          }).filter(Boolean);
+        } catch (e) {
+          existingDocs = [];
+        }
+      }
+      let newDocs = [];
+      if (req.files.supportingDocuments) {
+        newDocs = req.files.supportingDocuments.map(file => ({
+          path: file.path,
+          originalname: file.originalname
+        }));
+      }
+      updateData.supportingDocuments = [...existingDocs, ...newDocs];
     } else if (req.file) {
       console.log('Processing single file upload...');
       // Handle single file upload (backward compatibility)

@@ -89,6 +89,7 @@ const CreateProfile = ({ onProfileUpdated }) => {
   const [experience, setExperience] = useState([]);
   const [academicRecords, setAcademicRecords] = useState([]);
   const [portfolio, setPortfolio] = useState([]);
+  // 1. State for all documents (existing and new)
   const [supportingDocuments, setSupportingDocuments] = useState([]);
 
   // Check for existing profile when component loads
@@ -98,39 +99,38 @@ const CreateProfile = ({ onProfileUpdated }) => {
         try {
           const response = await axios.get(`http://localhost:5001/api/profiles?email=${user.email}`);
           if (response.data.profiles && response.data.profiles.length > 0) {
-            setExistingProfile(response.data.profiles[0]);
-            // Pre-fill form with existing data
+            const p = response.data.profiles[0];
+            setExistingProfile(p);
             setForm({
-              fullName: response.data.profiles[0].fullName || '',
-              age: response.data.profiles[0].age || '',
-              gender: response.data.profiles[0].gender || '',
-              nationality: response.data.profiles[0].nationality || '',
-              currentLocation: response.data.profiles[0].currentLocation || '',
-              email: response.data.profiles[0].email || user.email,
-              skills: response.data.profiles[0].skills || [],
-              language: response.data.profiles[0].language || [],
-              tags: response.data.profiles[0].tags || [],
-              isPublic: response.data.profiles[0].isPublic || false
+              fullName: p.fullName || '',
+              age: p.age || '',
+              gender: p.gender || '',
+              nationality: p.nationality || '',
+              currentLocation: p.currentLocation || '',
+              email: p.email || user.email,
+              skills: p.skills || [],
+              language: p.language || [],
+              tags: p.tags || [],
+              isPublic: p.isPublic || false,
+              highSchoolSubjects: p.highSchoolSubjects || '',
+              desiredField: p.desiredField || '',
+              talentCategory: p.talentCategory || '',
+              talentExperience: p.talentExperience || '',
+              talentDescription: p.talentDescription || ''
             });
-            setOption(response.data.profiles[0].option || '');
-            
-            // Set existing profile image if available
-            if (response.data.profiles[0].photoUrl) {
-              // Construct full URL for existing profile image
-              const photoUrl = response.data.profiles[0].photoUrl;
+            setOption(p.option || '');
+            setEducation(p.education || []);
+            setExperience(p.experience || []);
+            setAcademicRecords(p.academicRecords || []);
+            setPortfolio(p.portfolio || []);
+            setSupportingDocuments((p.supportingDocuments || []).map(doc => ({ path: doc.path, originalname: doc.originalname })));
+            if (p.photoUrl) {
+              const photoUrl = p.photoUrl;
               if (photoUrl.startsWith('http')) {
                 setImagePreview(photoUrl);
               } else {
                 setImagePreview(`http://localhost:5001/${photoUrl}`);
               }
-            }
-            
-            // Set existing education and experience data
-            if (response.data.profiles[0].education) {
-              setEducation(response.data.profiles[0].education);
-            }
-            if (response.data.profiles[0].experience) {
-              setExperience(response.data.profiles[0].experience);
             }
           }
         } catch (error) {
@@ -306,6 +306,11 @@ const CreateProfile = ({ onProfileUpdated }) => {
     setPortfolio(portfolio.filter((_, i) => i !== index));
   };
 
+  // 4. Remove logic: remove from correct state
+  const removeDocument = (idx) => {
+    setSupportingDocuments(prev => prev.filter((_, i) => i !== idx));
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
@@ -328,13 +333,23 @@ const CreateProfile = ({ onProfileUpdated }) => {
       data.append('experience', JSON.stringify(experience));
       data.append('academicRecords', JSON.stringify(academicRecords));
       data.append('portfolio', JSON.stringify(portfolio));
+      data.append('highSchoolSubjects', form.highSchoolSubjects || '');
+      data.append('desiredField', form.desiredField || '');
+      data.append('talentCategory', form.talentCategory || '');
+      data.append('talentExperience', form.talentExperience || '');
+      data.append('talentDescription', form.talentDescription || '');
       if (typeof form.isPublic !== 'undefined') data.append('isPublic', form.isPublic);
       if (files.document) data.append('document', files.document);
       if (profileImage) data.append('profileImage', profileImage);
       
-      // Add supporting documents
-      supportingDocuments.forEach((doc, index) => {
-        data.append('supportingDocuments', doc);
+      // Separate existing and new
+      const existingDocs = supportingDocuments.filter(doc => doc.path && doc.originalname);
+      const newFiles = supportingDocuments.filter(doc => doc.file && doc.originalname);
+      if (existingDocs.length > 0) {
+        data.append('existingSupportingDocuments', JSON.stringify(existingDocs));
+      }
+      newFiles.forEach(doc => {
+        data.append('supportingDocuments', doc.file);
       });
       
       const response = await axios.post('http://localhost:5001/api/profiles', data, {
@@ -345,7 +360,12 @@ const CreateProfile = ({ onProfileUpdated }) => {
       });
       
       setSuccess(true);
-      
+      // Debug: Log what is returned
+      console.log('Backend returned profile:', response.data.profile);
+      // Update supportingDocuments with the latest from backend
+      if (response.data && response.data.profile && response.data.profile.supportingDocuments) {
+        setSupportingDocuments((response.data.profile.supportingDocuments || []).map(doc => ({ path: doc.path, originalname: doc.originalname })));
+      }
       // Call the onProfileUpdated callback if provided
       if (onProfileUpdated) {
         await onProfileUpdated();
@@ -743,6 +763,31 @@ const CreateProfile = ({ onProfileUpdated }) => {
                   Transcripts and Certificates
                 </h3>
                 <div className="space-y-4">
+                  {/* Existing supporting documents */}
+                  {/* 6. Display: always show all */}
+                  {supportingDocuments.length > 0 && (
+                    <div className="mb-3">
+                      <p className="text-sm text-gray-700 mb-1">Existing Documents:</p>
+                      <ul className="list-disc ml-6">
+                        {supportingDocuments.map((doc, idx) => {
+                          const isExisting = doc.path && doc.originalname;
+                          const isNew = doc.file && doc.originalname;
+                          const name = doc.originalname;
+                          const href = isExisting ? `/${doc.path}` : undefined;
+                          return (
+                            <li key={idx} className="flex items-center space-x-2">
+                              {href ? (
+                                <a href={href} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">{name}</a>
+                              ) : (
+                                <span className="text-gray-700">{name}</span>
+                              )}
+                              <button type="button" onClick={() => removeDocument(idx)} className="ml-2 text-red-500 hover:text-red-700"><Trash2 className="h-4 w-4" /></button>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    </div>
+                  )}
                   <div className="flex items-center justify-between mb-3">
                     <p className="text-sm text-gray-700">Upload certificates, transcripts, and other supporting documents</p>
                     <input
@@ -750,7 +795,11 @@ const CreateProfile = ({ onProfileUpdated }) => {
                       multiple
                       onChange={(e) => {
                         const files = Array.from(e.target.files);
-                        setSupportingDocuments(prev => [...prev, ...files]);
+                        setSupportingDocuments(prev => {
+                          const existingNames = new Set(prev.map(doc => doc.originalname));
+                          const newDocs = files.filter(f => !existingNames.has(f.name)).map(f => ({ file: f, originalname: f.name }));
+                          return [...prev, ...newDocs];
+                        });
                       }}
                       className="hidden"
                       id="supporting-docs"
@@ -764,18 +813,18 @@ const CreateProfile = ({ onProfileUpdated }) => {
                     </label>
                   </div>
                   
-                  {supportingDocuments.length > 0 ? (
+                  {supportingDocuments.filter(doc => doc.file).length > 0 ? (
                     <div className="space-y-2">
-                      {supportingDocuments.map((doc, docIndex) => (
+                      {supportingDocuments.filter(doc => doc.file).map((doc, docIndex) => (
                         <div key={docIndex} className="flex items-center justify-between p-2 bg-white rounded border border-gray-200">
                           <div className="flex items-center space-x-2">
                             <FileText className="h-4 w-4 text-blue-500" />
-                            <span className="text-sm text-gray-700">{doc.name}</span>
+                            <span className="text-sm text-gray-700">{doc.originalname}</span>
                           </div>
                           <button
                             type="button"
                             onClick={() => {
-                              setSupportingDocuments(prev => prev.filter((_, i) => i !== docIndex));
+                              setSupportingDocuments(supportingDocuments.filter((_, i) => i !== docIndex));
                             }}
                             className="text-red-500 hover:text-red-700"
                           >
@@ -851,13 +900,30 @@ const CreateProfile = ({ onProfileUpdated }) => {
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">Degree</label>
-                        <input
-                          type="text"
+                        <select
                           value={edu.degree || ''}
                           onChange={(e) => updateEducation(index, 'degree', e.target.value)}
-                          placeholder="e.g., Bachelor's, Master's"
                           className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        />
+                        >
+                          <option value="">Select Degree</option>
+                          <option value="High School Diploma">High School Diploma</option>
+                          <option value="Associate Degree">Associate Degree</option>
+                          <option value="Bachelor Degree">Bachelor Degree</option>
+                          <option value="Bachelor of Science">Bachelor of Science</option>
+                          <option value="Bachelor of Arts">Bachelor of Arts</option>
+                          <option value="Bachelor of Engineering">Bachelor of Engineering</option>
+                          <option value="Bachelor of Business Administration">Bachelor of Business Administration</option>
+                          <option value="Master Degree">Master Degree</option>
+                          <option value="Master of Science">Master of Science</option>
+                          <option value="Master of Arts">Master of Arts</option>
+                          <option value="Master of Business Administration">Master of Business Administration</option>
+                          <option value="Doctor of Philosophy">Doctor of Philosophy</option>
+                          <option value="Doctor of Business Administration">Doctor of Business Administration</option>
+                          <option value="Juris Doctor">Juris Doctor</option>
+                          <option value="Bachelor of Laws">Bachelor of Laws</option>
+                          <option value="Master of Laws">Master of Laws</option>
+                          <option value="Other">Other</option>
+                        </select>
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">Field of Study</label>
@@ -895,7 +961,7 @@ const CreateProfile = ({ onProfileUpdated }) => {
                           type="text"
                           value={edu.end || ''}
                           onChange={(e) => updateEducation(index, 'end', e.target.value)}
-                          placeholder="e.g., 2022"
+                          placeholder="e.g., Present or December 2023"
                           className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                         />
                       </div>

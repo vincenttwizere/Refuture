@@ -35,6 +35,34 @@ const ProfileViewPage = () => {
   const { profile, loading, error, refetch } = useProfile(id);
   const [success, setSuccess] = useState('');
 
+  // Function to expand common degree abbreviations
+  const expandDegreeAbbreviation = (degree) => {
+    if (!degree) return degree;
+    
+    const abbreviations = {
+      'BD': 'Bachelor Degree',
+      'BS': 'Bachelor of Science',
+      'BA': 'Bachelor of Arts',
+      'BSc': 'Bachelor of Science',
+      'BEng': 'Bachelor of Engineering',
+      'BBA': 'Bachelor of Business Administration',
+      'MD': 'Master Degree',
+      'MS': 'Master of Science',
+      'MA': 'Master of Arts',
+      'MSc': 'Master of Science',
+      'MBA': 'Master of Business Administration',
+      'PhD': 'Doctor of Philosophy',
+      'Ph.D': 'Doctor of Philosophy',
+      'DBA': 'Doctor of Business Administration',
+      'JD': 'Juris Doctor',
+      'LLB': 'Bachelor of Laws',
+      'LLM': 'Master of Laws'
+    };
+    
+    const upperDegree = degree.toUpperCase().trim();
+    return abbreviations[upperDegree] || degree;
+  };
+
   useEffect(() => {
     if (profile && !loading && !error) {
         setSuccess('Profile loaded successfully');
@@ -433,7 +461,7 @@ const ProfileViewPage = () => {
                             </div>
                             <div>
                               <span className="text-sm font-medium text-gray-500">Degree</span>
-                              <p className="text-gray-900">{edu.degree}</p>
+                              <p className="text-gray-900">{expandDegreeAbbreviation(edu.degree)}</p>
                             </div>
                             <div>
                               <span className="text-sm font-medium text-gray-500">Field of Study</span>

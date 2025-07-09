@@ -38,7 +38,8 @@ const uploadDocument = upload.single('document');
 const uploadProfileImage = upload.single('profileImage');
 const uploadMultiple = upload.fields([
   { name: 'document', maxCount: 1 },
-  { name: 'profileImage', maxCount: 1 }
+  { name: 'profileImage', maxCount: 1 },
+  { name: 'supportingDocuments', maxCount: 10 } // Allow up to 10 supporting documents
 ]);
 
 export { upload, uploadDocument, uploadProfileImage, uploadMultiple };

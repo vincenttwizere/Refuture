@@ -34,7 +34,10 @@ import {
   Globe,
   GraduationCap,
   Download,
-  ArrowLeft
+  ArrowLeft,
+  BookOpen,
+  Languages,
+  Palette
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
@@ -43,6 +46,8 @@ import { useInterviews } from '../../hooks/useInterviews';
 import { useProfiles } from '../../hooks/useProfiles';
 import { useNotifications } from '../../hooks/useNotifications';
 import { useMessages } from '../../hooks/useMessages';
+import MessageCenter from '../messaging/MessageCenter';
+import { messagesAPI } from '../../services/api';
 
 const ProviderDashboard = () => {
   const [activeItem, setActiveItem] = useState('overview');
@@ -54,6 +59,34 @@ const ProviderDashboard = () => {
 
   const { logout, user, loading } = useAuth();
   const navigate = useNavigate();
+
+  // Function to expand common degree abbreviations
+  const expandDegreeAbbreviation = (degree) => {
+    if (!degree) return degree;
+    
+    const abbreviations = {
+      'BD': 'Bachelor Degree',
+      'BS': 'Bachelor of Science',
+      'BA': 'Bachelor of Arts',
+      'BSc': 'Bachelor of Science',
+      'BEng': 'Bachelor of Engineering',
+      'BBA': 'Bachelor of Business Administration',
+      'MD': 'Master Degree',
+      'MS': 'Master of Science',
+      'MA': 'Master of Arts',
+      'MSc': 'Master of Science',
+      'MBA': 'Master of Business Administration',
+      'PhD': 'Doctor of Philosophy',
+      'Ph.D': 'Doctor of Philosophy',
+      'DBA': 'Doctor of Business Administration',
+      'JD': 'Juris Doctor',
+      'LLB': 'Bachelor of Laws',
+      'LLM': 'Master of Laws'
+    };
+    
+    const upperDegree = degree.toUpperCase().trim();
+    return abbreviations[upperDegree] || degree;
+  };
 
   // Fetch real data from API
   const { 
@@ -82,7 +115,8 @@ const ProviderDashboard = () => {
   } = useProfiles();
 
   const { notifications } = useNotifications();
-  const { messages } = useMessages();
+  const { messages, loading: messagesLoading, error: messagesError, refetch: refetchMessages } = useMessages();
+  const [showMessageCenter, setShowMessageCenter] = useState(false);
 
   // Debug log for user and data (commented out to reduce noise)
   // console.log('ProviderDashboard user:', user, 'loading:', loading);
@@ -170,6 +204,40 @@ const ProviderDashboard = () => {
     message: '',
     contactMethod: 'email' // email, phone, or video
   });
+
+  // Place these at the top level, after other useState/useMemo hooks
+  const [search, setSearch] = useState('');
+  const [typeFilter, setTypeFilter] = useState('student');
+  const [sortBy, setSortBy] = useState('percentage');
+  const [sortOrder, setSortOrder] = useState('desc');
+
+  const filteredProfiles = useMemo(() => {
+    let filtered = profiles.filter(
+      (profile) =>
+        (!typeFilter || profile.option === typeFilter) &&
+        (!search ||
+          profile.fullName?.toLowerCase().includes(search.toLowerCase()) ||
+          profile.currentLocation?.toLowerCase().includes(search.toLowerCase()) ||
+          (profile.skills && profile.skills.join(' ').toLowerCase().includes(search.toLowerCase()))
+        )
+    );
+    // Only show students for ranking
+    if (typeFilter === 'student') {
+      filtered = filtered.map((profile) => ({
+        ...profile,
+        // Find highest percentage in academicRecords for ranking
+        maxPercentage: Array.isArray(profile.academicRecords) && profile.academicRecords.length > 0
+          ? Math.max(...profile.academicRecords.map((r) => Number(r.percentage) || 0))
+          : 0
+      }));
+      filtered = filtered.sort((a, b) =>
+        sortOrder === 'desc'
+          ? b.maxPercentage - a.maxPercentage
+          : a.maxPercentage - b.maxPercentage
+      );
+    }
+    return filtered;
+  }, [profiles, search, typeFilter, sortOrder]);
 
   const toggleSection = useCallback((section) => {
     setExpandedSections(prev => ({
@@ -463,6 +531,12 @@ const ProviderDashboard = () => {
     };
   }, [profiles]);
 
+  // Filter opportunities to only those created by the current provider
+  const myOpportunities = useMemo(() => {
+    if (!user || !user._id) return [];
+    return opportunities.filter(opp => opp.provider === user._id || (opp.provider && opp.provider._id === user._id));
+  }, [opportunities, user]);
+
   // Main content area
   const renderMainContent = () => {
     if (activeItem === 'overview') {
@@ -518,7 +592,7 @@ const ProviderDashboard = () => {
               </button>
             </div>
             <div className="space-y-3">
-              {opportunities.slice(0, 3).map(opp => (
+              {myOpportunities.slice(0, 3).map(opp => (
                 <div key={opp._id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                   <div>
                     <p className="font-medium text-sm">{opp.title}</p>
@@ -531,7 +605,7 @@ const ProviderDashboard = () => {
                   </span>
                 </div>
               ))}
-              {opportunities.length === 0 && (
+              {myOpportunities.length === 0 && (
                 <p className="text-gray-500 text-sm text-center py-4">No opportunities created yet</p>
               )}
             </div>
@@ -551,81 +625,36 @@ const ProviderDashboard = () => {
             </div>
           </div>
 
-          {/* Talent Category Filter */}
-          <div className="bg-white p-6 rounded-lg border">
-            <div className="flex flex-wrap gap-4">
+          {/* Filter Bar */}
+          <div className="bg-white p-4 rounded-lg border flex flex-col md:flex-row md:items-center md:space-x-4 space-y-2 md:space-y-0">
+            <input
+              type="text"
+              placeholder="Search by name, location, or skill..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              className="border border-gray-300 rounded-lg px-3 py-2 w-full md:w-64"
+            />
+            <select
+              value={typeFilter}
+              onChange={e => setTypeFilter(e.target.value)}
+              className="border border-gray-300 rounded-lg px-3 py-2"
+            >
+              <option value="student">Students</option>
+              <option value="job seeker">Job Seekers</option>
+              <option value="undocumented_talent">Undocumented Talents</option>
+              <option value="">All</option>
+            </select>
+            {typeFilter === 'student' && (
               <button
-                onClick={() => fetchProfiles({ option: 'student' })}
-                className="px-4 py-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition-colors flex items-center"
+                onClick={() => setSortOrder(sortOrder === 'desc' ? 'asc' : 'desc')}
+                className="ml-auto px-4 py-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 text-sm"
               >
-                <Users className="h-4 w-4 mr-2" />
-                Students
+                Sort by Score {sortOrder === 'desc' ? '↓' : '↑'}
               </button>
-              <button
-                onClick={() => fetchProfiles({ option: 'job seeker' })}
-                className="px-4 py-2 bg-green-100 text-green-700 rounded-lg hover:bg-green-200 transition-colors flex items-center"
-              >
-                <Briefcase className="h-4 w-4 mr-2" />
-                Job Seekers
-              </button>
-              <button
-                onClick={() => fetchProfiles({ option: 'undocumented_talent' })}
-                className="px-4 py-2 bg-purple-100 text-purple-700 rounded-lg hover:bg-purple-200 transition-colors flex items-center"
-              >
-                <Award className="h-4 w-4 mr-2" />
-                Undocumented Talents
-              </button>
-              <button
-                onClick={() => fetchProfiles()}
-                className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors flex items-center"
-              >
-                <Users className="h-4 w-4 mr-2" />
-                All Talents
-              </button>
+            )}
             </div>
             
-            {/* Stats */}
-            <div className="mt-6 grid grid-cols-1 md:grid-cols-4 gap-4">
-              <div className="bg-blue-50 p-4 rounded-lg">
-                <div className="flex items-center">
-                  <Users className="h-5 w-5 text-blue-600 mr-2" />
-                  <span className="text-sm font-medium text-blue-900">Students</span>
-                </div>
-                <p className="text-2xl font-bold text-blue-600 mt-1">
-                  {profileStats.students}
-                </p>
-              </div>
-              <div className="bg-green-50 p-4 rounded-lg">
-                <div className="flex items-center">
-                  <Briefcase className="h-5 w-5 text-green-600 mr-2" />
-                  <span className="text-sm font-medium text-green-900">Job Seekers</span>
-                </div>
-                <p className="text-2xl font-bold text-green-600 mt-1">
-                  {profileStats.jobSeekers}
-                </p>
-              </div>
-              <div className="bg-purple-50 p-4 rounded-lg">
-                <div className="flex items-center">
-                  <Award className="h-5 w-5 text-purple-600 mr-2" />
-                  <span className="text-sm font-medium text-purple-900">Undocumented</span>
-                </div>
-                <p className="text-2xl font-bold text-purple-600 mt-1">
-                  {profileStats.undocumented}
-                </p>
-              </div>
-              <div className="bg-gray-50 p-4 rounded-lg">
-                <div className="flex items-center">
-                  <Users className="h-5 w-5 text-gray-600 mr-2" />
-                  <span className="text-sm font-medium text-gray-900">Total</span>
-                </div>
-                <p className="text-2xl font-bold text-gray-600 mt-1">
-                  {profileStats.total}
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {/* Talents List */}
+          {/* Table or Loader/Error */}
           {profilesLoading ? (
             <div className="space-y-4">
               {[1, 2, 3].map(i => (
@@ -642,44 +671,50 @@ const ProviderDashboard = () => {
                 <p className="text-red-800">{profilesError}</p>
               </div>
             </div>
-          ) : profiles.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {profiles.map(profile => (
-                <div key={profile._id} className="bg-white p-6 rounded-lg border hover:shadow-lg transition-shadow">
-                  <div className="flex items-center mb-4">
-                    <div className="w-12 h-12 bg-gray-300 rounded-full flex items-center justify-center mr-4">
+          ) : filteredProfiles.length > 0 ? (
+            <div className="overflow-x-auto bg-white rounded-lg border">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Rank</th>
+                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
+                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Age</th>
+                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Gender</th>
+                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Location</th>
+                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Key Skills</th>
+                    {typeFilter === 'student' && (
+                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Top Score</th>
+                    )}
+                    <th className="px-4 py-2"></th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-100">
+                  {filteredProfiles.map((profile, idx) => (
+                    <tr key={profile._id} className="hover:bg-blue-50 transition-colors">
+                      <td className="px-4 py-2 font-semibold text-gray-700">{idx + 1}</td>
+                      <td className="px-4 py-2 flex items-center space-x-2">
+                        <div className="w-8 h-8 bg-gray-200 rounded-full flex items-center justify-center overflow-hidden">
                       {profile.photoUrl ? (
                         <img 
                           src={profile.photoUrl.startsWith('http') ? profile.photoUrl : `http://localhost:5001/${profile.photoUrl}`} 
                           alt={profile.fullName} 
-                          className="w-12 h-12 rounded-full object-cover"
-                          onError={(e) => {
-                            e.target.style.display = 'none';
-                            e.target.nextSibling.style.display = 'flex';
-                          }}
+                              className="w-8 h-8 object-cover"
                         />
-                      ) : null}
-                      <span className="text-lg font-medium text-gray-700" style={{ display: profile.photoUrl ? 'none' : 'flex' }}>
+                          ) : (
+                            <span className="text-sm font-medium text-gray-700">
                         {profile.fullName?.split(' ').map(n => n[0]).join('')}
                       </span>
+                          )}
                     </div>
-                    <div>
-                      <h3 className="font-semibold text-gray-900">{profile.fullName}</h3>
-                      <p className="text-sm text-gray-500">{profile.age} years old • {profile.gender}</p>
-                    </div>
-                  </div>
-                  
-                  <div className="space-y-3">
-                    <div>
-                      <p className="text-sm text-gray-600 mb-1">Location</p>
-                      <p className="text-sm font-medium">{profile.currentLocation}</p>
-                    </div>
-                    
-                    <div>
-                      <p className="text-sm text-gray-600 mb-1">Skills</p>
+                        <span>{profile.fullName}</span>
+                      </td>
+                      <td className="px-4 py-2">{profile.age}</td>
+                      <td className="px-4 py-2">{profile.gender}</td>
+                      <td className="px-4 py-2">{profile.currentLocation}</td>
+                      <td className="px-4 py-2">
                       <div className="flex flex-wrap gap-1">
-                        {profile.skills?.slice(0, 3).map((skill, index) => (
-                          <span key={index} className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
+                          {profile.skills?.slice(0, 3).map((skill, i) => (
+                            <span key={i} className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
                             {skill}
                           </span>
                         ))}
@@ -687,41 +722,22 @@ const ProviderDashboard = () => {
                           <span className="text-xs text-gray-500">+{profile.skills.length - 3} more</span>
                         )}
                       </div>
-                    </div>
-                    
-                    <div>
-                      <p className="text-sm text-gray-600 mb-1">Languages</p>
-                      <div className="flex flex-wrap gap-1">
-                        {profile.language?.slice(0, 2).map((lang, index) => (
-                          <span key={index} className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded">
-                            {lang}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                  
-                  <div className="mt-4 pt-4 border-t border-gray-100">
-                    <div className="flex space-x-2">
+                      </td>
+                      {typeFilter === 'student' && (
+                        <td className="px-4 py-2 font-semibold text-blue-700">{profile.maxPercentage || 0}%</td>
+                      )}
+                      <td className="px-4 py-2">
                       <button 
                         onClick={() => openProfileModal(profile)}
-                        className="flex-1 bg-blue-600 text-white px-3 py-2 rounded text-sm hover:bg-blue-700 transition-colors"
+                          className="bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700 text-sm"
                       >
-                        View Profile
+                          View
                       </button>
-                      <button 
-                        onClick={() => {
-                          setSelectedProfile(profile);
-                          openContactModal();
-                        }}
-                        className="flex-1 bg-gray-100 text-gray-700 px-3 py-2 rounded text-sm hover:bg-gray-200 transition-colors"
-                      >
-                        Contact
-                      </button>
-                    </div>
-                  </div>
-                </div>
+                      </td>
+                    </tr>
               ))}
+                </tbody>
+              </table>
             </div>
           ) : (
             <div className="text-center py-12">
@@ -769,9 +785,9 @@ const ProviderDashboard = () => {
                 <p className="text-red-800">{opportunitiesError}</p>
               </div>
             </div>
-          ) : opportunities.length > 0 ? (
+          ) : myOpportunities.length > 0 ? (
             <div className="space-y-4">
-              {opportunities.map(opportunity => (
+              {myOpportunities.map(opportunity => (
                 <div key={opportunity._id} className="bg-white p-6 rounded-lg border">
                   <div className="flex justify-between items-start mb-4">
                     <div className="flex-1">
@@ -864,9 +880,9 @@ const ProviderDashboard = () => {
                 <p className="text-red-800">{opportunitiesError}</p>
               </div>
             </div>
-          ) : opportunities.length > 0 ? (
+          ) : myOpportunities.length > 0 ? (
             <div className="space-y-4">
-              {opportunities.map(opportunity => (
+              {myOpportunities.map(opportunity => (
                 <div key={opportunity._id} className="bg-white p-6 rounded-lg border">
                   <div className="flex justify-between items-start mb-4">
                     <div className="flex-1">
@@ -928,25 +944,45 @@ const ProviderDashboard = () => {
             <div className="bg-white p-6 rounded-lg border">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg font-semibold text-gray-900">Messages</h3>
+                <div className="flex items-center space-x-2">
                 <span className="bg-blue-100 text-blue-800 text-xs font-medium px-2 py-1 rounded-full">
                   {messages?.length || 0}
                 </span>
+                  <button
+                    onClick={() => setShowMessageCenter(true)}
+                    className="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700"
+                  >
+                    Open
+                  </button>
+                </div>
               </div>
               <div className="space-y-3">
                 {messages && messages.length > 0 ? (
-                  messages.slice(0, 5).map(message => (
+                  messages.slice(0, 5).map(message => {
+                    const isReceived = message.recipient === user._id;
+                    const otherUserName = isReceived ? message.senderName : message.recipientName;
+                    
+                    return (
                     <div key={message._id} className="p-3 bg-gray-50 rounded-lg">
                       <div className="flex justify-between items-start">
                         <div>
-                          <p className="font-medium text-sm">{message.sender?.name || 'Unknown'}</p>
-                          <p className="text-xs text-gray-500">{message.subject}</p>
+                            <p className="font-medium text-sm">{otherUserName || 'Unknown'}</p>
+                            <p className="text-xs text-gray-500">{message.content}</p>
                         </div>
+                          <div className="text-right">
                         <span className="text-xs text-gray-400">
                           {new Date(message.createdAt).toLocaleDateString()}
                         </span>
+                            {!message.isRead && isReceived && (
+                              <span className="block bg-blue-500 text-white text-xs rounded-full px-2 py-1 mt-1">
+                                New
+                              </span>
+                            )}
                       </div>
                     </div>
-                  ))
+                      </div>
+                    );
+                  })
                 ) : (
                   <p className="text-gray-500 text-sm text-center py-4">No messages yet</p>
                 )}
@@ -1000,20 +1036,20 @@ const ProviderDashboard = () => {
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div className="bg-blue-50 p-4 rounded-lg">
               <h3 className="font-medium text-blue-900">Total Opportunities</h3>
-              <p className="text-2xl font-bold text-blue-600 mt-2">{opportunities.length}</p>
+              <p className="text-2xl font-bold text-blue-600 mt-2">{myOpportunities.length}</p>
               <p className="text-sm text-blue-600 mt-1">Created</p>
             </div>
             <div className="bg-green-50 p-4 rounded-lg">
               <h3 className="font-medium text-green-900">Active Opportunities</h3>
               <p className="text-2xl font-bold text-green-600 mt-2">
-                {opportunities.filter(opp => opp.isActive).length}
+                {myOpportunities.filter(opp => opp.isActive).length}
               </p>
               <p className="text-sm text-green-600 mt-1">Currently posted</p>
             </div>
             <div className="bg-purple-50 p-4 rounded-lg">
               <h3 className="font-medium text-purple-900">Total Applications</h3>
               <p className="text-2xl font-bold text-purple-600 mt-2">
-                {opportunities.reduce((sum, opp) => sum + (opp.currentApplicants || 0), 0)}
+                {myOpportunities.reduce((sum, opp) => sum + (opp.currentApplicants || 0), 0)}
               </p>
               <p className="text-sm text-purple-600 mt-1">Received</p>
             </div>
@@ -1930,6 +1966,88 @@ const ProviderDashboard = () => {
     }
   };
 
+  // Interview booking modal state
+  const [showInterviewModal, setShowInterviewModal] = useState(false);
+  const [interviewProfile, setInterviewProfile] = useState(null);
+  const [interviewDate, setInterviewDate] = useState('');
+  const [interviewTime, setInterviewTime] = useState('');
+  const [interviewMessage, setInterviewMessage] = useState('');
+  const [interviewLoading, setInterviewLoading] = useState(false);
+  const [interviewError, setInterviewError] = useState(null);
+
+  // Add a handler to open the interview modal
+  const openInterviewModal = (profile) => {
+    setInterviewProfile(profile);
+    setInterviewDate('');
+    setInterviewTime('');
+    setInterviewMessage('');
+    setInterviewError(null);
+    setShowInterviewModal(true);
+  };
+
+  const closeInterviewModal = () => {
+    setShowInterviewModal(false);
+    setInterviewProfile(null);
+    setInterviewDate('');
+    setInterviewTime('');
+    setInterviewMessage('');
+    setInterviewError(null);
+  };
+
+  const handleBookInterview = async (e) => {
+    e.preventDefault();
+    if (!interviewDate || !interviewTime) {
+      setInterviewError('Please select date and time.');
+      return;
+    }
+    setInterviewLoading(true);
+    setInterviewError(null);
+    try {
+      const dateTime = new Date(`${interviewDate}T${interviewTime}`);
+      await interviewsAPI.create({
+        provider: user._id,
+        refugee: interviewProfile.userId || interviewProfile._id,
+        date: dateTime,
+        message: interviewMessage
+      });
+      setShowInterviewModal(false);
+      setInterviewProfile(null);
+      setInterviewDate('');
+      setInterviewTime('');
+      setInterviewMessage('');
+      setInterviewError(null);
+      // Refresh interviews
+      if (typeof refetchInterviews === 'function') refetchInterviews();
+    } catch (err) {
+      setInterviewError(err.response?.data?.message || 'Failed to book interview');
+    } finally {
+      setInterviewLoading(false);
+    }
+  };
+
+  const [preselecting, setPreselecting] = useState(false);
+  const [preselectSuccess, setPreselectSuccess] = useState('');
+  const [preselectError, setPreselectError] = useState('');
+
+  const handleSendPreselection = async (profile) => {
+    setPreselecting(true);
+    setPreselectSuccess('');
+    setPreselectError('');
+    try {
+      await messagesAPI.send({
+        recipient: profile.userId || profile._id,
+        content: 'You have been preselected for an opportunity. Please review and book an interview if interested.',
+        metadata: { type: 'preselection', providerId: user._id, providerName: user.firstName + ' ' + user.lastName }
+      });
+      setPreselectSuccess('Preselection message sent!');
+    } catch (err) {
+      setPreselectError(err.response?.data?.message || 'Failed to send preselection message');
+    } finally {
+      setPreselecting(false);
+      setTimeout(() => { setPreselectSuccess(''); setPreselectError(''); }, 3000);
+    }
+  };
+
   return (
     <div className="h-screen bg-gray-50 flex flex-col">
       {/* Header */}
@@ -2293,40 +2411,32 @@ const ProviderDashboard = () => {
                 </button>
               </div>
             </div>
-            
             {profileLoading ? (
               <div className="p-8 text-center">
                 <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
                 <p className="mt-4 text-gray-600">Loading profile...</p>
               </div>
             ) : (
-              <div className="p-6">
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                  {/* Main Profile Info */}
-                  <div className="lg:col-span-2">
-                    <div className="bg-gray-50 rounded-lg p-6 mb-6">
-                      {/* Profile Header */}
-                      <div className="flex items-start space-x-6 mb-6">
-                        <div className="w-24 h-24 bg-gray-300 rounded-full flex items-center justify-center">
+              <div className="p-6 space-y-8">
+                {/* Profile Picture & Basic Info */}
+                <div className="flex items-start space-x-6">
+                  <div className="w-24 h-24 bg-gray-300 rounded-full flex items-center justify-center overflow-hidden">
                           {selectedProfile.photoUrl ? (
                             <img 
                               src={selectedProfile.photoUrl.startsWith('http') ? selectedProfile.photoUrl : `http://localhost:5001/${selectedProfile.photoUrl}`} 
                               alt={selectedProfile.fullName} 
                               className="w-24 h-24 rounded-full object-cover"
-                              onError={(e) => {
-                                e.target.style.display = 'none';
-                                e.target.nextSibling.style.display = 'flex';
-                              }}
                             />
-                          ) : null}
-                          <span className="text-2xl font-medium text-gray-700" style={{ display: selectedProfile.photoUrl ? 'none' : 'flex' }}>
+                    ) : (
+                      <span className="text-2xl font-medium text-gray-700">
                             {selectedProfile.fullName?.split(' ').map(n => n[0]).join('')}
                           </span>
+                    )}
                         </div>
                         <div className="flex-1">
                           <h1 className="text-3xl font-bold text-gray-900 mb-2">{selectedProfile.fullName}</h1>
-                          <p className="text-lg text-gray-600 mb-3">{selectedProfile.age} years old • {selectedProfile.gender}</p>
-                          <div className="flex items-center space-x-4">
+                    <p className="text-lg text-gray-600 mb-2">{selectedProfile.age} years old • {selectedProfile.gender}</p>
+                    <div className="flex items-center space-x-4 mb-2">
                             <span className={`px-3 py-1 rounded-full text-sm font-medium ${
                               selectedProfile.option === 'student' ? 'bg-blue-100 text-blue-800' :
                               selectedProfile.option === 'job seeker' ? 'bg-green-100 text-green-800' :
@@ -2335,166 +2445,223 @@ const ProviderDashboard = () => {
                             }`}>
                               {selectedProfile.option}
                             </span>
-                            <div className="flex items-center text-gray-600">
+                      <span className="flex items-center text-gray-600">
                               <MapPin className="h-4 w-4 mr-1" />
                               {selectedProfile.currentLocation}
+                      </span>
+                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${selectedProfile.isPublic ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>{selectedProfile.isPublic ? 'Public' : 'Private'}</span>
                             </div>
+                    <div className="flex flex-wrap gap-4 text-gray-600 text-sm">
+                      <span><Mail className="inline h-4 w-4 mr-1" />{selectedProfile.email}</span>
+                      {selectedProfile.phone && <span><Phone className="inline h-4 w-4 mr-1" />{selectedProfile.phone}</span>}
+                      {selectedProfile.website && <span><Globe className="inline h-4 w-4 mr-1" /><a href={selectedProfile.website} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">{selectedProfile.website}</a></span>}
                           </div>
                         </div>
                       </div>
 
-                      {/* About */}
-                      {selectedProfile.about && (
-                        <div className="mb-6">
-                          <h3 className="text-lg font-semibold text-gray-900 mb-3">About</h3>
-                          <p className="text-gray-700 leading-relaxed">{selectedProfile.about}</p>
+                {/* Resume/CV and Get in Touch (now in main form) */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {/* Resume/CV */}
+                  {selectedProfile.document && (
+                    <div className="bg-gray-50 rounded-lg p-6 flex flex-col items-center justify-center">
+                      <h3 className="text-lg font-semibold text-gray-900 mb-4">Resume/CV</h3>
+                      <button className="w-full bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center justify-center">
+                        <Download className="h-4 w-4 mr-2" />
+                        Download Resume
+                      </button>
                         </div>
                       )}
-
-                      {/* Skills */}
-                      {selectedProfile.skills && selectedProfile.skills.length > 0 && (
-                        <div className="mb-6">
-                          <h3 className="text-lg font-semibold text-gray-900 mb-3">Skills</h3>
-                          <div className="flex flex-wrap gap-2">
-                            {selectedProfile.skills.map((skill, index) => (
-                              <span key={index} className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm">
-                                {skill}
-                              </span>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Languages */}
-                      {selectedProfile.language && selectedProfile.language.length > 0 && (
-                        <div className="mb-6">
-                          <h3 className="text-lg font-semibold text-gray-900 mb-3">Languages</h3>
-                          <div className="flex flex-wrap gap-2">
-                            {selectedProfile.language.map((lang, index) => (
-                              <span key={index} className="bg-green-100 text-green-800 px-3 py-1 rounded-full text-sm">
-                                {lang}
-                              </span>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Education */}
-                      {selectedProfile.education && (
-                        <div className="mb-6">
-                          <h3 className="text-lg font-semibold text-gray-900 mb-3 flex items-center">
-                            <GraduationCap className="h-5 w-5 mr-2" />
-                            Education
-                          </h3>
-                          <div className="bg-white p-4 rounded-lg">
-                            <p className="text-gray-700">{selectedProfile.education}</p>
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Work Experience */}
-                      {selectedProfile.workExperience && (
-                        <div className="mb-6">
-                          <h3 className="text-lg font-semibold text-gray-900 mb-3 flex items-center">
-                            <Briefcase className="h-5 w-5 mr-2" />
-                            Work Experience
-                          </h3>
-                          <div className="bg-white p-4 rounded-lg">
-                            <p className="text-gray-700">{selectedProfile.workExperience}</p>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Sidebar */}
-                  <div className="space-y-6">
-                    {/* Contact Information */}
-                    <div className="bg-gray-50 rounded-lg p-6">
-                      <h3 className="text-lg font-semibold text-gray-900 mb-4">Contact Information</h3>
-                      <div className="space-y-3">
-                        {selectedProfile.email && (
-                          <div className="flex items-center text-gray-600">
-                            <Mail className="h-4 w-4 mr-3" />
-                            <span>{selectedProfile.email}</span>
-                          </div>
-                        )}
-                        {selectedProfile.phone && (
-                          <div className="flex items-center text-gray-600">
-                            <Phone className="h-4 w-4 mr-3" />
-                            <span>{selectedProfile.phone}</span>
-                          </div>
-                        )}
-                        {selectedProfile.website && (
-                          <div className="flex items-center text-gray-600">
-                            <Globe className="h-4 w-4 mr-3" />
-                            <a href={selectedProfile.website} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
-                              {selectedProfile.website}
-                            </a>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Additional Information */}
-                    <div className="bg-gray-50 rounded-lg p-6">
-                      <h3 className="text-lg font-semibold text-gray-900 mb-4">Additional Information</h3>
-                      <div className="space-y-3">
-                        {selectedProfile.dateOfBirth && (
-                          <div className="flex items-center text-gray-600">
-                            <Calendar className="h-4 w-4 mr-3" />
-                            <span>Born: {new Date(selectedProfile.dateOfBirth).toLocaleDateString()}</span>
-                          </div>
-                        )}
-                        {selectedProfile.nationality && (
-                          <div className="text-gray-600">
-                            <span className="font-medium">Nationality:</span> {selectedProfile.nationality}
-                          </div>
-                        )}
-                        {selectedProfile.maritalStatus && (
-                          <div className="text-gray-600">
-                            <span className="font-medium">Marital Status:</span> {selectedProfile.maritalStatus}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Resume/CV */}
-                    {selectedProfile.document && (
-                      <div className="bg-gray-50 rounded-lg p-6">
-                        <h3 className="text-lg font-semibold text-gray-900 mb-4">Resume/CV</h3>
-                        <button className="w-full bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center justify-center">
-                          <Download className="h-4 w-4 mr-2" />
-                          Download Resume
-                        </button>
-                      </div>
-                    )}
-
-                    {/* Contact Actions */}
-                    <div className="bg-gray-50 rounded-lg p-6">
-                      <h3 className="text-lg font-semibold text-gray-900 mb-4">Get in Touch</h3>
-                      <div className="space-y-3">
-                        <button
-                          onClick={openContactModal}
-                          className="w-full bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center justify-center"
-                        >
-                          <MessageCircle className="h-4 w-4 mr-2" />
-                          Send Message
-                        </button>
-                        {selectedProfile.phone && (
-                          <button className="w-full bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 flex items-center justify-center">
-                            <Phone className="h-4 w-4 mr-2" />
-                            Call
-                          </button>
-                        )}
-                        <button className="w-full bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 flex items-center justify-center">
-                          <Video className="h-4 w-4 mr-2" />
-                          Schedule Video Call
-                        </button>
-                      </div>
-                    </div>
+                  {/* Get in Touch */}
+                  <div className="bg-gray-50 rounded-lg p-6 flex flex-col items-center justify-center">
+                    <h3 className="text-lg font-semibold text-gray-900 mb-4">Get in Touch</h3>
+                    <button
+                      onClick={() => {
+                        setShowMessageCenter(true);
+                      }}
+                      className="w-full bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center justify-center mb-3"
+                    >
+                      <MessageCircle className="h-4 w-4 mr-2" />
+                      Send Message
+                    </button>
+                    <button className="w-full bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 flex items-center justify-center">
+                      <Video className="h-4 w-4 mr-2" />
+                      Schedule Video Call
+                    </button>
                   </div>
                 </div>
+
+                {/* Skills & Languages */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900 mb-2 flex items-center"><Award className="h-5 w-5 mr-2 text-blue-500" />Skills</h3>
+                    {selectedProfile.skills && selectedProfile.skills.length > 0 ? (
+                          <div className="flex flex-wrap gap-2">
+                        {selectedProfile.skills.map((skill, i) => (
+                          <span key={i} className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm">{skill}</span>
+                            ))}
+                          </div>
+                    ) : <p className="text-gray-500 text-sm">No skills listed</p>}
+                        </div>
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900 mb-2 flex items-center"><Languages className="h-5 w-5 mr-2 text-blue-500" />Languages</h3>
+                    {selectedProfile.language && selectedProfile.language.length > 0 ? (
+                          <div className="flex flex-wrap gap-2">
+                        {selectedProfile.language.map((lang, i) => (
+                          <span key={i} className="bg-green-100 text-green-800 px-3 py-1 rounded-full text-sm">{lang}</span>
+                            ))}
+                          </div>
+                    ) : <p className="text-gray-500 text-sm">No languages listed</p>}
+                        </div>
+                </div>
+
+                {/* Student Template */}
+                {selectedProfile.option === 'student' && (
+                  <>
+                    <div className="bg-blue-50 rounded-lg p-6 border border-blue-200">
+                      <h3 className="text-lg font-semibold text-blue-900 mb-4 flex items-center"><BookOpen className="h-5 w-5 mr-2 text-blue-600" />Academic Information</h3>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                        <div>
+                          <span className="block text-sm font-medium text-blue-800 mb-2">High School Subjects</span>
+                          <p className="text-gray-900">{selectedProfile.highSchoolSubjects || <span className="text-gray-400 italic">No data provided</span>}</p>
+                          </div>
+                        <div>
+                          <span className="block text-sm font-medium text-blue-800 mb-2">Desired Field of Study</span>
+                          <p className="text-gray-900">{selectedProfile.desiredField || <span className="text-gray-400 italic">No data provided</span>}</p>
+                        </div>
+                          </div>
+                        </div>
+                    <div className="bg-gray-50 rounded-lg p-6 border border-gray-200">
+                      <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center"><Award className="h-5 w-5 mr-2 text-blue-500" />Annual Academic Records</h3>
+                      {selectedProfile.academicRecords && selectedProfile.academicRecords.length > 0 ? (
+                        <div className="space-y-4">
+                          {selectedProfile.academicRecords.map((record, i) => (
+                            <div key={i} className="bg-white rounded-lg p-4 border border-gray-200">
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                  <span className="text-sm font-medium text-gray-500">Academic Level</span>
+                                  <p className="text-gray-900">{expandDegreeAbbreviation(record.level)}</p>
+                    </div>
+                                <div>
+                                  <span className="text-sm font-medium text-gray-500">Year</span>
+                                  <p className="text-gray-900">{record.year}</p>
+                  </div>
+                                {record.school && (
+                                  <div>
+                                    <span className="text-sm font-medium text-gray-500">School</span>
+                                    <p className="text-gray-900">{record.school}</p>
+                          </div>
+                        )}
+                                <div>
+                                  <span className="text-sm font-medium text-gray-500">Percentage Score</span>
+                                  <p className="text-gray-900">{record.percentage}%</p>
+                          </div>
+                              </div>
+                              {record.subjectGrades && (
+                                <div className="mt-4">
+                                  <span className="text-sm font-medium text-gray-500">Subject Grades</span>
+                                  <p className="text-gray-900">{record.subjectGrades}</p>
+                          </div>
+                        )}
+                      </div>
+                          ))}
+                    </div>
+                      ) : <p className="text-gray-400 italic">No academic records added yet</p>}
+                          </div>
+                    <div className="bg-gray-50 rounded-lg p-6 border border-gray-200">
+                      <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center"><FileText className="h-5 w-5 mr-2 text-blue-500" />Transcripts and Certificates</h3>
+                      {selectedProfile.supportingDocuments && selectedProfile.supportingDocuments.length > 0 ? (
+                        <div className="space-y-2">
+                          {selectedProfile.supportingDocuments.map((doc, i) => (
+                            <div key={i} className="flex items-center justify-between p-3 bg-white rounded border">
+                              <div className="flex items-center">
+                                <FileText className="h-4 w-4 text-blue-500 mr-2" />
+                                <span className="text-gray-700">{doc.name || doc}</span>
+                          </div>
+                              {typeof doc === 'string' && (
+                                <a href={`http://localhost:5001/${doc}`} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline text-xs">View</a>
+                        )}
+                          </div>
+                          ))}
+                      </div>
+                      ) : <p className="text-gray-400 italic">No supporting documents uploaded yet</p>}
+                    </div>
+                  </>
+                )}
+
+                {/* Job Seeker Template */}
+                {selectedProfile.option === 'job seeker' && (
+                  <>
+                    <div className="bg-gray-50 rounded-lg p-6 border border-gray-200 mb-6">
+                      <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center"><GraduationCap className="h-5 w-5 mr-2 text-blue-500" />Education</h3>
+                      {selectedProfile.education && selectedProfile.education.length > 0 ? (
+                        <div className="space-y-4">
+                          {selectedProfile.education.map((edu, i) => (
+                            <div key={i} className="bg-white rounded-lg p-4 border border-gray-200">
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div><span className="text-sm font-medium text-gray-500">School/Institution</span><p className="text-gray-900">{edu.school}</p></div>
+                                <div><span className="text-sm font-medium text-gray-500">Degree</span><p className="text-gray-900">{expandDegreeAbbreviation(edu.degree)}</p></div>
+                                <div><span className="text-sm font-medium text-gray-500">Field of Study</span><p className="text-gray-900">{edu.field}</p></div>
+                                <div><span className="text-sm font-medium text-gray-500">Duration</span><p className="text-gray-900">{edu.duration}</p></div>
+                                <div><span className="text-sm font-medium text-gray-500">Start Date</span><p className="text-gray-900">{edu.start}</p></div>
+                                <div><span className="text-sm font-medium text-gray-500">End Date</span><p className="text-gray-900">{edu.end}</p></div>
+                      </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : <p className="text-gray-400 italic">No education history added yet</p>}
+                    </div>
+                    <div className="bg-gray-50 rounded-lg p-6 border border-gray-200">
+                      <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center"><Briefcase className="h-5 w-5 mr-2 text-blue-500" />Work Experience</h3>
+                      {selectedProfile.experience && selectedProfile.experience.length > 0 ? (
+                        <div className="space-y-4">
+                          {selectedProfile.experience.map((exp, i) => (
+                            <div key={i} className="bg-white rounded-lg p-4 border border-gray-200">
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div><span className="text-sm font-medium text-gray-500">Company</span><p className="text-gray-900">{exp.company}</p></div>
+                                <div><span className="text-sm font-medium text-gray-500">Job Title</span><p className="text-gray-900">{exp.title}</p></div>
+                                <div><span className="text-sm font-medium text-gray-500">Start Date</span><p className="text-gray-900">{exp.start}</p></div>
+                                <div><span className="text-sm font-medium text-gray-500">End Date</span><p className="text-gray-900">{exp.end}</p></div>
+                                <div className="md:col-span-2"><span className="text-sm font-medium text-gray-500">Description</span><p className="text-gray-900">{exp.description}</p></div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : <p className="text-gray-400 italic">No work experience added yet</p>}
+                    </div>
+                  </>
+                )}
+
+                {/* Undocumented Talent Template */}
+                {selectedProfile.option === 'undocumented_talent' && (
+                  <>
+                    <div className="bg-gray-50 rounded-lg p-6 border border-gray-200">
+                      <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center"><Star className="h-5 w-5 mr-2 text-blue-500" />Talent Information</h3>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                        <div><span className="block text-sm font-medium text-gray-700 mb-2">Talent Category</span><p className="text-gray-900">{selectedProfile.talentCategory}</p></div>
+                        <div><span className="block text-sm font-medium text-gray-700 mb-2">Years of Experience</span><p className="text-gray-900">{selectedProfile.talentExperience}</p></div>
+                        <div className="md:col-span-2"><span className="block text-sm font-medium text-gray-700 mb-2">Talent Description</span><p className="text-gray-900">{selectedProfile.talentDescription}</p></div>
+                      </div>
+                    </div>
+                    <div className="bg-gray-50 rounded-lg p-6 border border-gray-200">
+                      <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center"><Palette className="h-5 w-5 mr-2 text-blue-500" />Portfolio & Work Samples</h3>
+                      {selectedProfile.portfolio && selectedProfile.portfolio.length > 0 ? (
+                        <div className="space-y-4">
+                          {selectedProfile.portfolio.map((item, i) => (
+                            <div key={i} className="bg-white rounded-lg p-4 border border-gray-200">
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div><span className="text-sm font-medium text-gray-500">Title</span><p className="text-gray-900">{item.title}</p></div>
+                                <div><span className="text-sm font-medium text-gray-500">Category</span><p className="text-gray-900">{item.category}</p></div>
+                                <div><span className="text-sm font-medium text-gray-500">Year Created</span><p className="text-gray-900">{item.year}</p></div>
+                                <div><span className="text-sm font-medium text-gray-500">Link</span>{item.link && (<a href={item.link} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">{item.link}</a>)}</div>
+                                <div className="md:col-span-2"><span className="text-sm font-medium text-gray-500">Description</span><p className="text-gray-900">{item.description}</p></div>
+                  </div>
+                </div>
+                          ))}
+              </div>
+                      ) : <p className="text-gray-400 italic">No portfolio items added yet</p>}
+                    </div>
+                  </>
+                )}
               </div>
             )}
           </div>
@@ -2615,6 +2782,40 @@ const ProviderDashboard = () => {
                 >
                   Send Message
                 </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Message Center Modal */}
+      <MessageCenter 
+        isOpen={showMessageCenter}
+        onClose={() => setShowMessageCenter(false)}
+        preSelectedRecipient={selectedProfile}
+      />
+
+      {showInterviewModal && interviewProfile && (
+        <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-md">
+            <h2 className="text-lg font-semibold mb-4">Book Interview with {interviewProfile.fullName || interviewProfile.firstName + ' ' + interviewProfile.lastName}</h2>
+            <form onSubmit={handleBookInterview} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium mb-1">Date</label>
+                <input type="date" value={interviewDate} onChange={e => setInterviewDate(e.target.value)} className="w-full border rounded px-3 py-2" required />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">Time</label>
+                <input type="time" value={interviewTime} onChange={e => setInterviewTime(e.target.value)} className="w-full border rounded px-3 py-2" required />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">Message (optional)</label>
+                <textarea value={interviewMessage} onChange={e => setInterviewMessage(e.target.value)} className="w-full border rounded px-3 py-2" rows={3} />
+              </div>
+              {interviewError && <div className="text-red-600 text-sm">{interviewError}</div>}
+              <div className="flex justify-end space-x-2">
+                <button type="button" onClick={closeInterviewModal} className="px-4 py-2 bg-gray-200 rounded">Cancel</button>
+                <button type="submit" disabled={interviewLoading} className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50">{interviewLoading ? 'Booking...' : 'Book Interview'}</button>
               </div>
             </form>
           </div>
