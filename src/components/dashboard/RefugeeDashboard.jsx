@@ -31,6 +31,7 @@ import { useInterviews } from '../../hooks/useInterviews';
 import { useProfiles } from '../../hooks/useProfiles';
 import { useNotifications } from '../../hooks/useNotifications';
 import { useMessages } from '../../hooks/useMessages';
+import { messagesAPI } from '../../services/api';
 import ProfileView from '../profiles/ProfileView';
 import CreateProfile from '../profiles/CreateProfile';
 import MessageCenter from '../messaging/MessageCenter';
@@ -74,6 +75,8 @@ const RefugeeDashboard = () => {
   const [showMessageCenter, setShowMessageCenter] = useState(false);
   const [selectedConversation, setSelectedConversation] = useState(null);
   const [conversations, setConversations] = useState([]);
+  const [newMessage, setNewMessage] = useState('');
+  const [sendingMessage, setSendingMessage] = useState(false);
 
   // Calculate unread notifications count
   const unreadNotificationsCount = notifications.filter(notification => !notification.isRead).length;
@@ -84,6 +87,11 @@ const RefugeeDashboard = () => {
   // Group messages into conversations
   useEffect(() => {
     if (messages.length > 0) {
+      console.log('=== START MESSAGE GROUPING ===');
+      console.log('Raw messages from API:', messages);
+      console.log('Current user ID:', user._id);
+      
+      // Create a map to group messages by conversation partner
       const conversationMap = new Map();
       
       messages.forEach(message => {
@@ -91,35 +99,110 @@ const RefugeeDashboard = () => {
         const otherUserId = isReceived ? message.sender : message.recipient;
         const otherUserName = isReceived ? message.senderName : message.recipientName;
         
-        if (!conversationMap.has(otherUserId)) {
-          conversationMap.set(otherUserId, {
-            userId: otherUserId,
-            userName: otherUserName,
+        console.log('Processing message:', {
+          messageId: message._id,
+          content: message.content.substring(0, 30) + '...',
+          isReceived,
+          otherUserId,
+          otherUserName,
+          sender: message.sender,
+          recipient: message.recipient,
+          senderName: message.senderName,
+          recipientName: message.recipientName,
+          currentUserId: user._id,
+          senderType: typeof message.sender,
+          recipientType: typeof message.recipient,
+          currentUserIdType: typeof user._id
+        });
+        
+        // Check if user IDs are strings or objects
+        const senderId = typeof message.sender === 'object' ? message.sender._id : message.sender;
+        const recipientId = typeof message.recipient === 'object' ? message.recipient._id : message.recipient;
+        const currentUserId = typeof user._id === 'object' ? user._id.toString() : user._id;
+        
+        console.log('Normalized IDs:', {
+          senderId,
+          recipientId,
+          currentUserId,
+          isReceivedAfterNormalization: recipientId === currentUserId
+        });
+        
+        const normalizedIsReceived = recipientId === currentUserId;
+        const normalizedOtherUserId = normalizedIsReceived ? senderId : recipientId;
+        
+        // Determine the conversation partner name - always show the other person's name
+        let normalizedOtherUserName;
+        if (normalizedIsReceived) {
+          // Message was received by current user, so show sender's name
+          normalizedOtherUserName = message.senderName;
+        } else {
+          // Message was sent by current user, so show recipient's name
+          normalizedOtherUserName = message.recipientName;
+        }
+        
+        console.log('Conversation partner determination:', {
+          isReceived: normalizedIsReceived,
+          otherUserId: normalizedOtherUserId,
+          otherUserName: normalizedOtherUserName,
+          senderName: message.senderName,
+          recipientName: message.recipientName,
+          currentUserName: user.firstName + ' ' + user.lastName
+        });
+        
+        if (!conversationMap.has(normalizedOtherUserId)) {
+          conversationMap.set(normalizedOtherUserId, {
+            userId: normalizedOtherUserId,
+            userName: normalizedOtherUserName,
             messages: [],
+            messageCount: 0,
             unreadCount: 0,
-            lastMessage: null
+            lastMessage: null,
+            date: '',
+            status: 'Open Conversation'
           });
         }
         
-        const conversation = conversationMap.get(otherUserId);
+        const conversation = conversationMap.get(normalizedOtherUserId);
         conversation.messages.push(message);
+        conversation.messageCount = conversation.messages.length;
         
-        if (isReceived && !message.isRead) {
-          conversation.unreadCount++;
-        }
-        
+        // Update last message if this one is more recent
         if (!conversation.lastMessage || new Date(message.createdAt) > new Date(conversation.lastMessage.createdAt)) {
           conversation.lastMessage = message;
+          conversation.date = new Date(message.createdAt).toLocaleDateString();
+        }
+        
+        // Count unread messages
+        if (normalizedIsReceived && !message.isRead) {
+          conversation.unreadCount++;
         }
       });
       
-      // Convert to array and sort by last message date
-      const conversationsArray = Array.from(conversationMap.values()).sort((a, b) => 
+      // Convert map to array and sort messages within each conversation
+      const conversations = Array.from(conversationMap.values()).map(conversation => {
+        // Sort messages by date
+        conversation.messages.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+        console.log(`Conversation with ${conversation.userName}: ${conversation.messages.length} messages`);
+        return conversation;
+      });
+      
+      // Sort conversations by most recent message
+      const sortedConversations = conversations.sort((a, b) => 
         new Date(b.lastMessage.createdAt) - new Date(a.lastMessage.createdAt)
       );
       
-      setConversations(conversationsArray);
+      console.log('Final grouped conversations:', sortedConversations.map(c => ({
+        userName: c.userName,
+        userId: c.userId,
+        messageCount: c.messages.length,
+        unreadCount: c.unreadCount,
+        lastMessage: c.lastMessage.content.substring(0, 50)
+      })));
+      console.log('=== END MESSAGE GROUPING ===');
+      
+      setConversations(sortedConversations);
     } else {
+      console.log('No messages to group');
       setConversations([]);
     }
   }, [messages, user._id]);
@@ -147,7 +230,8 @@ const RefugeeDashboard = () => {
     console.log('Refugee Dashboard - Messages:', messages);
     console.log('Refugee Dashboard - Messages Loading:', messagesLoading);
     console.log('Refugee Dashboard - Messages Error:', messagesError);
-  }, [messages, messagesLoading, messagesError]);
+    console.log('Refugee Dashboard - Conversations:', conversations);
+  }, [messages, messagesLoading, messagesError, conversations]);
 
   // Defensive loading state (must be after all hooks)
   if (loading) return <div className="min-h-screen flex items-center justify-center">Loading user...</div>;
@@ -462,181 +546,211 @@ const RefugeeDashboard = () => {
 
     if (activeItem === 'messages') {
       return (
-        <div className="space-y-6">
-          {/* Error Display */}
-          {messagesError && (
-            <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-              <div className="flex items-center">
-                <AlertCircle className="h-5 w-5 text-red-400 mr-2" />
-                <p className="text-red-800 text-sm">{messagesError}</p>
+        <div className="flex h-screen bg-gray-100">
+          {/* Sidebar - Conversations List */}
+          <div className="w-1/3 bg-white border-r border-gray-200 flex flex-col">
+            {/* Header */}
+            <div className="p-4 border-b border-gray-200">
+              <div className="flex items-center justify-between mb-4">
+                <h1 className="text-xl font-semibold text-gray-900">Messages</h1>
+                <button 
+                  onClick={() => setShowMessageCenter(true)}
+                  className="p-2 hover:bg-gray-100 rounded-full"
+                >
+                  <MessageCircle className="w-5 h-5 text-gray-500" />
+                </button>
+              </div>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="Search conversations..."
+                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
               </div>
             </div>
-          )}
 
-          {/* Header */}
-          <div className="flex justify-between items-center">
-            <div>
-              <h3 className="text-lg font-semibold text-gray-900">Messages</h3>
-              <p className="text-sm text-gray-600">Communicate with providers and mentors</p>
-            </div>
-            <button
-              onClick={() => setShowMessageCenter(true)}
-              className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center"
-            >
-              <MessageCircle className="h-4 w-4 mr-2" />
-              Open Messages
-            </button>
-          </div>
-
-          {/* Loading State */}
-          {messagesLoading && (
-            <div className="space-y-4">
-              <div className="animate-pulse">
-                <div className="space-y-4">
-                  {[1, 2, 3].map(i => (
-                    <div key={i} className="bg-gray-200 p-6 rounded-lg h-24"></div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Messages Display */}
-          {!messagesLoading && (
-            <>
-              {conversations.length > 0 ? (
-                <div className="space-y-4">
-                  {conversations.map((conversation) => (
-                    <div 
-                      key={conversation.userId} 
-                      className="bg-white rounded-lg shadow border border-gray-200 p-6 cursor-pointer hover:bg-gray-50 transition-colors"
-                      onClick={() => setSelectedConversation(conversation)}
+            {/* Conversations List */}
+            <div className="flex-1 overflow-y-auto">
+              {!messagesLoading ? (
+                conversations.length > 0 ? (
+                  conversations.map((conversation) => (
+                    <div
+                      key={conversation.userId}
+                      onClick={() => {
+                        console.log('Selected conversation:', {
+                          userId: conversation.userId,
+                          userName: conversation.userName,
+                          messageCount: conversation.messages.length,
+                          messages: conversation.messages.map(m => ({
+                            id: m._id,
+                            sender: m.sender,
+                            recipient: m.recipient,
+                            senderName: m.senderName,
+                            recipientName: m.recipientName,
+                            content: m.content.substring(0, 30)
+                          }))
+                        });
+                        setSelectedConversation(conversation);
+                      }}
+                      className={`p-4 border-b border-gray-100 cursor-pointer hover:bg-gray-50 transition-colors ${
+                        selectedConversation?.userId === conversation.userId ? 'bg-blue-50 border-l-4 border-l-blue-500' : ''
+                      }`}
                     >
-                      <div className="flex justify-between items-start mb-4">
-                        <div>
-                          <h4 className="font-semibold text-gray-900 mb-1">
-                            {conversation.userName}
-                          </h4>
-                          <p className="text-sm text-gray-600">
-                            {conversation.lastMessage.content.length > 50 
-                              ? conversation.lastMessage.content.substring(0, 50) + '...'
-                              : conversation.lastMessage.content
-                            }
-                          </p>
+                      <div className="flex items-start space-x-3">
+                        {/* Avatar */}
+                        <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-medium text-sm ${getAvatarColor(conversation.userName)}`}>
+                          {getInitials(conversation.userName)}
                         </div>
-                        <div className="text-right">
-                          {conversation.unreadCount > 0 && (
-                            <span className="bg-blue-100 text-blue-800 text-xs font-medium px-2 py-1 rounded-full">
-                              {conversation.unreadCount}
+                        
+                        {/* Message Info */}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between mb-1">
+                            <h3 className="font-semibold text-gray-900 truncate">{conversation.userName}</h3>
+                            <span className="text-xs text-gray-500">
+                              {new Date(conversation.lastMessage.createdAt).toLocaleDateString()}
                             </span>
-                          )}
-                          <p className="text-xs text-gray-400 mt-1">
-                            {new Date(conversation.lastMessage.createdAt).toLocaleDateString()}
-                          </p>
+                          </div>
+                          
+                          <div className="flex items-center text-sm text-gray-600 mb-1">
+                            <span>{conversation.messages.length} message{conversation.messages.length > 1 ? 's' : ''}</span>
+                            <span className="mx-2">•</span>
+                            <span className="truncate">
+                              {conversation.lastMessage.content.length > 30 
+                                ? conversation.lastMessage.content.substring(0, 30) + '...'
+                                : conversation.lastMessage.content
+                              }
+                            </span>
+                          </div>
+                          
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs text-green-600">Open Conversation</span>
+                            {conversation.unreadCount > 0 && (
+                              <span className="bg-blue-100 text-blue-800 text-xs font-medium px-2 py-1 rounded-full">
+                                {conversation.unreadCount}
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </div>
-                      
-                      <div className="flex justify-end">
-                        <button 
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setSelectedConversation(conversation);
-                          }}
-                          className="bg-blue-50 text-blue-700 px-3 py-2 rounded text-sm hover:bg-blue-100 transition-colors"
-                        >
-                          <MessageCircle className="h-4 w-4 inline mr-1" />
-                          Open Conversation
-                        </button>
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-center py-12">
+                    <MessageCircle className="h-16 w-16 mx-auto mb-4 text-gray-300" />
+                    <h3 className="text-lg font-medium text-gray-900 mb-2">No conversations yet</h3>
+                    <p className="text-gray-600 mb-6">When providers reach out to you, their messages will appear here</p>
+                    <button
+                      onClick={() => setShowMessageCenter(true)}
+                      className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
+                    >
+                      Start a Conversation
+                    </button>
+                  </div>
+                )
+              ) : (
+                <div className="space-y-4 p-4">
+                  {[1, 2, 3].map(i => (
+                    <div key={i} className="animate-pulse">
+                      <div className="flex items-start space-x-3">
+                        <div className="w-10 h-10 bg-gray-200 rounded-full"></div>
+                        <div className="flex-1">
+                          <div className="h-4 bg-gray-200 rounded w-3/4 mb-2"></div>
+                          <div className="h-3 bg-gray-200 rounded w-1/2"></div>
+                        </div>
                       </div>
                     </div>
                   ))}
                 </div>
-              ) : (
-                <div className="text-center py-12">
-                  <MessageCircle className="h-16 w-16 mx-auto mb-4 text-gray-300" />
-                  <h3 className="text-lg font-medium text-gray-900 mb-2">No conversations yet</h3>
-                  <p className="text-gray-600 mb-6">When providers reach out to you, their messages will appear here</p>
-                  <button
-                    onClick={() => setShowMessageCenter(true)}
-                    className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
-                  >
-                    Start a Conversation
-                  </button>
-                </div>
               )}
-            </>
-          )}
+            </div>
+          </div>
 
-          {/* Conversation Modal */}
-          {selectedConversation && (
-            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-              <div className="bg-white rounded-lg max-w-2xl w-full max-h-[80vh] flex flex-col">
-                <div className="p-6 border-b border-gray-200">
-                  <div className="flex justify-between items-center">
-                    <h2 className="text-2xl font-bold text-gray-900">Conversation with {selectedConversation.userName}</h2>
-                    <button
-                      onClick={() => setSelectedConversation(null)}
-                      className="text-gray-400 hover:text-gray-600"
-                    >
-                      <X className="h-6 w-6" />
-                    </button>
+          {/* Main Chat Area */}
+          <div className="flex-1 flex flex-col">
+            {selectedConversation ? (
+              <>
+                {/* Chat Header */}
+                <div className="bg-white border-b border-gray-200 px-6 py-4">
+                  <div className="flex items-center space-x-3">
+                    <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-medium ${getAvatarColor(selectedConversation.userName)}`}>
+                      {getInitials(selectedConversation.userName)}
+                    </div>
+                    <div>
+                      <h2 className="text-lg font-semibold text-gray-900">{selectedConversation.userName}</h2>
+                      <p className="text-sm text-green-500">Open Conversation</p>
+                    </div>
                   </div>
                 </div>
-                
-                <div className="flex-1 overflow-y-auto p-6">
-                  <div className="space-y-4">
+
+                {/* Messages Area */}
+                <div className="flex-1 overflow-y-auto p-6 bg-gray-50">
+                  <div className="max-w-4xl mx-auto space-y-4">
                     {selectedConversation.messages.map((message) => {
-                      const isReceived = message.recipient === user._id;
+                      // Use the same normalization logic as in the grouping
+                      const senderId = typeof message.sender === 'object' ? message.sender._id : message.sender;
+                      const recipientId = typeof message.recipient === 'object' ? message.recipient._id : message.recipient;
+                      const currentUserId = typeof user._id === 'object' ? user._id.toString() : user._id;
+                      const isReceived = recipientId === currentUserId;
+                      const isOwnMessage = senderId === currentUserId;
+                      
                       return (
-                        <div 
-                          key={message._id} 
-                          className={`flex ${isReceived ? 'justify-start' : 'justify-end'}`}
-                        >
-                          <div className={`max-w-xs lg:max-w-md px-4 py-2 rounded-lg ${
-                            isReceived 
-                              ? 'bg-gray-100 text-gray-900' 
-                              : 'bg-blue-600 text-white'
+                        <div key={message._id} className={`flex ${isOwnMessage ? 'justify-end' : 'justify-start'}`}>
+                          <div className={`max-w-md px-4 py-2 rounded-lg ${
+                            isOwnMessage 
+                              ? 'bg-blue-500 text-white ml-auto' 
+                              : 'bg-gray-100 text-gray-900'
                           }`}>
-                            <p className="text-sm">{message.content}</p>
-                            <p className={`text-xs mt-1 ${
-                              isReceived ? 'text-gray-500' : 'text-blue-100'
-                            }`}>
-                              {new Date(message.createdAt).toLocaleString()}
-                            </p>
+                            <div className="flex-1">
+                              <div className="flex items-center justify-end mb-1">
+                                <span className="text-xs text-gray-500">
+                                  {new Date(message.createdAt).toLocaleString()}
+                                </span>
+                              </div>
+                              <p className={`${isOwnMessage ? 'text-white' : 'text-gray-800'}`}>
+                                {message.content}
+                              </p>
+                            </div>
                           </div>
                         </div>
                       );
                     })}
                   </div>
                 </div>
-                
-                <div className="p-6 border-t border-gray-200">
-                  <div className="flex space-x-3">
-                    <button
-                      onClick={() => setShowMessageCenter(true)}
-                      className="flex-1 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
+
+                {/* Input Area */}
+                <div className="bg-white border-t border-gray-200 px-6 py-4">
+                  <div className="max-w-4xl mx-auto flex items-center space-x-4">
+                    <input
+                      type="text"
+                      value={newMessage}
+                      onChange={(e) => setNewMessage(e.target.value)}
+                      onKeyPress={handleKeyPress}
+                      placeholder={`Reply to ${selectedConversation.userName}...`}
+                      className="flex-1 px-4 py-2 border border-gray-300 rounded-full focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      disabled={sendingMessage}
+                    />
+                    <button 
+                      onClick={sendMessage}
+                      disabled={!newMessage.trim() || sendingMessage}
+                      className="px-6 py-2 bg-blue-500 text-white rounded-full hover:bg-blue-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      <MessageCircle className="h-4 w-4 inline mr-2" />
-                      Reply
-                    </button>
-                    <button
-                      onClick={() => setSelectedConversation(null)}
-                      className="px-6 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200"
-                    >
-                      Close
+                      {sendingMessage ? 'Sending...' : 'Send'}
                     </button>
                   </div>
                 </div>
+              </>
+            ) : (
+              /* No Conversation Selected */
+              <div className="flex-1 flex items-center justify-center bg-gray-50">
+                <div className="text-center">
+                  <MessageCircle className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                  <h3 className="text-lg font-medium text-gray-900 mb-2">Select a conversation</h3>
+                  <p className="text-gray-500">Choose a conversation from the sidebar to start messaging</p>
+                </div>
               </div>
-            </div>
-          )}
-
-          {/* Message Center Modal */}
-          <MessageCenter 
-            isOpen={showMessageCenter}
-            onClose={() => setShowMessageCenter(false)}
-            preSelectedRecipient={selectedConversation}
-          />
+            )}
+          </div>
         </div>
       );
     }
@@ -1420,6 +1534,66 @@ const RefugeeDashboard = () => {
     return <div className="text-gray-500">Select a section to view details.</div>;
   };
 
+  // Helper functions for avatar and initials
+  const getAvatarColor = (name) => {
+    const colors = [
+      'bg-blue-500', 'bg-green-500', 'bg-purple-500', 'bg-pink-500', 
+      'bg-indigo-500', 'bg-yellow-500', 'bg-red-500', 'bg-teal-500'
+    ];
+    const hash = name.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+    return colors[hash % colors.length];
+  };
+
+  const getInitials = (name) => {
+    if (!name) return '';
+    const names = name.split(' ');
+    if (names.length === 1) return names[0].charAt(0).toUpperCase();
+    return names[0].charAt(0).toUpperCase() + names[names.length - 1].charAt(0).toUpperCase();
+  };
+
+  // Send message function
+  const sendMessage = async () => {
+    if (!newMessage.trim() || !selectedConversation || sendingMessage) return;
+
+    try {
+      setSendingMessage(true);
+      
+      const messageData = {
+        recipient: selectedConversation.userId,
+        content: newMessage.trim(),
+        metadata: {
+          type: 'direct_message'
+        }
+      };
+
+      console.log('Sending message:', messageData);
+      
+      // Send the message using the messages API service
+      const response = await messagesAPI.send(messageData);
+      console.log('Message sent successfully:', response.data);
+
+      // Clear the input
+      setNewMessage('');
+      
+      // Refresh messages to show the new message
+      refetchMessages();
+      
+    } catch (error) {
+      console.error('Error sending message:', error);
+      alert('Failed to send message. Please try again.');
+    } finally {
+      setSendingMessage(false);
+    }
+  };
+
+  // Handle Enter key press
+  const handleKeyPress = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage();
+    }
+  };
+
   return (
     <div className="flex h-screen bg-gray-50">
       {/* Sidebar - Fixed */}
@@ -1462,6 +1636,12 @@ const RefugeeDashboard = () => {
           </div>
         </div>
       </div>
+      
+      {/* MessageCenter Modal */}
+      <MessageCenter
+        isOpen={showMessageCenter}
+        onClose={() => setShowMessageCenter(false)}
+      />
     </div>
   );
 };

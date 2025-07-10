@@ -47,7 +47,7 @@ const ProfileView = ({ profile, onEdit }) => {
     const upperDegree = degree.toUpperCase().trim();
     return abbreviations[upperDegree] || degree;
   };
-
+  
   // Construct full URL for profile image
   const getProfileImageUrl = (photoUrl) => {
     if (!photoUrl) return '/default-avatar.png';
@@ -261,9 +261,9 @@ const ProfileView = ({ profile, onEdit }) => {
                       const path = isObj ? doc.path : doc;
                       const name = isObj ? doc.originalname : `Document ${index + 1}`;
                       return (
-                        <div key={index} className="flex items-center justify-between p-3 bg-white rounded border">
-                          <div className="flex items-center">
-                            <FileText className="h-4 w-4 text-blue-500 mr-2" />
+                      <div key={index} className="flex items-center justify-between p-3 bg-white rounded border">
+                        <div className="flex items-center">
+                          <FileText className="h-4 w-4 text-blue-500 mr-2" />
                             <a href={`/${path}`} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">{name}</a>
                           </div>
                         </div>

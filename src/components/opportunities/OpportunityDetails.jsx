@@ -18,17 +18,22 @@ import {
 } from 'lucide-react';
 import { useOpportunity } from '../../hooks/useOpportunities';
 import { useSavedOpportunities } from '../../hooks/useSavedOpportunities';
+import { useAuth } from '../../contexts/AuthContext';
 
 const OpportunityDetails = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const { opportunity, loading, error } = useOpportunity(id);
   const { saveOpportunity, unsaveOpportunity, checkIfSaved } = useSavedOpportunities();
+  const { user } = useAuth();
   
   const [isSaved, setIsSaved] = useState(false);
   const [saveLoading, setSaveLoading] = useState(false);
   const [saveError, setSaveError] = useState(null);
   const [saveSuccess, setSaveSuccess] = useState(null);
+  const [applyLoading, setApplyLoading] = useState(false);
+  const [applyError, setApplyError] = useState(null);
+  const [applySuccess, setApplySuccess] = useState(false);
 
   // Check if opportunity is saved on component mount
   useEffect(() => {
@@ -58,6 +63,56 @@ const OpportunityDetails = () => {
       setSaveError(err.message || 'Failed to update saved status');
     } finally {
       setSaveLoading(false);
+    }
+  };
+
+  const handleApply = async () => {
+    if (!id) return;
+    
+    setApplyLoading(true);
+    setApplyError(null);
+    setApplySuccess(false);
+
+    try {
+      // Get user info from AuthContext
+      if (!user) {
+        throw new Error('User not logged in');
+      }
+
+      // Create application data
+      const applicationData = {
+        opportunityId: id,
+        applicantId: user._id,
+        status: 'pending',
+        appliedAt: new Date().toISOString()
+      };
+
+      console.log('Applying for opportunity:', applicationData);
+
+      // Send application to backend
+      const response = await fetch('http://localhost:5001/api/applications', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify(applicationData)
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to apply for opportunity');
+      }
+
+      const result = await response.json();
+      console.log('Application submitted successfully:', result);
+      setApplySuccess(true);
+      
+    } catch (err) {
+      console.error('Error applying for opportunity:', err);
+      setApplyError(err.message || 'Failed to apply for opportunity');
+    } finally {
+      setApplyLoading(false);
     }
   };
 
@@ -168,6 +223,30 @@ const OpportunityDetails = () => {
             Back to Dashboard
           </button>
           
+          <div className="flex items-center space-x-3">
+            {/* Apply Button - Only show for refugees */}
+            {user?.role === 'refugee' && (
+              <button
+                onClick={handleApply}
+                disabled={applyLoading || applySuccess}
+                className={`flex items-center px-6 py-2 rounded-lg transition-colors ${
+                  applySuccess
+                    ? 'bg-green-600 text-white cursor-not-allowed'
+                    : 'bg-blue-600 text-white hover:bg-blue-700'
+                } disabled:opacity-50`}
+              >
+                {applyLoading ? (
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current mr-2"></div>
+                ) : applySuccess ? (
+                  <CheckCircle className="h-4 w-4 mr-2" />
+                ) : (
+                  <Briefcase className="h-4 w-4 mr-2" />
+                )}
+                {applyLoading ? 'Applying...' : (applySuccess ? 'Applied' : 'Apply')}
+              </button>
+            )}
+            
+            {/* Save Button */}
           <button
             onClick={handleSaveToggle}
             disabled={saveLoading}
@@ -186,6 +265,7 @@ const OpportunityDetails = () => {
             )}
             {saveLoading ? 'Saving...' : (isSaved ? 'Saved' : 'Save')}
           </button>
+          </div>
         </div>
 
         {/* Success/Error Messages */}
@@ -203,6 +283,25 @@ const OpportunityDetails = () => {
             <div className="flex items-center">
               <AlertCircle className="h-5 w-5 text-red-400 mr-2" />
               <p className="text-red-800">{saveError}</p>
+            </div>
+          </div>
+        )}
+
+        {/* Apply Success/Error Messages */}
+        {applySuccess && (
+          <div className="mb-6 bg-green-50 border border-green-200 rounded-lg p-4">
+            <div className="flex items-center">
+              <CheckCircle className="h-5 w-5 text-green-400 mr-2" />
+              <p className="text-green-800">Application submitted successfully! The provider will review your application.</p>
+            </div>
+          </div>
+        )}
+
+        {applyError && (
+          <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4">
+            <div className="flex items-center">
+              <AlertCircle className="h-5 w-5 text-red-400 mr-2" />
+              <p className="text-red-800">{applyError}</p>
             </div>
           </div>
         )}

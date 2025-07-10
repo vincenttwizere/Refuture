@@ -46,6 +46,7 @@ import { useInterviews } from '../../hooks/useInterviews';
 import { useProfiles } from '../../hooks/useProfiles';
 import { useNotifications } from '../../hooks/useNotifications';
 import { useMessages } from '../../hooks/useMessages';
+import { useApplications } from '../../hooks/useApplications';
 import MessageCenter from '../messaging/MessageCenter';
 import { messagesAPI } from '../../services/api';
 
@@ -116,6 +117,7 @@ const ProviderDashboard = () => {
 
   const { notifications } = useNotifications();
   const { messages, loading: messagesLoading, error: messagesError, refetch: refetchMessages } = useMessages();
+  const { applications, loading: applicationsLoading, error: applicationsError, refetch: refetchApplications, updateApplicationStatus } = useApplications();
   const [showMessageCenter, setShowMessageCenter] = useState(false);
 
   // Debug log for user and data (commented out to reduce noise)
@@ -252,13 +254,18 @@ const ProviderDashboard = () => {
     { id: 'available-talents', label: 'Available Talents', icon: Users },
     { id: 'opportunities', label: 'Create Opportunity', icon: FileText },
     { id: 'my-opportunities', label: 'My Opportunities', icon: Briefcase },
-    { id: 'applications', label: 'Applications', icon: FileText },
+    { 
+      id: 'applications', 
+      label: 'Applications', 
+      icon: FileText,
+      badge: applications.filter(app => app.status === 'pending').length > 0 ? applications.filter(app => app.status === 'pending').length : null
+    },
     { id: 'communications', label: 'Communications', icon: MessageCircle },
     { id: 'analytics', label: 'Analytics', icon: BarChart3 },
     { id: 'interviews', label: 'Interview Manager', icon: Calendar },
     { id: 'settings', label: 'Settings', icon: Settings },
     { id: 'support', label: 'Help & Support', icon: HelpCircle }
-  ], []);
+  ], [applications]);
 
   // Sidebar rendering
   const renderMenuItem = useCallback((item) => {
@@ -363,19 +370,69 @@ const ProviderDashboard = () => {
   };
 
   // Profile view functions
-  const openProfileModal = async (profile) => {
+  const openProfileModal = async (applicant) => {
     try {
       setProfileLoading(true);
-      setSelectedProfile(profile);
       setShowProfileModal(true);
       
-      // Fetch full profile data if we only have basic info
-      if (!profile.about && !profile.education && !profile.workExperience) {
-        const fullProfile = await fetchProfileById(profile._id);
-        setSelectedProfile(fullProfile);
+      // Fetch profile data using the applicant's email
+      if (applicant?.email) {
+        const response = await fetch(`http://localhost:5001/api/profiles?email=${applicant.email}`, {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('token')}`
+          }
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          if (data.profiles && data.profiles.length > 0) {
+            setSelectedProfile(data.profiles[0]);
+          } else {
+            // If no profile found, create a basic profile object from applicant data
+            setSelectedProfile({
+              fullName: `${applicant.firstName} ${applicant.lastName}`,
+              email: applicant.email,
+              option: 'Not specified',
+              age: 'Not specified',
+              gender: 'Not specified',
+              currentLocation: 'Not specified',
+              skills: [],
+              language: [],
+              isPublic: false
+            });
+          }
+        } else {
+          console.error('Failed to fetch profile data');
+          // Create a basic profile object from applicant data
+          setSelectedProfile({
+            fullName: `${applicant.firstName} ${applicant.lastName}`,
+            email: applicant.email,
+            option: 'Not specified',
+            age: 'Not specified',
+            gender: 'Not specified',
+            currentLocation: 'Not specified',
+            skills: [],
+            language: [],
+            isPublic: false
+          });
+        }
+      } else {
+        console.error('No applicant email provided');
       }
     } catch (error) {
       console.error('Error loading profile:', error);
+      // Create a basic profile object from applicant data
+      setSelectedProfile({
+        fullName: `${applicant?.firstName || 'Unknown'} ${applicant?.lastName || 'User'}`,
+        email: applicant?.email || 'No email',
+        option: 'Not specified',
+        age: 'Not specified',
+        gender: 'Not specified',
+        currentLocation: 'Not specified',
+        skills: [],
+        language: [],
+        isPublic: false
+      });
     } finally {
       setProfileLoading(false);
     }
@@ -509,7 +566,7 @@ const ProviderDashboard = () => {
   // Calculate real statistics for overview
   const overviewStats = useMemo(() => {
     const activeOpportunities = opportunities.filter(opp => opp.isActive).length;
-    const totalApplications = opportunities.reduce((sum, opp) => sum + (opp.currentApplicants || 0), 0);
+    const totalApplications = applications.length;
     const pendingInterviews = interviews.filter(int => int.status === 'pending').length;
     const successfulPlacements = interviews.filter(int => int.status === 'completed').length;
     
@@ -519,7 +576,7 @@ const ProviderDashboard = () => {
       pendingInterviews,
       successfulPlacements
     };
-  }, [opportunities, interviews]);
+  }, [opportunities, applications, interviews]);
 
   // Memoize profile statistics to prevent recalculation
   const profileStats = useMemo(() => {
@@ -596,7 +653,7 @@ const ProviderDashboard = () => {
                 <div key={opp._id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                   <div>
                     <p className="font-medium text-sm">{opp.title}</p>
-                    <p className="text-xs text-gray-500">{opp.currentApplicants || 0} applications</p>
+                    <p className="text-xs text-gray-500">{getApplicationCount(opp._id)} applications</p>
                   </div>
                   <span className={`text-xs px-2 py-1 rounded-full ${
                     opp.isActive ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
@@ -759,13 +816,6 @@ const ProviderDashboard = () => {
               <h2 className="text-2xl font-bold text-gray-900">My Opportunities</h2>
               <p className="text-gray-600">Manage your posted opportunities</p>
             </div>
-            <button
-              onClick={() => setShowCreateModal(true)}
-              className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center"
-            >
-              <Plus className="h-4 w-4 mr-2" />
-              Create Opportunity
-            </button>
           </div>
 
           {/* Opportunities List */}
@@ -803,8 +853,8 @@ const ProviderDashboard = () => {
                           {opportunity.type}
                         </div>
                         <div className="flex items-center">
-                          <Calendar className="h-4 w-4 mr-1" />
-                          {new Date(opportunity.applicationDeadline).toLocaleDateString()}
+                          <Users className="h-4 w-4 mr-1" />
+                          {getApplicationCount(opportunity._id)} applications
                         </div>
                       </div>
                     </div>
@@ -827,6 +877,15 @@ const ProviderDashboard = () => {
                         <Trash2 className="h-4 w-4" />
                       </button>
                     </div>
+                  </div>
+                  
+                  <div className="border-t pt-4 flex justify-between items-center">
+                    <button 
+                      onClick={() => setActiveItem('applications')}
+                      className="text-blue-600 hover:text-blue-700 text-sm font-medium"
+                    >
+                      View Applications ({getApplicationCount(opportunity._id)})
+                    </button>
                   </div>
                 </div>
               ))}
@@ -862,9 +921,21 @@ const ProviderDashboard = () => {
               <h2 className="text-2xl font-bold text-gray-900">Applications</h2>
               <p className="text-gray-600">Review applications for your opportunities</p>
             </div>
+            {applications.length > 0 && (
+              <div className="flex items-center space-x-2">
+                <span className="bg-blue-100 text-blue-800 text-xs font-medium px-2 py-1 rounded-full">
+                  {applications.length} {applications.length === 1 ? 'application' : 'applications'}
+                </span>
+                {applications.filter(app => app.status === 'pending').length > 0 && (
+                  <span className="bg-yellow-100 text-yellow-800 text-xs font-medium px-2 py-1 rounded-full">
+                    {applications.filter(app => app.status === 'pending').length} pending
+                  </span>
+                )}
+              </div>
+            )}
           </div>
 
-          {opportunitiesLoading ? (
+          {applicationsLoading ? (
             <div className="space-y-4">
               {[1, 2, 3].map(i => (
                 <div key={i} className="bg-white p-6 rounded-lg border animate-pulse">
@@ -873,47 +944,108 @@ const ProviderDashboard = () => {
                 </div>
               ))}
             </div>
-          ) : opportunitiesError ? (
+          ) : applicationsError ? (
             <div className="bg-red-50 border border-red-200 rounded-lg p-4">
               <div className="flex items-center">
                 <AlertCircle className="h-5 w-5 text-red-400 mr-2" />
-                <p className="text-red-800">{opportunitiesError}</p>
+                <p className="text-red-800">{applicationsError}</p>
               </div>
             </div>
-          ) : myOpportunities.length > 0 ? (
+          ) : applications.length > 0 ? (
             <div className="space-y-4">
-              {myOpportunities.map(opportunity => (
-                <div key={opportunity._id} className="bg-white p-6 rounded-lg border">
+              {applications.map(application => (
+                <div key={application._id} className="bg-white p-6 rounded-lg border">
                   <div className="flex justify-between items-start mb-4">
                     <div className="flex-1">
-                      <h3 className="text-lg font-semibold text-gray-900 mb-2">{opportunity.title}</h3>
-                      <p className="text-gray-600 mb-3">{opportunity.description}</p>
-                      <div className="flex items-center space-x-4 text-sm text-gray-500">
+                      <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                        {application.opportunityId?.title || 'Opportunity'}
+                      </h3>
+                      <div className="flex items-center space-x-4 text-sm text-gray-500 mb-3">
                         <div className="flex items-center">
                           <MapPin className="h-4 w-4 mr-1" />
-                          {opportunity.location}
+                          {application.opportunityId?.location || 'Location not specified'}
                         </div>
                         <div className="flex items-center">
                           <Briefcase className="h-4 w-4 mr-1" />
-                          {opportunity.type}
+                          {application.opportunityId?.type || 'Type not specified'}
                         </div>
                         <div className="flex items-center">
-                          <Users className="h-4 w-4 mr-1" />
-                          {opportunity.currentApplicants || 0} applications
+                          <Calendar className="h-4 w-4 mr-1" />
+                          Applied {new Date(application.appliedAt).toLocaleDateString()}
+                        </div>
+                      </div>
+                      
+                      {/* Applicant Information */}
+                      <div className="bg-gray-50 rounded-lg p-4 mb-3">
+                        <h4 className="font-medium text-gray-900 mb-2">Applicant</h4>
+                        <div className="flex items-center space-x-4">
+                          <div className="flex items-center">
+                            <UserCheck className="h-4 w-4 mr-2 text-gray-500" />
+                            <span className="text-sm">
+                              {application.applicantId?.firstName} {application.applicantId?.lastName}
+                            </span>
+                          </div>
+                          <div className="flex items-center">
+                            <Mail className="h-4 w-4 mr-2 text-gray-500" />
+                            <span className="text-sm">{application.applicantId?.email}</span>
+                          </div>
                         </div>
                       </div>
                     </div>
-                    <span className={`text-xs px-2 py-1 rounded-full ${
-                      opportunity.isActive ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
+                    
+                    <span className={`text-xs px-3 py-1 rounded-full ${
+                      application.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
+                      application.status === 'accepted' ? 'bg-green-100 text-green-800' :
+                      application.status === 'rejected' ? 'bg-red-100 text-red-800' :
+                      application.status === 'reviewed' ? 'bg-blue-100 text-blue-800' :
+                      'bg-gray-100 text-gray-800'
                     }`}>
-                      {opportunity.isActive ? 'Active' : 'Inactive'}
+                      {application.status.charAt(0).toUpperCase() + application.status.slice(1)}
                     </span>
                   </div>
                   
-                  <div className="border-t pt-4">
-                    <button className="text-blue-600 hover:text-blue-700 text-sm font-medium">
-                      View Applications ({opportunity.currentApplicants || 0})
+                  <div className="border-t pt-4 flex justify-between items-center">
+                    <button 
+                      onClick={() => openProfileModal(application.applicantId)}
+                      className="text-blue-600 hover:text-blue-700 text-sm font-medium"
+                    >
+                      View Profile
                     </button>
+                    
+                    <div className="flex space-x-2">
+                      {application.status === 'pending' && (
+                        <>
+                          <button 
+                            onClick={() => handleApplicationStatusUpdate(application._id, 'accepted')}
+                            className="bg-green-600 text-white px-3 py-1 rounded text-sm hover:bg-green-700"
+                          >
+                            Accept
+                          </button>
+                          <button 
+                            onClick={() => handleApplicationStatusUpdate(application._id, 'rejected')}
+                            className="bg-red-600 text-white px-3 py-1 rounded text-sm hover:bg-red-700"
+                          >
+                            Reject
+                          </button>
+                        </>
+                      )}
+                      <button 
+                        onClick={() => {
+                          // Create a recipient object with the applicant's email
+                          const recipient = {
+                            _id: application.applicantId?._id,
+                            firstName: application.applicantId?.firstName,
+                            lastName: application.applicantId?.lastName,
+                            email: application.applicantId?.email
+                          };
+                          setSelectedProfile(recipient);
+                          setShowMessageCenter(true);
+                        }}
+                        className="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700"
+                      >
+                        Message
+                      </button>
+                    </div>
                   </div>
                 </div>
               ))}
@@ -959,7 +1091,11 @@ const ProviderDashboard = () => {
               <div className="space-y-3">
                 {messages && messages.length > 0 ? (
                   messages.slice(0, 5).map(message => {
-                    const isReceived = message.recipient === user._id;
+                    // Use the same normalization logic as in RefugeeDashboard
+                    const senderId = typeof message.sender === 'object' ? message.sender._id : message.sender;
+                    const recipientId = typeof message.recipient === 'object' ? message.recipient._id : message.recipient;
+                    const currentUserId = typeof user._id === 'object' ? user._id.toString() : user._id;
+                    const isReceived = recipientId === currentUserId;
                     const otherUserName = isReceived ? message.senderName : message.recipientName;
                     
                     return (
@@ -2030,22 +2166,40 @@ const ProviderDashboard = () => {
   const [preselectError, setPreselectError] = useState('');
 
   const handleSendPreselection = async (profile) => {
-    setPreselecting(true);
-    setPreselectSuccess('');
-    setPreselectError('');
     try {
-      await messagesAPI.send({
-        recipient: profile.userId || profile._id,
-        content: 'You have been preselected for an opportunity. Please review and book an interview if interested.',
-        metadata: { type: 'preselection', providerId: user._id, providerName: user.firstName + ' ' + user.lastName }
+      const response = await messagesAPI.send({
+        recipientId: profile.userId,
+        content: `You have been preselected for an opportunity! Please check your dashboard for more details.`
       });
-      setPreselectSuccess('Preselection message sent!');
-    } catch (err) {
-      setPreselectError(err.response?.data?.message || 'Failed to send preselection message');
-    } finally {
-      setPreselecting(false);
-      setTimeout(() => { setPreselectSuccess(''); setPreselectError(''); }, 3000);
+      
+      if (response.data.success) {
+        alert('Preselection message sent successfully!');
+        refetchMessages();
+      }
+    } catch (error) {
+      console.error('Error sending preselection:', error);
+      alert('Failed to send preselection message');
     }
+  };
+
+  const handleApplicationStatusUpdate = async (applicationId, status) => {
+    try {
+      const result = await updateApplicationStatus(applicationId, status);
+      
+      if (result.success) {
+        alert(`Application ${status} successfully!`);
+      } else {
+        alert(`Failed to ${status} application: ${result.error}`);
+      }
+    } catch (error) {
+      console.error('Error updating application status:', error);
+      alert('Failed to update application status');
+    }
+  };
+
+  // Calculate application count for an opportunity
+  const getApplicationCount = (opportunityId) => {
+    return applications.filter(app => app.opportunityId?._id === opportunityId).length;
   };
 
   return (
@@ -2539,29 +2693,33 @@ const ProviderDashboard = () => {
                               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div>
                                   <span className="text-sm font-medium text-gray-500">Academic Level</span>
-                                  <p className="text-gray-900">{expandDegreeAbbreviation(record.level)}</p>
-                    </div>
+                                  <p className="text-gray-900">{expandDegreeAbbreviation(record.level || '')}</p>
+                                </div>
                                 <div>
                                   <span className="text-sm font-medium text-gray-500">Year</span>
-                                  <p className="text-gray-900">{record.year}</p>
-                  </div>
+                                  <p className="text-gray-900">{String(record.year || '')}</p>
+                                </div>
                                 {record.school && (
                                   <div>
                                     <span className="text-sm font-medium text-gray-500">School</span>
-                                    <p className="text-gray-900">{record.school}</p>
-                          </div>
-                        )}
+                                    <p className="text-gray-900">{String(record.school)}</p>
+                                  </div>
+                                )}
                                 <div>
                                   <span className="text-sm font-medium text-gray-500">Percentage Score</span>
-                                  <p className="text-gray-900">{record.percentage}%</p>
-                          </div>
+                                  <p className="text-gray-900">{String(record.percentage || 0)}%</p>
+                                </div>
                               </div>
                               {record.subjectGrades && (
                                 <div className="mt-4">
                                   <span className="text-sm font-medium text-gray-500">Subject Grades</span>
-                                  <p className="text-gray-900">{record.subjectGrades}</p>
-                          </div>
-                        )}
+                                  <p className="text-gray-900">
+                                    {typeof record.subjectGrades === 'string' ? record.subjectGrades : 
+                                     typeof record.subjectGrades === 'object' ? JSON.stringify(record.subjectGrades) : 
+                                     String(record.subjectGrades)}
+                                  </p>
+                                </div>
+                              )}
                       </div>
                           ))}
                     </div>
@@ -2575,14 +2733,19 @@ const ProviderDashboard = () => {
                             <div key={i} className="flex items-center justify-between p-3 bg-white rounded border">
                               <div className="flex items-center">
                                 <FileText className="h-4 w-4 text-blue-500 mr-2" />
-                                <span className="text-gray-700">{doc.name || doc}</span>
-                          </div>
-                              {typeof doc === 'string' && (
+                                <span className="text-gray-700">
+                                  {typeof doc === 'object' && doc.originalname ? doc.originalname : 
+                                   typeof doc === 'string' ? doc : 'Document'}
+                                </span>
+                              </div>
+                              {typeof doc === 'string' ? (
                                 <a href={`http://localhost:5001/${doc}`} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline text-xs">View</a>
-                        )}
-                          </div>
+                              ) : typeof doc === 'object' && doc.path ? (
+                                <a href={`http://localhost:5001/${doc.path}`} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline text-xs">View</a>
+                              ) : null}
+                            </div>
                           ))}
-                      </div>
+                        </div>
                       ) : <p className="text-gray-400 italic">No supporting documents uploaded yet</p>}
                     </div>
                   </>
@@ -2598,12 +2761,12 @@ const ProviderDashboard = () => {
                           {selectedProfile.education.map((edu, i) => (
                             <div key={i} className="bg-white rounded-lg p-4 border border-gray-200">
                               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div><span className="text-sm font-medium text-gray-500">School/Institution</span><p className="text-gray-900">{edu.school}</p></div>
-                                <div><span className="text-sm font-medium text-gray-500">Degree</span><p className="text-gray-900">{expandDegreeAbbreviation(edu.degree)}</p></div>
-                                <div><span className="text-sm font-medium text-gray-500">Field of Study</span><p className="text-gray-900">{edu.field}</p></div>
-                                <div><span className="text-sm font-medium text-gray-500">Duration</span><p className="text-gray-900">{edu.duration}</p></div>
-                                <div><span className="text-sm font-medium text-gray-500">Start Date</span><p className="text-gray-900">{edu.start}</p></div>
-                                <div><span className="text-sm font-medium text-gray-500">End Date</span><p className="text-gray-900">{edu.end}</p></div>
+                                <div><span className="text-sm font-medium text-gray-500">School/Institution</span><p className="text-gray-900">{String(edu.school || '')}</p></div>
+                                <div><span className="text-sm font-medium text-gray-500">Degree</span><p className="text-gray-900">{expandDegreeAbbreviation(edu.degree || '')}</p></div>
+                                <div><span className="text-sm font-medium text-gray-500">Field of Study</span><p className="text-gray-900">{String(edu.field || '')}</p></div>
+                                <div><span className="text-sm font-medium text-gray-500">Duration</span><p className="text-gray-900">{String(edu.duration || '')}</p></div>
+                                <div><span className="text-sm font-medium text-gray-500">Start Date</span><p className="text-gray-900">{String(edu.start || '')}</p></div>
+                                <div><span className="text-sm font-medium text-gray-500">End Date</span><p className="text-gray-900">{String(edu.end || '')}</p></div>
                       </div>
                             </div>
                           ))}
@@ -2617,11 +2780,11 @@ const ProviderDashboard = () => {
                           {selectedProfile.experience.map((exp, i) => (
                             <div key={i} className="bg-white rounded-lg p-4 border border-gray-200">
                               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div><span className="text-sm font-medium text-gray-500">Company</span><p className="text-gray-900">{exp.company}</p></div>
-                                <div><span className="text-sm font-medium text-gray-500">Job Title</span><p className="text-gray-900">{exp.title}</p></div>
-                                <div><span className="text-sm font-medium text-gray-500">Start Date</span><p className="text-gray-900">{exp.start}</p></div>
-                                <div><span className="text-sm font-medium text-gray-500">End Date</span><p className="text-gray-900">{exp.end}</p></div>
-                                <div className="md:col-span-2"><span className="text-sm font-medium text-gray-500">Description</span><p className="text-gray-900">{exp.description}</p></div>
+                                <div><span className="text-sm font-medium text-gray-500">Company</span><p className="text-gray-900">{String(exp.company || '')}</p></div>
+                                <div><span className="text-sm font-medium text-gray-500">Job Title</span><p className="text-gray-900">{String(exp.title || '')}</p></div>
+                                <div><span className="text-sm font-medium text-gray-500">Start Date</span><p className="text-gray-900">{String(exp.start || '')}</p></div>
+                                <div><span className="text-sm font-medium text-gray-500">End Date</span><p className="text-gray-900">{String(exp.end || '')}</p></div>
+                                <div className="md:col-span-2"><span className="text-sm font-medium text-gray-500">Description</span><p className="text-gray-900">{String(exp.description || '')}</p></div>
                               </div>
                             </div>
                           ))}
@@ -2637,9 +2800,9 @@ const ProviderDashboard = () => {
                     <div className="bg-gray-50 rounded-lg p-6 border border-gray-200">
                       <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center"><Star className="h-5 w-5 mr-2 text-blue-500" />Talent Information</h3>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                        <div><span className="block text-sm font-medium text-gray-700 mb-2">Talent Category</span><p className="text-gray-900">{selectedProfile.talentCategory}</p></div>
-                        <div><span className="block text-sm font-medium text-gray-700 mb-2">Years of Experience</span><p className="text-gray-900">{selectedProfile.talentExperience}</p></div>
-                        <div className="md:col-span-2"><span className="block text-sm font-medium text-gray-700 mb-2">Talent Description</span><p className="text-gray-900">{selectedProfile.talentDescription}</p></div>
+                        <div><span className="block text-sm font-medium text-gray-700 mb-2">Talent Category</span><p className="text-gray-900">{String(selectedProfile.talentCategory || '')}</p></div>
+                        <div><span className="block text-sm font-medium text-gray-700 mb-2">Years of Experience</span><p className="text-gray-900">{String(selectedProfile.talentExperience || '')}</p></div>
+                        <div className="md:col-span-2"><span className="block text-sm font-medium text-gray-700 mb-2">Talent Description</span><p className="text-gray-900">{String(selectedProfile.talentDescription || '')}</p></div>
                       </div>
                     </div>
                     <div className="bg-gray-50 rounded-lg p-6 border border-gray-200">
@@ -2649,11 +2812,11 @@ const ProviderDashboard = () => {
                           {selectedProfile.portfolio.map((item, i) => (
                             <div key={i} className="bg-white rounded-lg p-4 border border-gray-200">
                               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div><span className="text-sm font-medium text-gray-500">Title</span><p className="text-gray-900">{item.title}</p></div>
-                                <div><span className="text-sm font-medium text-gray-500">Category</span><p className="text-gray-900">{item.category}</p></div>
-                                <div><span className="text-sm font-medium text-gray-500">Year Created</span><p className="text-gray-900">{item.year}</p></div>
-                                <div><span className="text-sm font-medium text-gray-500">Link</span>{item.link && (<a href={item.link} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">{item.link}</a>)}</div>
-                                <div className="md:col-span-2"><span className="text-sm font-medium text-gray-500">Description</span><p className="text-gray-900">{item.description}</p></div>
+                                <div><span className="text-sm font-medium text-gray-500">Title</span><p className="text-gray-900">{String(item.title || '')}</p></div>
+                                <div><span className="text-sm font-medium text-gray-500">Category</span><p className="text-gray-900">{String(item.category || '')}</p></div>
+                                <div><span className="text-sm font-medium text-gray-500">Year Created</span><p className="text-gray-900">{String(item.year || '')}</p></div>
+                                <div><span className="text-sm font-medium text-gray-500">Link</span>{item.link && (<a href={item.link} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">{String(item.link)}</a>)}</div>
+                                <div className="md:col-span-2"><span className="text-sm font-medium text-gray-500">Description</span><p className="text-gray-900">{String(item.description || '')}</p></div>
                   </div>
                 </div>
                           ))}

@@ -105,4 +105,11 @@ export const messagesAPI = {
   delete: (id) => api.delete(`/messages/${id}`)
 };
 
+export const applicationsAPI = {
+  getOpportunityApplications: (opportunityId) => api.get(`/applications/opportunity/${opportunityId}`),
+  getProviderApplications: () => api.get('/applications/provider'),
+  updateStatus: (applicationId, data) => api.put(`/applications/${applicationId}/status`, data),
+  getById: (applicationId) => api.get(`/applications/${applicationId}`)
+};
+
 export default api; 
