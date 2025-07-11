@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react';
 import { applicationsAPI } from '../services/api';
+import { useAuth } from '../contexts/AuthContext';
 
-export const useApplications = (opportunityId = null) => {
+export const useApplications = (opportunityId = null, userRole = null) => {
+  const { user } = useAuth();
   const [applications, setApplications] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -15,6 +17,9 @@ export const useApplications = (opportunityId = null) => {
       if (opportunityId) {
         // Fetch applications for a specific opportunity
         response = await applicationsAPI.getOpportunityApplications(opportunityId);
+      } else if (userRole === 'refugee' || user?.role === 'refugee') {
+        // Fetch applications for the current refugee user
+        response = await applicationsAPI.getUserApplications();
       } else {
         // Fetch all applications for the current provider
         response = await applicationsAPI.getProviderApplications();

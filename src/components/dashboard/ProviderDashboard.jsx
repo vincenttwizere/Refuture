@@ -49,6 +49,29 @@ import { useMessages } from '../../hooks/useMessages';
 import { useApplications } from '../../hooks/useApplications';
 import MessageCenter from '../messaging/MessageCenter';
 import { messagesAPI } from '../../services/api';
+import { Line, Bar } from 'react-chartjs-2';
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  BarElement,
+  Title,
+  Tooltip,
+  Legend
+} from 'chart.js';
+
+ChartJS.register(
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  BarElement,
+  Title,
+  Tooltip,
+  Legend
+);
 
 const ProviderDashboard = () => {
   const [activeItem, setActiveItem] = useState('overview');
@@ -104,7 +127,11 @@ const ProviderDashboard = () => {
   const {
     interviews, 
     loading: interviewsLoading, 
-    error: interviewsError 
+    error: interviewsError,
+    sendInterviewInvite,
+    updateInterview,
+    deleteInterview,
+    refetch: refetchInterviews
   } = useInterviews('provider');
 
   const { 
@@ -119,6 +146,33 @@ const ProviderDashboard = () => {
   const { messages, loading: messagesLoading, error: messagesError, refetch: refetchMessages } = useMessages();
   const { applications, loading: applicationsLoading, error: applicationsError, refetch: refetchApplications, updateApplicationStatus } = useApplications();
   const [showMessageCenter, setShowMessageCenter] = useState(false);
+
+  // Success toast state
+  const [showSuccessToast, setShowSuccessToast] = useState(false);
+  const [successMessage, setSuccessMessage] = useState('');
+  const [isUpdatingProfile, setIsUpdatingProfile] = useState(false);
+
+  // Function to show success toast
+  const displaySuccessToast = (message) => {
+    setSuccessMessage(message);
+    setShowSuccessToast(true);
+    setTimeout(() => setShowSuccessToast(false), 5000);
+  };
+
+  // Calculate unread messages count
+  const unreadMessagesCount = useMemo(() => {
+    if (!messages || !user) return 0;
+    return messages.filter(message => {
+      const recipientId = typeof message.recipient === 'object' ? message.recipient._id : message.recipient;
+      const currentUserId = typeof user._id === 'object' ? user._id.toString() : user._id;
+      return !message.isRead && recipientId === currentUserId;
+    }).length;
+  }, [messages, user]);
+
+  // Calculate unread notifications count
+  const unreadNotificationsCount = useMemo(() => {
+    return notifications.filter(notification => !notification.isRead).length;
+  }, [notifications]);
 
   // Debug log for user and data (commented out to reduce noise)
   // console.log('ProviderDashboard user:', user, 'loading:', loading);
@@ -207,40 +261,6 @@ const ProviderDashboard = () => {
     contactMethod: 'email' // email, phone, or video
   });
 
-  // Place these at the top level, after other useState/useMemo hooks
-  const [search, setSearch] = useState('');
-  const [typeFilter, setTypeFilter] = useState('student');
-  const [sortBy, setSortBy] = useState('percentage');
-  const [sortOrder, setSortOrder] = useState('desc');
-
-  const filteredProfiles = useMemo(() => {
-    let filtered = profiles.filter(
-      (profile) =>
-        (!typeFilter || profile.option === typeFilter) &&
-        (!search ||
-          profile.fullName?.toLowerCase().includes(search.toLowerCase()) ||
-          profile.currentLocation?.toLowerCase().includes(search.toLowerCase()) ||
-          (profile.skills && profile.skills.join(' ').toLowerCase().includes(search.toLowerCase()))
-        )
-    );
-    // Only show students for ranking
-    if (typeFilter === 'student') {
-      filtered = filtered.map((profile) => ({
-        ...profile,
-        // Find highest percentage in academicRecords for ranking
-        maxPercentage: Array.isArray(profile.academicRecords) && profile.academicRecords.length > 0
-          ? Math.max(...profile.academicRecords.map((r) => Number(r.percentage) || 0))
-          : 0
-      }));
-      filtered = filtered.sort((a, b) =>
-        sortOrder === 'desc'
-          ? b.maxPercentage - a.maxPercentage
-          : a.maxPercentage - b.maxPercentage
-      );
-    }
-    return filtered;
-  }, [profiles, search, typeFilter, sortOrder]);
-
   const toggleSection = useCallback((section) => {
     setExpandedSections(prev => ({
       ...prev,
@@ -260,12 +280,17 @@ const ProviderDashboard = () => {
       icon: FileText,
       badge: applications.filter(app => app.status === 'pending').length > 0 ? applications.filter(app => app.status === 'pending').length : null
     },
-    { id: 'communications', label: 'Communications', icon: MessageCircle },
+    { 
+      id: 'communications', 
+      label: 'Communications', 
+      icon: MessageCircle,
+      badge: (unreadMessagesCount + unreadNotificationsCount) > 0 ? (unreadMessagesCount + unreadNotificationsCount) : null
+    },
     { id: 'analytics', label: 'Analytics', icon: BarChart3 },
     { id: 'interviews', label: 'Interview Manager', icon: Calendar },
     { id: 'settings', label: 'Settings', icon: Settings },
     { id: 'support', label: 'Help & Support', icon: HelpCircle }
-  ], [applications]);
+  ], [applications, unreadMessagesCount, unreadNotificationsCount]);
 
   // Sidebar rendering
   const renderMenuItem = useCallback((item) => {
@@ -678,39 +703,9 @@ const ProviderDashboard = () => {
           <div className="flex justify-between items-center">
             <div>
               <h2 className="text-2xl font-bold text-gray-900">Available Talents</h2>
-              <p className="text-gray-600">Browse refugee talent profiles by category</p>
+              <p className="text-gray-600">Browse refugee talent profiles</p>
             </div>
           </div>
-
-          {/* Filter Bar */}
-          <div className="bg-white p-4 rounded-lg border flex flex-col md:flex-row md:items-center md:space-x-4 space-y-2 md:space-y-0">
-            <input
-              type="text"
-              placeholder="Search by name, location, or skill..."
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              className="border border-gray-300 rounded-lg px-3 py-2 w-full md:w-64"
-            />
-            <select
-              value={typeFilter}
-              onChange={e => setTypeFilter(e.target.value)}
-              className="border border-gray-300 rounded-lg px-3 py-2"
-            >
-              <option value="student">Students</option>
-              <option value="job seeker">Job Seekers</option>
-              <option value="undocumented_talent">Undocumented Talents</option>
-              <option value="">All</option>
-            </select>
-            {typeFilter === 'student' && (
-              <button
-                onClick={() => setSortOrder(sortOrder === 'desc' ? 'asc' : 'desc')}
-                className="ml-auto px-4 py-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 text-sm"
-              >
-                Sort by Score {sortOrder === 'desc' ? '↓' : '↑'}
-              </button>
-            )}
-            </div>
-            
           {/* Table or Loader/Error */}
           {profilesLoading ? (
             <div className="space-y-4">
@@ -728,79 +723,71 @@ const ProviderDashboard = () => {
                 <p className="text-red-800">{profilesError}</p>
               </div>
             </div>
-          ) : filteredProfiles.length > 0 ? (
+          ) : profiles.length > 0 ? (
             <div className="overflow-x-auto bg-white rounded-lg border">
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
-                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Rank</th>
                     <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
                     <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Age</th>
                     <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Gender</th>
                     <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Location</th>
                     <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Key Skills</th>
-                    {typeFilter === 'student' && (
-                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Top Score</th>
-                    )}
                     <th className="px-4 py-2"></th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-100">
-                  {filteredProfiles.map((profile, idx) => (
+                  {profiles.map((profile) => (
                     <tr key={profile._id} className="hover:bg-blue-50 transition-colors">
-                      <td className="px-4 py-2 font-semibold text-gray-700">{idx + 1}</td>
                       <td className="px-4 py-2 flex items-center space-x-2">
                         <div className="w-8 h-8 bg-gray-200 rounded-full flex items-center justify-center overflow-hidden">
-                      {profile.photoUrl ? (
-                        <img 
-                          src={profile.photoUrl.startsWith('http') ? profile.photoUrl : `http://localhost:5001/${profile.photoUrl}`} 
-                          alt={profile.fullName} 
+                          {profile.photoUrl ? (
+                            <img 
+                              src={profile.photoUrl.startsWith('http') ? profile.photoUrl : `http://localhost:5001/${profile.photoUrl}`} 
+                              alt={profile.fullName} 
                               className="w-8 h-8 object-cover"
-                        />
+                            />
                           ) : (
                             <span className="text-sm font-medium text-gray-700">
-                        {profile.fullName?.split(' ').map(n => n[0]).join('')}
-                      </span>
+                              {profile.fullName?.split(' ').map(n => n[0]).join('')}
+                            </span>
                           )}
-                    </div>
+                        </div>
                         <span>{profile.fullName}</span>
                       </td>
                       <td className="px-4 py-2">{profile.age}</td>
                       <td className="px-4 py-2">{profile.gender}</td>
                       <td className="px-4 py-2">{profile.currentLocation}</td>
                       <td className="px-4 py-2">
-                      <div className="flex flex-wrap gap-1">
+                        <div className="flex flex-wrap gap-1">
                           {profile.skills?.slice(0, 3).map((skill, i) => (
                             <span key={i} className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
-                            {skill}
-                          </span>
-                        ))}
-                        {profile.skills?.length > 3 && (
-                          <span className="text-xs text-gray-500">+{profile.skills.length - 3} more</span>
-                        )}
-                      </div>
+                              {skill}
+                            </span>
+                          ))}
+                          {profile.skills?.length > 3 && (
+                            <span className="text-xs text-gray-500">+{profile.skills.length - 3} more</span>
+                          )}
+                        </div>
                       </td>
-                      {typeFilter === 'student' && (
-                        <td className="px-4 py-2 font-semibold text-blue-700">{profile.maxPercentage || 0}%</td>
-                      )}
                       <td className="px-4 py-2">
-                      <button 
-                        onClick={() => openProfileModal(profile)}
+                        <button 
+                          onClick={() => openProfileModal(profile)}
                           className="bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700 text-sm"
-                      >
+                        >
                           View
-                      </button>
+                        </button>
                       </td>
                     </tr>
-              ))}
+                  ))}
                 </tbody>
               </table>
             </div>
           ) : (
             <div className="text-center py-12">
               <Users className="h-16 w-16 mx-auto text-gray-300 mb-4" />
-              <h3 className="text-lg font-medium text-gray-900 mb-2">No talents found for this filter</h3>
-              <p className="text-gray-600">Try selecting a different category or load all profiles</p>
+              <h3 className="text-lg font-medium text-gray-900 mb-2">No talents found</h3>
+              <p className="text-gray-600">Try again later or contact support</p>
             </div>
           )}
         </div>
@@ -838,7 +825,7 @@ const ProviderDashboard = () => {
           ) : myOpportunities.length > 0 ? (
             <div className="space-y-4">
               {myOpportunities.map(opportunity => (
-                <div key={opportunity._id} className="bg-white p-6 rounded-lg border">
+                <div key={opportunity._id} className="bg-white p-6 rounded-lg border border-gray-200">
                   <div className="flex justify-between items-start mb-4">
                     <div className="flex-1">
                       <h3 className="text-lg font-semibold text-gray-900 mb-2">{opportunity.title}</h3>
@@ -954,7 +941,7 @@ const ProviderDashboard = () => {
           ) : applications.length > 0 ? (
             <div className="space-y-4">
               {applications.map(application => (
-                <div key={application._id} className="bg-white p-6 rounded-lg border">
+                <div key={application._id} className="bg-white p-6 rounded-lg border border-gray-200">
                   <div className="flex justify-between items-start mb-4">
                     <div className="flex-1">
                       <h3 className="text-lg font-semibold text-gray-900 mb-2">
@@ -984,7 +971,7 @@ const ProviderDashboard = () => {
                             <span className="text-sm">
                               {application.applicantId?.firstName} {application.applicantId?.lastName}
                             </span>
-                          </div>
+                    </div>
                           <div className="flex items-center">
                             <Mail className="h-4 w-4 mr-2 text-gray-500" />
                             <span className="text-sm">{application.applicantId?.email}</span>
@@ -1044,7 +1031,7 @@ const ProviderDashboard = () => {
                         className="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700"
                       >
                         Message
-                      </button>
+                    </button>
                     </div>
                   </div>
                 </div>
@@ -1073,7 +1060,7 @@ const ProviderDashboard = () => {
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Messages */}
-            <div className="bg-white p-6 rounded-lg border">
+            <div className="bg-white p-6 rounded-lg border border-gray-200">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg font-semibold text-gray-900">Messages</h3>
                 <div className="flex items-center space-x-2">
@@ -1126,7 +1113,7 @@ const ProviderDashboard = () => {
             </div>
 
             {/* Notifications */}
-            <div className="bg-white p-6 rounded-lg border">
+            <div className="bg-white p-6 rounded-lg border border-gray-200">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg font-semibold text-gray-900">Notifications</h3>
                 <span className="bg-red-100 text-red-800 text-xs font-medium px-2 py-1 rounded-full">
@@ -1158,7 +1145,11 @@ const ProviderDashboard = () => {
       );
     }
 
+
+
     if (activeItem === 'analytics') {
+      // --- Chart Data Preparation ---
+      // Use applicationsByMonth and opportunityPerformance from top-level hooks
       return (
         <div className="space-y-6">
           <div className="flex justify-between items-center">
@@ -1200,16 +1191,50 @@ const ProviderDashboard = () => {
 
           {/* Charts Placeholder */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <div className="bg-white p-6 rounded-lg border">
+            <div className="bg-white p-6 rounded-lg border border-gray-200">
               <h3 className="text-lg font-semibold text-gray-900 mb-4">Applications Over Time</h3>
               <div className="h-64 bg-gray-50 rounded-lg flex items-center justify-center">
-                <p className="text-gray-500">Chart coming soon</p>
+                {applicationsByMonth.labels && applicationsByMonth.labels.length > 0 ? (
+                  <Line
+                    data={applicationsByMonth}
+                    options={{
+                      responsive: true,
+                      plugins: {
+                        legend: { display: false },
+                        title: { display: false },
+                      },
+                      scales: {
+                        x: { title: { display: true, text: 'Month' } },
+                        y: { title: { display: true, text: 'Applications' }, beginAtZero: true }
+                      }
+                    }}
+                  />
+                ) : (
+                  <p className="text-gray-500">No application data yet</p>
+                )}
               </div>
             </div>
-            <div className="bg-white p-6 rounded-lg border">
+            <div className="bg-white p-6 rounded-lg border border-gray-200">
               <h3 className="text-lg font-semibold text-gray-900 mb-4">Opportunity Performance</h3>
               <div className="h-64 bg-gray-50 rounded-lg flex items-center justify-center">
-                <p className="text-gray-500">Chart coming soon</p>
+                {opportunityPerformance.labels && opportunityPerformance.labels.length > 0 ? (
+                  <Bar
+                    data={opportunityPerformance}
+                    options={{
+                      responsive: true,
+                      plugins: {
+                        legend: { display: false },
+                        title: { display: false },
+                      },
+                      scales: {
+                        x: { title: { display: true, text: 'Opportunity' } },
+                        y: { title: { display: true, text: 'Applications' }, beginAtZero: true }
+                      }
+                    }}
+                  />
+                ) : (
+                  <p className="text-gray-500">No opportunity data yet</p>
+                )}
               </div>
             </div>
           </div>
@@ -1225,7 +1250,10 @@ const ProviderDashboard = () => {
               <h2 className="text-2xl font-bold text-gray-900">Interview Manager</h2>
               <p className="text-gray-600">Schedule and manage interviews</p>
             </div>
-            <button className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center">
+            <button
+              className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center"
+              onClick={() => setShowCandidatePicker(true)}
+            >
               <Plus className="h-4 w-4 mr-2" />
               Schedule Interview
             </button>
@@ -1250,7 +1278,7 @@ const ProviderDashboard = () => {
           ) : interviews.length > 0 ? (
             <div className="space-y-4">
               {interviews.map(interview => (
-                <div key={interview._id} className="bg-white p-6 rounded-lg border">
+                <div key={interview._id} className="bg-white p-6 rounded-lg border border-gray-200">
                   <div className="flex justify-between items-start mb-4">
                     <div className="flex-1">
                       <h3 className="text-lg font-semibold text-gray-900 mb-2">
@@ -1285,13 +1313,13 @@ const ProviderDashboard = () => {
                   </div>
                   
                   <div className="flex space-x-2 pt-4 border-t">
-                    <button className="text-blue-600 hover:text-blue-700 text-sm font-medium">
+                    <button className="text-blue-600 hover:text-blue-700 text-sm font-medium" onClick={() => handleViewInterviewDetails(interview)}>
                       View Details
                     </button>
-                    <button className="text-green-600 hover:text-green-700 text-sm font-medium">
+                    <button className="text-green-600 hover:text-green-700 text-sm font-medium" onClick={() => handleReschedule(interview)}>
                       Reschedule
                     </button>
-                    <button className="text-red-600 hover:text-red-700 text-sm font-medium">
+                    <button className="text-red-600 hover:text-red-700 text-sm font-medium" onClick={() => handleCancelInterview(interview._id)}>
                       Cancel
                     </button>
                   </div>
@@ -1321,7 +1349,7 @@ const ProviderDashboard = () => {
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Profile Settings */}
-            <div className="bg-white p-6 rounded-lg border">
+            <div className="bg-white p-6 rounded-lg border border-gray-200">
               <h3 className="text-lg font-semibold text-gray-900 mb-4">Profile Settings</h3>
               <div className="space-y-4">
                 <div>
@@ -1351,14 +1379,28 @@ const ProviderDashboard = () => {
                     placeholder="+1 (555) 123-4567"
                   />
                 </div>
-                <button className="w-full bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700">
-                  Update Profile
+                <button 
+                  onClick={() => {
+                    setIsUpdatingProfile(true);
+                    navigate('/create-profile');
+                  }}
+                  disabled={isUpdatingProfile}
+                  className="w-full bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
+                >
+                  {isUpdatingProfile ? (
+                    <>
+                      <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                      Updating...
+                    </>
+                  ) : (
+                    'Update Profile'
+                  )}
                 </button>
               </div>
             </div>
 
             {/* Notification Settings */}
-            <div className="bg-white p-6 rounded-lg border">
+            <div className="bg-white p-6 rounded-lg border border-gray-200">
               <h3 className="text-lg font-semibold text-gray-900 mb-4">Notification Settings</h3>
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
@@ -1401,7 +1443,7 @@ const ProviderDashboard = () => {
           </div>
 
           {/* Account Actions */}
-          <div className="bg-white p-6 rounded-lg border">
+          <div className="bg-white p-6 rounded-lg border border-gray-200">
             <h3 className="text-lg font-semibold text-gray-900 mb-4">Account Actions</h3>
             <div className="flex space-x-4">
               <button className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 flex items-center">
@@ -1429,7 +1471,7 @@ const ProviderDashboard = () => {
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* FAQ */}
-            <div className="bg-white p-6 rounded-lg border">
+            <div className="bg-white p-6 rounded-lg border border-gray-200">
               <h3 className="text-lg font-semibold text-gray-900 mb-4">Frequently Asked Questions</h3>
               <div className="space-y-4">
                 <div>
@@ -1448,7 +1490,7 @@ const ProviderDashboard = () => {
             </div>
 
             {/* Contact Support */}
-            <div className="bg-white p-6 rounded-lg border">
+            <div className="bg-white p-6 rounded-lg border border-gray-200">
               <h3 className="text-lg font-semibold text-gray-900 mb-4">Contact Support</h3>
               <div className="space-y-4">
                 <div className="flex items-center">
@@ -1480,7 +1522,7 @@ const ProviderDashboard = () => {
           </div>
 
           {/* Resources */}
-          <div className="bg-white p-6 rounded-lg border">
+          <div className="bg-white p-6 rounded-lg border border-gray-200">
             <h3 className="text-lg font-semibold text-gray-900 mb-4">Helpful Resources</h3>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <a href="#" className="p-4 border border-gray-200 rounded-lg hover:bg-gray-50">
@@ -1503,6 +1545,8 @@ const ProviderDashboard = () => {
         </div>
       );
     }
+
+
 
     // Default fallback
     return (
@@ -2140,22 +2184,58 @@ const ProviderDashboard = () => {
     setInterviewError(null);
     try {
       const dateTime = new Date(`${interviewDate}T${interviewTime}`);
-      await interviewsAPI.create({
-        provider: user._id,
-        refugee: interviewProfile.userId || interviewProfile._id,
-        date: dateTime,
-        message: interviewMessage
+      // Find the user ID by email since profiles don't have userId field
+      const userResponse = await fetch(`http://localhost:5001/api/users/by-email/${encodeURIComponent(interviewProfile.email)}`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
       });
+      
+      if (!userResponse.ok) {
+        throw new Error('Could not find user for this profile');
+      }
+      
+      const userData = await userResponse.json();
+      const talentId = userData.user._id;
+      
+      const inviteData = {
+        talentId: talentId,
+        type: 'job', // Default to job interview
+        title: 'Interview Invitation',
+        description: interviewMessage || 'Interview invitation',
+        organization: user.organization || 'Unknown',
+        position: '',
+        location: 'remote',
+        address: '',
+        scheduledDate: dateTime,
+        duration: 60,
+        providerNotes: interviewMessage || ''
+      };
+      
+      console.log('Sending interview invite with data:', inviteData);
+      console.log('Interview profile:', interviewProfile);
+      console.log('User:', user);
+      
+      if (rescheduleMode && rescheduleInterviewId) {
+        console.log('Rescheduling interview:', rescheduleInterviewId);
+        await updateInterview(rescheduleInterviewId, inviteData);
+        alert('Interview rescheduled successfully!');
+      } else {
+        console.log('Creating new interview invite');
+        await sendInterviewInvite(inviteData);
+        alert('Interview booked successfully!');
+      }
       setShowInterviewModal(false);
       setInterviewProfile(null);
       setInterviewDate('');
       setInterviewTime('');
       setInterviewMessage('');
       setInterviewError(null);
-      // Refresh interviews
+      setRescheduleMode(false);
+      setRescheduleInterviewId(null);
       if (typeof refetchInterviews === 'function') refetchInterviews();
     } catch (err) {
-      setInterviewError(err.response?.data?.message || 'Failed to book interview');
+      setInterviewError(err.response?.data?.message || 'Failed to book/reschedule interview');
     } finally {
       setInterviewLoading(false);
     }
@@ -2200,6 +2280,109 @@ const ProviderDashboard = () => {
   // Calculate application count for an opportunity
   const getApplicationCount = (opportunityId) => {
     return applications.filter(app => app.opportunityId?._id === opportunityId).length;
+  };
+
+  // Place these at the top level, after all other hooks in ProviderDashboard
+  const applicationsByMonth = useMemo(() => {
+    if (!applications) return {};
+    const counts = {};
+    applications.forEach(app => {
+      const date = new Date(app.appliedAt);
+      const label = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+      counts[label] = (counts[label] || 0) + 1;
+    });
+    const labels = Object.keys(counts).sort();
+    return {
+      labels,
+      datasets: [
+        {
+          label: 'Applications',
+          data: labels.map(l => counts[l]),
+          borderColor: '#2563eb',
+          backgroundColor: 'rgba(37,99,235,0.2)',
+          fill: true,
+          tension: 0.3,
+        }
+      ]
+    };
+  }, [applications]);
+
+  const opportunityPerformance = useMemo(() => {
+    if (!opportunities || !applications) return {};
+    const counts = {};
+    opportunities.forEach(opp => {
+      counts[opp.title] = 0;
+    });
+    applications.forEach(app => {
+      const opp = app.opportunityId?.title || app.opportunityId;
+      if (counts[opp] !== undefined) counts[opp]++;
+    });
+    const labels = Object.keys(counts);
+    return {
+      labels,
+      datasets: [
+        {
+          label: 'Applications',
+          data: labels.map(l => counts[l]),
+          backgroundColor: '#2563eb',
+        }
+      ]
+    };
+  }, [opportunities, applications]);
+
+  // Add at the top level of ProviderDashboard, after other useState hooks
+  const [showCandidatePicker, setShowCandidatePicker] = useState(false);
+  const [candidateSearch, setCandidateSearch] = useState('');
+
+  // Add at the top level of ProviderDashboard, after other useState hooks
+  const [rescheduleMode, setRescheduleMode] = useState(false);
+  const [rescheduleInterviewId, setRescheduleInterviewId] = useState(null);
+
+  // Interview details modal state
+  const [showInterviewDetailsModal, setShowInterviewDetailsModal] = useState(false);
+  const [selectedInterviewDetails, setSelectedInterviewDetails] = useState(null);
+
+  // Add a function to handle viewing interview details
+  const handleViewInterviewDetails = (interview) => {
+    setSelectedInterviewDetails(interview);
+    setShowInterviewDetailsModal(true);
+  };
+
+  // Add a function to handle rescheduling
+  const handleReschedule = (interview) => {
+    console.log('Rescheduling interview:', interview);
+    
+    // Set the talent profile for the interview modal
+    setInterviewProfile(interview.talent);
+    
+    // Set the date and time from the scheduled date
+    if (interview.scheduledDate) {
+      const date = new Date(interview.scheduledDate);
+      setInterviewDate(date.toISOString().slice(0, 10));
+      setInterviewTime(date.toISOString().slice(11, 16));
+    } else {
+      setInterviewDate('');
+      setInterviewTime('');
+    }
+    
+    // Set the message from provider notes
+    setInterviewMessage(interview.providerNotes || '');
+    setInterviewError(null);
+    setRescheduleMode(true);
+    setRescheduleInterviewId(interview._id);
+    setShowInterviewModal(true);
+  };
+
+  // Add a function to handle canceling an interview
+  const handleCancelInterview = async (interviewId) => {
+    if (!window.confirm('Are you sure you want to cancel this interview?')) return;
+    try {
+      await deleteInterview(interviewId);
+      alert('Interview canceled successfully!');
+      if (typeof refetchInterviews === 'function') refetchInterviews();
+    } catch (err) {
+      alert('Failed to cancel interview.');
+    }
   };
 
   return (
@@ -2248,7 +2431,7 @@ const ProviderDashboard = () => {
       {/* Create/Edit Modal */}
       {(showCreateModal || showEditModal) && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+          <div className="bg-white rounded-lg border border-gray-200 p-6 w-full max-w-4xl max-h-[80vh] overflow-y-auto">
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-xl font-bold text-gray-900">
                 {showEditModal ? 'Edit Opportunity' : 'Create New Opportunity'}
@@ -2553,10 +2736,10 @@ const ProviderDashboard = () => {
       {/* Profile View Modal */}
       {showProfileModal && selectedProfile && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="p-6 border-b border-gray-200">
+          <div className="bg-white rounded-lg border border-gray-200 max-w-4xl w-full max-h-[80vh] overflow-y-auto">
+            <div className="p-4 border-b border-gray-200">
               <div className="flex justify-between items-center">
-                <h2 className="text-2xl font-bold text-gray-900">Profile Details</h2>
+                <h2 className="text-xl font-bold text-gray-900">Profile Details</h2>
                 <button
                   onClick={closeProfileModal}
                   className="text-gray-400 hover:text-gray-600"
@@ -2571,25 +2754,25 @@ const ProviderDashboard = () => {
                 <p className="mt-4 text-gray-600">Loading profile...</p>
               </div>
             ) : (
-              <div className="p-6 space-y-8">
+              <div className="p-4 space-y-6">
                 {/* Profile Picture & Basic Info */}
-                <div className="flex items-start space-x-6">
-                  <div className="w-24 h-24 bg-gray-300 rounded-full flex items-center justify-center overflow-hidden">
+                <div className="flex items-start space-x-4">
+                  <div className="w-20 h-20 bg-gray-300 rounded-full flex items-center justify-center overflow-hidden">
                           {selectedProfile.photoUrl ? (
                             <img 
                               src={selectedProfile.photoUrl.startsWith('http') ? selectedProfile.photoUrl : `http://localhost:5001/${selectedProfile.photoUrl}`} 
                               alt={selectedProfile.fullName} 
-                              className="w-24 h-24 rounded-full object-cover"
+                              className="w-20 h-20 rounded-full object-cover"
                             />
                     ) : (
-                      <span className="text-2xl font-medium text-gray-700">
+                      <span className="text-xl font-medium text-gray-700">
                             {selectedProfile.fullName?.split(' ').map(n => n[0]).join('')}
                           </span>
                     )}
                         </div>
                         <div className="flex-1">
-                          <h1 className="text-3xl font-bold text-gray-900 mb-2">{selectedProfile.fullName}</h1>
-                    <p className="text-lg text-gray-600 mb-2">{selectedProfile.age} years old • {selectedProfile.gender}</p>
+                          <h1 className="text-2xl font-bold text-gray-900 mb-1">{selectedProfile.fullName}</h1>
+                    <p className="text-base text-gray-600 mb-1">{selectedProfile.age} years old • {selectedProfile.gender}</p>
                     <div className="flex items-center space-x-4 mb-2">
                             <span className={`px-3 py-1 rounded-full text-sm font-medium ${
                               selectedProfile.option === 'student' ? 'bg-blue-100 text-blue-800' :
@@ -2614,20 +2797,20 @@ const ProviderDashboard = () => {
                       </div>
 
                 {/* Resume/CV and Get in Touch (now in main form) */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {/* Resume/CV */}
                   {selectedProfile.document && (
-                    <div className="bg-gray-50 rounded-lg p-6 flex flex-col items-center justify-center">
-                      <h3 className="text-lg font-semibold text-gray-900 mb-4">Resume/CV</h3>
-                      <button className="w-full bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center justify-center">
-                        <Download className="h-4 w-4 mr-2" />
-                        Download Resume
-                      </button>
+                                      <div className="bg-gray-50 rounded-lg p-4 border border-gray-200 flex flex-col items-center justify-center">
+                    <h3 className="text-base font-semibold text-gray-900 mb-2">Resume/CV</h3>
+                    <button className="w-full bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center justify-center">
+                      <Download className="h-4 w-4 mr-2" />
+                      Download Resume
+                    </button>
                         </div>
                       )}
                   {/* Get in Touch */}
-                  <div className="bg-gray-50 rounded-lg p-6 flex flex-col items-center justify-center">
-                    <h3 className="text-lg font-semibold text-gray-900 mb-4">Get in Touch</h3>
+                  <div className="bg-gray-50 rounded-lg p-4 border border-gray-200 flex flex-col items-center justify-center">
+                    <h3 className="text-base font-semibold text-gray-900 mb-2">Get in Touch</h3>
                     <button
                       onClick={() => {
                         setShowMessageCenter(true);
@@ -2645,9 +2828,9 @@ const ProviderDashboard = () => {
                 </div>
 
                 {/* Skills & Languages */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div>
-                    <h3 className="text-lg font-semibold text-gray-900 mb-2 flex items-center"><Award className="h-5 w-5 mr-2 text-blue-500" />Skills</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                    <h3 className="text-base font-semibold text-gray-900 mb-2 flex items-center"><Award className="h-4 w-4 mr-2 text-blue-500" />Skills</h3>
                     {selectedProfile.skills && selectedProfile.skills.length > 0 ? (
                           <div className="flex flex-wrap gap-2">
                         {selectedProfile.skills.map((skill, i) => (
@@ -2656,8 +2839,8 @@ const ProviderDashboard = () => {
                           </div>
                     ) : <p className="text-gray-500 text-sm">No skills listed</p>}
                         </div>
-                  <div>
-                    <h3 className="text-lg font-semibold text-gray-900 mb-2 flex items-center"><Languages className="h-5 w-5 mr-2 text-blue-500" />Languages</h3>
+                  <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                    <h3 className="text-base font-semibold text-gray-900 mb-2 flex items-center"><Languages className="h-4 w-4 mr-2 text-blue-500" />Languages</h3>
                     {selectedProfile.language && selectedProfile.language.length > 0 ? (
                           <div className="flex flex-wrap gap-2">
                         {selectedProfile.language.map((lang, i) => (
@@ -2666,50 +2849,50 @@ const ProviderDashboard = () => {
                           </div>
                     ) : <p className="text-gray-500 text-sm">No languages listed</p>}
                         </div>
-                </div>
+                          </div>
 
                 {/* Student Template */}
                 {selectedProfile.option === 'student' && (
                   <>
-                    <div className="bg-blue-50 rounded-lg p-6 border border-blue-200">
-                      <h3 className="text-lg font-semibold text-blue-900 mb-4 flex items-center"><BookOpen className="h-5 w-5 mr-2 text-blue-600" />Academic Information</h3>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                    <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                      <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center"><BookOpen className="h-4 w-4 mr-2 text-blue-500" />Academic Information</h3>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                         <div>
-                          <span className="block text-sm font-medium text-blue-800 mb-2">High School Subjects</span>
+                          <span className="block text-sm font-medium text-gray-700 mb-2">High School Subjects</span>
                           <p className="text-gray-900">{selectedProfile.highSchoolSubjects || <span className="text-gray-400 italic">No data provided</span>}</p>
                           </div>
                         <div>
-                          <span className="block text-sm font-medium text-blue-800 mb-2">Desired Field of Study</span>
+                          <span className="block text-sm font-medium text-gray-700 mb-2">Desired Field of Study</span>
                           <p className="text-gray-900">{selectedProfile.desiredField || <span className="text-gray-400 italic">No data provided</span>}</p>
                         </div>
-                          </div>
-                        </div>
-                    <div className="bg-gray-50 rounded-lg p-6 border border-gray-200">
-                      <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center"><Award className="h-5 w-5 mr-2 text-blue-500" />Annual Academic Records</h3>
+                    </div>
+                  </div>
+                    <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                      <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center"><Award className="h-4 w-4 mr-2 text-blue-500" />Annual Academic Records</h3>
                       {selectedProfile.academicRecords && selectedProfile.academicRecords.length > 0 ? (
-                        <div className="space-y-4">
+                      <div className="space-y-3">
                           {selectedProfile.academicRecords.map((record, i) => (
-                            <div key={i} className="bg-white rounded-lg p-4 border border-gray-200">
+                            <div key={i} className="bg-white rounded-lg p-3 border border-gray-200">
                               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div>
                                   <span className="text-sm font-medium text-gray-500">Academic Level</span>
                                   <p className="text-gray-900">{expandDegreeAbbreviation(record.level || '')}</p>
-                                </div>
+                          </div>
                                 <div>
                                   <span className="text-sm font-medium text-gray-500">Year</span>
                                   <p className="text-gray-900">{String(record.year || '')}</p>
-                                </div>
+                          </div>
                                 {record.school && (
                                   <div>
                                     <span className="text-sm font-medium text-gray-500">School</span>
                                     <p className="text-gray-900">{String(record.school)}</p>
-                                  </div>
-                                )}
+                          </div>
+                        )}
                                 <div>
                                   <span className="text-sm font-medium text-gray-500">Percentage Score</span>
                                   <p className="text-gray-900">{String(record.percentage || 0)}%</p>
-                                </div>
-                              </div>
+                      </div>
+                    </div>
                               {record.subjectGrades && (
                                 <div className="mt-4">
                                   <span className="text-sm font-medium text-gray-500">Subject Grades</span>
@@ -2718,32 +2901,32 @@ const ProviderDashboard = () => {
                                      typeof record.subjectGrades === 'object' ? JSON.stringify(record.subjectGrades) : 
                                      String(record.subjectGrades)}
                                   </p>
-                                </div>
-                              )}
-                      </div>
-                          ))}
-                    </div>
-                      ) : <p className="text-gray-400 italic">No academic records added yet</p>}
                           </div>
-                    <div className="bg-gray-50 rounded-lg p-6 border border-gray-200">
-                      <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center"><FileText className="h-5 w-5 mr-2 text-blue-500" />Transcripts and Certificates</h3>
+                        )}
+                          </div>
+                          ))}
+                          </div>
+                      ) : <p className="text-gray-400 italic">No academic records added yet</p>}
+                      </div>
+                    <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                      <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center"><FileText className="h-4 w-4 mr-2 text-blue-500" />Transcripts and Certificates</h3>
                       {selectedProfile.supportingDocuments && selectedProfile.supportingDocuments.length > 0 ? (
                         <div className="space-y-2">
                           {selectedProfile.supportingDocuments.map((doc, i) => (
-                            <div key={i} className="flex items-center justify-between p-3 bg-white rounded border">
+                            <div key={i} className="flex items-center justify-between p-2 bg-white rounded border">
                               <div className="flex items-center">
                                 <FileText className="h-4 w-4 text-blue-500 mr-2" />
                                 <span className="text-gray-700">
                                   {typeof doc === 'object' && doc.originalname ? doc.originalname : 
                                    typeof doc === 'string' ? doc : 'Document'}
                                 </span>
-                              </div>
+                    </div>
                               {typeof doc === 'string' ? (
                                 <a href={`http://localhost:5001/${doc}`} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline text-xs">View</a>
                               ) : typeof doc === 'object' && doc.path ? (
                                 <a href={`http://localhost:5001/${doc.path}`} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline text-xs">View</a>
                               ) : null}
-                            </div>
+                      </div>
                           ))}
                         </div>
                       ) : <p className="text-gray-400 italic">No supporting documents uploaded yet</p>}
@@ -2960,28 +3143,267 @@ const ProviderDashboard = () => {
 
       {showInterviewModal && interviewProfile && (
         <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-md">
-            <h2 className="text-lg font-semibold mb-4">Book Interview with {interviewProfile.fullName || interviewProfile.firstName + ' ' + interviewProfile.lastName}</h2>
-            <form onSubmit={handleBookInterview} className="space-y-4">
+          <div className="bg-white rounded-lg shadow-xl p-6 max-w-2xl w-full">
+            <h2 className="text-2xl font-bold text-gray-900 mb-4">
+              {rescheduleMode ? 'Reschedule Interview with' : 'Book Interview with'} {interviewProfile.fullName || interviewProfile.firstName + ' ' + interviewProfile.lastName}
+            </h2>
+            <form onSubmit={handleBookInterview} className="space-y-6">
               <div>
-                <label className="block text-sm font-medium mb-1">Date</label>
-                <input type="date" value={interviewDate} onChange={e => setInterviewDate(e.target.value)} className="w-full border rounded px-3 py-2" required />
+                <label className="block text-sm font-medium text-gray-700 mb-2">Date</label>
+                <input type="date" value={interviewDate} onChange={e => setInterviewDate(e.target.value)} className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500" required />
               </div>
               <div>
-                <label className="block text-sm font-medium mb-1">Time</label>
-                <input type="time" value={interviewTime} onChange={e => setInterviewTime(e.target.value)} className="w-full border rounded px-3 py-2" required />
+                <label className="block text-sm font-medium text-gray-700 mb-2">Time</label>
+                <input type="time" value={interviewTime} onChange={e => setInterviewTime(e.target.value)} className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500" required />
               </div>
               <div>
-                <label className="block text-sm font-medium mb-1">Message (optional)</label>
-                <textarea value={interviewMessage} onChange={e => setInterviewMessage(e.target.value)} className="w-full border rounded px-3 py-2" rows={3} />
+                <label className="block text-sm font-medium text-gray-700 mb-2">Message (optional)</label>
+                <textarea value={interviewMessage} onChange={e => setInterviewMessage(e.target.value)} className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500" rows={3} />
               </div>
               {interviewError && <div className="text-red-600 text-sm">{interviewError}</div>}
-              <div className="flex justify-end space-x-2">
-                <button type="button" onClick={closeInterviewModal} className="px-4 py-2 bg-gray-200 rounded">Cancel</button>
-                <button type="submit" disabled={interviewLoading} className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50">{interviewLoading ? 'Booking...' : 'Book Interview'}</button>
+              <div className="flex justify-end space-x-3 pt-6 border-t mt-6">
+                <button type="button" onClick={() => { closeInterviewModal(); setRescheduleMode(false); setRescheduleInterviewId(null); }} className="px-6 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200">Cancel</button>
+                <button type="submit" disabled={interviewLoading} className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50">{interviewLoading ? 'Booking...' : (rescheduleMode ? 'Reschedule Interview' : 'Book Interview')}</button>
               </div>
             </form>
           </div>
+        </div>
+      )}
+
+      {showCandidatePicker && (
+        <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-lg">
+            <h2 className="text-lg font-semibold mb-4">Pick a Candidate</h2>
+            <input
+              type="text"
+              placeholder="Search by name, email, or skill..."
+              value={candidateSearch}
+              onChange={e => setCandidateSearch(e.target.value)}
+              className="w-full border rounded px-3 py-2 mb-4"
+            />
+            <div className="max-h-64 overflow-y-auto divide-y divide-gray-100">
+              {profiles.filter(profile =>
+                profile.fullName?.toLowerCase().includes(candidateSearch.toLowerCase()) ||
+                profile.email?.toLowerCase().includes(candidateSearch.toLowerCase()) ||
+                (profile.skills && profile.skills.join(' ').toLowerCase().includes(candidateSearch.toLowerCase()))
+              ).map(profile => (
+                <button
+                  key={profile._id}
+                  className="w-full text-left px-3 py-2 hover:bg-blue-50 rounded flex items-center"
+                  onClick={() => {
+                    setShowCandidatePicker(false);
+                    openInterviewModal(profile);
+                  }}
+                >
+                  <span className="font-medium">{profile.fullName}</span>
+                  <span className="ml-2 text-xs text-gray-500">{profile.email}</span>
+                  <span className="ml-auto text-xs text-gray-400">{profile.skills?.slice(0,2).join(', ')}</span>
+                </button>
+              ))}
+              {profiles.length === 0 && (
+                <div className="text-gray-500 text-center py-4">No candidates found</div>
+              )}
+            </div>
+            <div className="flex justify-end mt-4">
+              <button onClick={() => setShowCandidatePicker(false)} className="px-4 py-2 bg-gray-200 rounded">Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Interview Details Modal */}
+      {showInterviewDetailsModal && selectedInterviewDetails && (
+        <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6 border-b border-gray-200">
+              <div className="flex justify-between items-center">
+                <h2 className="text-2xl font-bold text-gray-900">Interview Details</h2>
+                <button
+                  onClick={() => setShowInterviewDetailsModal(false)}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <X className="h-6 w-6" />
+                </button>
+              </div>
+            </div>
+            
+            <div className="p-6 space-y-6">
+              {/* Interview Status */}
+              <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                <div>
+                  <h3 className="font-semibold text-gray-900">Status</h3>
+                  <p className="text-sm text-gray-600">Current interview status</p>
+                </div>
+                <span className={`px-3 py-1 rounded-full text-sm font-medium ${
+                  selectedInterviewDetails.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
+                  selectedInterviewDetails.status === 'accepted' ? 'bg-green-100 text-green-800' :
+                  selectedInterviewDetails.status === 'declined' ? 'bg-red-100 text-red-800' :
+                  selectedInterviewDetails.status === 'completed' ? 'bg-blue-100 text-blue-800' :
+                  'bg-gray-100 text-gray-800'
+                }`}>
+                  {selectedInterviewDetails.status.charAt(0).toUpperCase() + selectedInterviewDetails.status.slice(1)}
+                </span>
+              </div>
+
+              {/* Interview Information */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <h3 className="font-semibold text-gray-900 mb-3">Interview Information</h3>
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">Type</label>
+                      <p className="text-sm text-gray-900">{selectedInterviewDetails.type || 'Not specified'}</p>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">Title</label>
+                      <p className="text-sm text-gray-900">{selectedInterviewDetails.title || 'Interview'}</p>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">Organization</label>
+                      <p className="text-sm text-gray-900">{selectedInterviewDetails.organization || 'Not specified'}</p>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">Position</label>
+                      <p className="text-sm text-gray-900">{selectedInterviewDetails.position || 'Not specified'}</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <h3 className="font-semibold text-gray-900 mb-3">Schedule Details</h3>
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">Date & Time</label>
+                      <p className="text-sm text-gray-900">
+                        {selectedInterviewDetails.scheduledDate ? 
+                          new Date(selectedInterviewDetails.scheduledDate).toLocaleString() : 
+                          'Not scheduled'
+                        }
+                      </p>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">Duration</label>
+                      <p className="text-sm text-gray-900">
+                        {selectedInterviewDetails.duration ? `${selectedInterviewDetails.duration} minutes` : 'Not specified'}
+                      </p>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">Location</label>
+                      <p className="text-sm text-gray-900">{selectedInterviewDetails.location || 'Not specified'}</p>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">Address</label>
+                      <p className="text-sm text-gray-900">{selectedInterviewDetails.address || 'Not specified'}</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Description */}
+              <div>
+                <h3 className="font-semibold text-gray-900 mb-3">Description</h3>
+                <p className="text-sm text-gray-900 bg-gray-50 p-3 rounded-lg">
+                  {selectedInterviewDetails.description || 'No description provided'}
+                </p>
+              </div>
+
+              {/* Provider Notes */}
+              {selectedInterviewDetails.providerNotes && (
+                <div>
+                  <h3 className="font-semibold text-gray-900 mb-3">Provider Notes</h3>
+                  <p className="text-sm text-gray-900 bg-gray-50 p-3 rounded-lg">
+                    {selectedInterviewDetails.providerNotes}
+                  </p>
+                </div>
+              )}
+
+              {/* Talent Response */}
+              {selectedInterviewDetails.talentResponse && selectedInterviewDetails.talentResponse.message && (
+                <div>
+                  <h3 className="font-semibold text-gray-900 mb-3">Talent Response</h3>
+                  <div className="bg-gray-50 p-3 rounded-lg">
+                    <p className="text-sm text-gray-900 mb-2">{selectedInterviewDetails.talentResponse.message}</p>
+                    <p className="text-xs text-gray-500">
+                      Responded on: {new Date(selectedInterviewDetails.talentResponse.respondedAt).toLocaleString()}
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Meeting Link */}
+              {selectedInterviewDetails.meetingLink && (
+                <div>
+                  <h3 className="font-semibold text-gray-900 mb-3">Meeting Link</h3>
+                  <a 
+                    href={selectedInterviewDetails.meetingLink} 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="text-blue-600 hover:text-blue-700 text-sm break-all"
+                  >
+                    {selectedInterviewDetails.meetingLink}
+                  </a>
+                </div>
+              )}
+
+              {/* Created Date */}
+              <div>
+                <h3 className="font-semibold text-gray-900 mb-3">Created</h3>
+                <p className="text-sm text-gray-900">
+                  {new Date(selectedInterviewDetails.createdAt).toLocaleString()}
+                </p>
+              </div>
+            </div>
+
+            <div className="p-6 border-t border-gray-200">
+              <div className="flex justify-end space-x-3">
+                <button
+                  onClick={() => setShowInterviewDetailsModal(false)}
+                  className="px-6 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200"
+                >
+                  Close
+                </button>
+                <button
+                  onClick={() => {
+                    setShowInterviewDetailsModal(false);
+                    handleReschedule(selectedInterviewDetails);
+                  }}
+                  className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
+                >
+                  Reschedule
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Success Toast */}
+      {showSuccessToast && (
+        <div className="fixed top-4 right-4 z-50 bg-green-600 text-white px-6 py-3 rounded-lg shadow-lg animate-fade-in flex items-center">
+          <CheckCircle className="h-5 w-5 mr-2" />
+          {successMessage}
+          <button
+            onClick={() => setShowSuccessToast(false)}
+            className="ml-4 text-white hover:text-gray-200"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
+
+      {/* Error Toast */}
+      {(opportunitiesError || interviewsError || profilesError) && (
+        <div className="fixed top-4 right-4 z-50 bg-red-600 text-white px-6 py-3 rounded-lg shadow-lg animate-fade-in flex items-center">
+          <AlertCircle className="h-5 w-5 mr-2" />
+          {opportunitiesError || interviewsError || profilesError}
+          <button
+            onClick={() => {
+              // Add any additional actions you want to execute when the error toast is closed
+            }}
+            className="ml-4 text-white hover:text-gray-200"
+          >
+            <X className="h-4 w-4" />
+          </button>
         </div>
       )}
     </div>

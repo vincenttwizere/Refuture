@@ -9,6 +9,9 @@ const router = express.Router();
 // POST /api/interviews/invite - Send interview invitation (provider only)
 router.post('/invite', protect, async (req, res) => {
   try {
+    console.log('Interview invite request body:', req.body);
+    console.log('User making request:', req.user._id, req.user.role);
+    
     const { 
       talentId, 
       type, 
@@ -25,20 +28,26 @@ router.post('/invite', protect, async (req, res) => {
 
     // Validate required fields
     if (!talentId || !type || !title || !description || !organization) {
+      console.log('Missing required fields:', { talentId, type, title, description, organization });
       return res.status(400).json({ 
         message: 'Missing required fields' 
       });
     }
 
     // Check if talent exists and has a profile
+    console.log('Looking for talent with ID:', talentId);
     const talent = await User.findById(talentId);
+    console.log('Found talent:', talent ? { id: talent._id, role: talent.role, hasProfile: talent.hasProfile } : 'Not found');
+    
     if (!talent || talent.role !== 'refugee') {
+      console.log('Talent not found or not a refugee');
       return res.status(404).json({ 
         message: 'Talent not found' 
       });
     }
 
     if (!talent.hasProfile) {
+      console.log('Talent has no profile');
       return res.status(400).json({ 
         message: 'Talent has not completed their profile' 
       });
@@ -58,6 +67,22 @@ router.post('/invite', protect, async (req, res) => {
     }
 
     // Create interview invitation
+    console.log('Creating interview with data:', {
+      providerId: req.user._id,
+      talentId: talentId,
+      type,
+      title,
+      description,
+      organization,
+      position,
+      location,
+      address,
+      scheduledDate: scheduledDate ? new Date(scheduledDate) : null,
+      duration,
+      providerNotes,
+      status: 'pending'
+    });
+    
     const interview = new Interview({
       providerId: req.user._id,
       talentId: talentId,
@@ -74,7 +99,9 @@ router.post('/invite', protect, async (req, res) => {
       status: 'pending'
     });
 
+    console.log('About to save interview...');
     await interview.save();
+    console.log('Interview saved successfully:', interview._id);
 
     res.status(201).json({
       message: 'Interview invitation sent successfully',

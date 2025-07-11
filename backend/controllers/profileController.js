@@ -5,8 +5,16 @@ import mongoose from 'mongoose';
 // Create a new profile or update existing one
 const createProfile = async (req, res) => {
   try {
-    console.log('Received profile creation request:', req.body);
-    console.log('Files:', req.files);
+    console.log('=== PROFILE CREATION REQUEST ===');
+    console.log('User:', req.user ? req.user.email : 'No user');
+    console.log('Request body keys:', Object.keys(req.body));
+    console.log('Files:', req.files ? Object.keys(req.files) : 'No files');
+    console.log('Raw experience from body:', req.body.experience);
+    console.log('Talent fields received:', {
+      talentCategory: req.body.talentCategory,
+      talentExperience: req.body.talentExperience,
+      talentDescription: req.body.talentDescription
+    });
     
     const {
       option,
@@ -32,6 +40,15 @@ const createProfile = async (req, res) => {
       talentDescription,
       portfolio
     } = req.body;
+
+    // Validate required fields
+    if (!option || !fullName || !age || !gender || !nationality || !currentLocation || !email) {
+      console.log('Missing required fields:', { option, fullName, age, gender, nationality, currentLocation, email });
+      return res.status(400).json({
+        success: false,
+        message: 'Missing required fields: option, fullName, age, gender, nationality, currentLocation, email'
+      });
+    }
 
     // Parse JSON strings back to arrays
     let skillsArray = [];
@@ -75,10 +92,20 @@ const createProfile = async (req, res) => {
 
     // Handle experience - make it optional
     if (experience) {
+      console.log('Raw experience received:', experience);
+      console.log('Experience type:', typeof experience);
+      console.log('Experience is array:', Array.isArray(experience));
       try {
-        experienceArray = typeof experience === 'string' ? JSON.parse(experience) : experience || [];
+        // Check if experience is already an array
+        if (Array.isArray(experience)) {
+          experienceArray = experience;
+        } else {
+          experienceArray = typeof experience === 'string' ? JSON.parse(experience) : experience || [];
+        }
+        console.log('Parsed experience:', experienceArray);
       } catch (e) {
         console.log('Error parsing experience:', e);
+        console.log('Raw experience value:', experience);
         experienceArray = [];
       }
     } else {
@@ -125,27 +152,33 @@ const createProfile = async (req, res) => {
       education: educationArray,
       experience: experienceArray,
       isPublic: isPublic === 'true' || isPublic === true,
-      // Student-specific fields
-      highSchoolSubjects,
-      desiredField,
+      // Student-specific fields - only include if not empty
+      ...(highSchoolSubjects && highSchoolSubjects.trim() !== '' && { highSchoolSubjects }),
+      ...(desiredField && desiredField.trim() !== '' && { desiredField }),
       academicRecords: academicRecordsArray,
-      // Undocumented talent-specific fields
-      talentCategory,
-      talentExperience,
-      talentDescription,
+      // Undocumented talent-specific fields - only include if provided and not empty
+      ...(talentCategory && talentCategory.trim() !== '' && { talentCategory }),
+      ...(talentExperience && talentExperience.trim() !== '' && { talentExperience }),
+      ...(talentDescription && talentDescription.trim() !== '' && { talentDescription }),
       portfolio: portfolioArray
     };
 
+    console.log('Profile data prepared:', Object.keys(profileData));
+    console.log('Final profile data:', JSON.stringify(profileData, null, 2));
+
     // Handle file uploads
     if (req.files) {
+      console.log('Processing uploaded files...');
       // Handle document upload
       if (req.files.document && req.files.document[0]) {
         profileData.document = req.files.document[0].path;
+        console.log('Document uploaded:', profileData.document);
       }
       
       // Handle profile image upload
       if (req.files.profileImage && req.files.profileImage[0]) {
         profileData.photoUrl = req.files.profileImage[0].path;
+        console.log('Profile image uploaded:', profileData.photoUrl);
       }
 
       // Handle supporting documents
@@ -155,13 +188,17 @@ const createProfile = async (req, res) => {
           originalname: file.originalname
         }));
         profileData.supportingDocuments = supportingDocs;
+        console.log('Supporting documents uploaded:', supportingDocs.length);
       }
     } else if (req.file) {
+      console.log('Processing single file upload...');
       // Handle single file upload (backward compatibility)
       if (req.file.fieldname === 'document') {
         profileData.document = req.file.path;
+        console.log('Document uploaded:', profileData.document);
       } else if (req.file.fieldname === 'profileImage') {
         profileData.photoUrl = req.file.path;
+        console.log('Profile image uploaded:', profileData.photoUrl);
       }
     }
 
@@ -200,13 +237,30 @@ const createProfile = async (req, res) => {
       message = 'Profile created successfully';
     }
 
+    console.log('Profile operation completed successfully');
     res.status(200).json({
       success: true,
       message,
       profile
     });
   } catch (error) {
+    console.error('=== PROFILE CREATION ERROR ===');
     console.error('Error creating/updating profile:', error);
+    console.error('Error stack:', error.stack);
+    
+    // Handle validation errors specifically
+    if (error.name === 'ValidationError') {
+      const validationErrors = Object.keys(error.errors).map(key => {
+        return `${key}: ${error.errors[key].message}`;
+      }).join(', ');
+      
+      return res.status(400).json({
+        success: false,
+        message: 'Profile validation failed',
+        error: validationErrors
+      });
+    }
+    
     res.status(500).json({
       success: false,
       message: 'Error creating profile',

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Home, 
   Users, 
@@ -75,6 +75,21 @@ const AdminDashboard = () => {
   const { opportunities, loading: opportunitiesLoading, error: opportunitiesError, fetchOpportunities, deleteOpportunity, refetchOpportunities } = useOpportunities();
   const { stats, loading: statsLoading, error: statsError, refetchStats } = usePlatformStats();
 
+  // Calculate unread messages count
+  const unreadMessagesCount = useMemo(() => {
+    if (!messages || !user) return 0;
+    return messages.filter(message => {
+      const recipientId = typeof message.recipient === 'object' ? message.recipient._id : message.recipient;
+      const currentUserId = typeof user._id === 'object' ? user._id.toString() : user._id;
+      return !message.isRead && recipientId === currentUserId;
+    }).length;
+  }, [messages, user]);
+
+  // Calculate unread notifications count
+  const unreadNotificationsCount = useMemo(() => {
+    return notifications.filter(notification => !notification.isRead).length;
+  }, [notifications]);
+
   // User management state
   const [selectedUser, setSelectedUser] = useState(null);
   const [userModalOpen, setUserModalOpen] = useState(false);
@@ -109,6 +124,13 @@ const AdminDashboard = () => {
     { id: 'users', label: 'User Management', icon: Users },
     { id: 'opportunities', label: 'Opportunities', icon: Briefcase },
     { id: 'profiles', label: 'Profiles', icon: User },
+    { id: 'messages', label: 'Messages', icon: MessageCircle, badge: unreadMessagesCount > 0 ? unreadMessagesCount : null },
+    { 
+      id: 'notifications', 
+      label: 'Notifications', 
+      icon: Bell,
+      badge: unreadNotificationsCount > 0 ? unreadNotificationsCount : null
+    },
     { id: 'reports', label: 'Reports', icon: TrendingUp },
     { id: 'settings', label: 'Settings', icon: Settings },
     { id: 'support', label: 'Help & Support', icon: HelpCircle }
@@ -1221,6 +1243,106 @@ const AdminDashboard = () => {
                   View Logs
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    if (activeItem === 'messages') {
+      return (
+        <div className="space-y-6">
+          <div className="flex justify-between items-center">
+            <h3 className="text-lg font-medium text-gray-900">System Messages</h3>
+            <div className="flex items-center space-x-2">
+              <span className="text-sm text-gray-500">
+                {unreadMessagesCount} unread messages
+              </span>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-lg border border-gray-200">
+            <div className="p-6">
+              {messages && messages.length > 0 ? (
+                <div className="space-y-4">
+                  {messages.slice(0, 10).map(message => {
+                    const senderId = typeof message.sender === 'object' ? message.sender._id : message.sender;
+                    const recipientId = typeof message.recipient === 'object' ? message.recipient._id : message.recipient;
+                    const currentUserId = typeof user._id === 'object' ? user._id.toString() : user._id;
+                    const isReceived = recipientId === currentUserId;
+                    const otherUserName = isReceived ? message.senderName : message.recipientName;
+                    
+                    return (
+                      <div key={message._id} className="p-4 bg-gray-50 rounded-lg">
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <p className="font-medium text-sm">{otherUserName || 'Unknown'}</p>
+                            <p className="text-xs text-gray-500 mt-1">{message.content}</p>
+                          </div>
+                          <div className="text-right">
+                            <span className="text-xs text-gray-400">
+                              {new Date(message.createdAt).toLocaleDateString()}
+                            </span>
+                            {!message.isRead && isReceived && (
+                              <span className="block bg-blue-500 text-white text-xs rounded-full px-2 py-1 mt-1">
+                                New
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <p className="text-gray-500 text-center py-8">No messages found</p>
+              )}
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    if (activeItem === 'notifications') {
+      return (
+        <div className="space-y-6">
+          <div className="flex justify-between items-center">
+            <h3 className="text-lg font-medium text-gray-900">System Notifications</h3>
+            <div className="flex items-center space-x-2">
+              <span className="text-sm text-gray-500">
+                {unreadNotificationsCount} unread notifications
+              </span>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-lg border border-gray-200">
+            <div className="p-6">
+              {notifications && notifications.length > 0 ? (
+                <div className="space-y-4">
+                  {notifications.slice(0, 10).map(notification => (
+                    <div key={notification._id} className="p-4 bg-gray-50 rounded-lg">
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <p className="font-medium text-sm">{notification.title}</p>
+                          <p className="text-xs text-gray-500 mt-1">{notification.message}</p>
+                        </div>
+                        <div className="text-right">
+                          <span className="text-xs text-gray-400">
+                            {new Date(notification.createdAt).toLocaleDateString()}
+                          </span>
+                          {!notification.isRead && (
+                            <span className="block bg-red-500 text-white text-xs rounded-full px-2 py-1 mt-1">
+                              New
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-gray-500 text-center py-8">No notifications found</p>
+              )}
             </div>
           </div>
         </div>

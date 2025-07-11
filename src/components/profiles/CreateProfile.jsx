@@ -123,6 +123,20 @@ const CreateProfile = ({ onProfileUpdated }) => {
             setExperience(p.experience || []);
             setAcademicRecords(p.academicRecords || []);
             setPortfolio(p.portfolio || []);
+            console.log('Loaded experience from profile:', p.experience);
+            console.log('Set experience state to:', p.experience || []);
+            
+            // Fix experience data if it's corrupted
+            if (p.experience && typeof p.experience === 'string') {
+              try {
+                const parsedExperience = JSON.parse(p.experience);
+                setExperience(Array.isArray(parsedExperience) ? parsedExperience : []);
+                console.log('Fixed corrupted experience data:', parsedExperience);
+              } catch (e) {
+                console.log('Could not parse experience data, using empty array');
+                setExperience([]);
+              }
+            }
             setSupportingDocuments((p.supportingDocuments || []).map(doc => ({ path: doc.path, originalname: doc.originalname })));
             if (p.photoUrl) {
               const photoUrl = p.photoUrl;
@@ -237,6 +251,7 @@ const CreateProfile = ({ onProfileUpdated }) => {
   const updateExperience = (index, field, value) => {
     const updatedExperience = [...experience];
     updatedExperience[index] = { ...updatedExperience[index], [field]: value };
+    console.log('Updating experience:', { index, field, value, updatedExperience });
     setExperience(updatedExperience);
   };
 
@@ -318,6 +333,25 @@ const CreateProfile = ({ onProfileUpdated }) => {
     setLoading(true);
     
     try {
+      console.log('=== FRONTEND PROFILE SUBMISSION ===');
+      console.log('User:', user);
+      console.log('Form data:', form);
+      console.log('Option:', option);
+      console.log('Files:', { document: files.document, profileImage });
+      console.log('Experience data:', experience);
+      console.log('Experience JSON:', JSON.stringify(experience));
+      console.log('Experience type:', typeof experience);
+      console.log('Experience is array:', Array.isArray(experience));
+      console.log('Talent fields:', {
+        talentCategory: form.talentCategory,
+        talentExperience: form.talentExperience,
+        talentDescription: form.talentDescription
+      });
+      
+      // Ensure experience is properly formatted
+      const cleanExperience = Array.isArray(experience) ? experience : [];
+      console.log('Clean experience to send:', cleanExperience);
+      
       const data = new FormData();
       data.append('option', option);
       data.append('fullName', form.fullName || '');
@@ -330,14 +364,23 @@ const CreateProfile = ({ onProfileUpdated }) => {
       data.append('language', JSON.stringify(form.language || []));
       data.append('tags', JSON.stringify(form.tags || []));
       data.append('education', JSON.stringify(education));
-      data.append('experience', JSON.stringify(experience));
+      data.append('experience', JSON.stringify(cleanExperience));
       data.append('academicRecords', JSON.stringify(academicRecords));
       data.append('portfolio', JSON.stringify(portfolio));
       data.append('highSchoolSubjects', form.highSchoolSubjects || '');
       data.append('desiredField', form.desiredField || '');
-      data.append('talentCategory', form.talentCategory || '');
-      data.append('talentExperience', form.talentExperience || '');
-      data.append('talentDescription', form.talentDescription || '');
+      
+      // Only append talent fields if they have values
+      if (form.talentCategory && form.talentCategory.trim() !== '') {
+        data.append('talentCategory', form.talentCategory);
+      }
+      if (form.talentExperience && form.talentExperience.trim() !== '') {
+        data.append('talentExperience', form.talentExperience);
+      }
+      if (form.talentDescription && form.talentDescription.trim() !== '') {
+        data.append('talentDescription', form.talentDescription);
+      }
+      
       if (typeof form.isPublic !== 'undefined') data.append('isPublic', form.isPublic);
       if (files.document) data.append('document', files.document);
       if (profileImage) data.append('profileImage', profileImage);
@@ -352,6 +395,12 @@ const CreateProfile = ({ onProfileUpdated }) => {
         data.append('supportingDocuments', doc.file);
       });
       
+      console.log('Token:', localStorage.getItem('token'));
+      console.log('FormData entries:');
+      for (let [key, value] of data.entries()) {
+        console.log(`${key}:`, value);
+      }
+      
       const response = await axios.post('http://localhost:5001/api/profiles', data, {
         headers: { 
           'Content-Type': 'multipart/form-data',
@@ -359,6 +408,7 @@ const CreateProfile = ({ onProfileUpdated }) => {
         }
       });
       
+      console.log('Backend response:', response.data);
       setSuccess(true);
       // Debug: Log what is returned
       console.log('Backend returned profile:', response.data.profile);
@@ -370,14 +420,27 @@ const CreateProfile = ({ onProfileUpdated }) => {
       if (onProfileUpdated) {
         await onProfileUpdated();
       } else {
-        // Redirect to refugee dashboard after successful save
+        // Show success message and redirect based on user role
+        const successMessage = existingProfile ? 'Profile updated successfully!' : 'Profile created successfully!';
+        console.log(successMessage);
+        
+        // Redirect to appropriate dashboard after successful save
         setTimeout(() => {
-          navigate('/refugee-dashboard');
+          if (user?.role === 'refugee') {
+            navigate('/refugee-dashboard');
+          } else if (user?.role === 'provider') {
+            navigate('/provider-dashboard');
+          } else {
+            navigate('/');
+          }
         }, 2000);
       }
       
     } catch (error) {
+      console.error('=== FRONTEND PROFILE ERROR ===');
       console.error('Error saving profile:', error);
+      console.error('Error response:', error.response?.data);
+      console.error('Error status:', error.response?.status);
       setError(error.response?.data?.message || error.response?.data?.error || 'Error saving profile');
     } finally {
       setLoading(false);

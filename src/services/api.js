@@ -15,7 +15,15 @@ api.interceptors.request.use(
     const token = localStorage.getItem('token');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
+      console.log('Request with token:', token.substring(0, 20) + '...');
+    } else {
+      console.log('No token found in localStorage');
     }
+    console.log('Request config:', {
+      method: config.method,
+      url: config.url,
+      data: config.data
+    });
     return config;
   },
   (error) => {
@@ -108,6 +116,7 @@ export const messagesAPI = {
 export const applicationsAPI = {
   getOpportunityApplications: (opportunityId) => api.get(`/applications/opportunity/${opportunityId}`),
   getProviderApplications: () => api.get('/applications/provider'),
+  getUserApplications: () => api.get('/applications/user'),
   updateStatus: (applicationId, data) => api.put(`/applications/${applicationId}/status`, data),
   getById: (applicationId) => api.get(`/applications/${applicationId}`)
 };

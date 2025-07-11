@@ -1,4 +1,5 @@
 import express from 'express';
+import User from '../models/UserModel.js';
 import {
   getAllUsers,
   getUserById,
@@ -11,8 +12,25 @@ import { protect, admin } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
 
-// All routes require admin access
-router.use(protect, admin);
+// Get user by email (for interview booking) - accessible to all authenticated users
+router.get('/by-email/:email', protect, async (req, res) => {
+  try {
+    const { email } = req.params;
+    const user = await User.findOne({ email });
+    
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+    
+    res.json({ user: { _id: user._id, email: user.email, role: user.role } });
+  } catch (error) {
+    console.error('Error finding user by email:', error);
+    res.status(500).json({ message: 'Error finding user' });
+  }
+});
+
+// All other routes require admin access
+router.use(admin);
 
 // Get all users with filtering and pagination
 router.get('/', getAllUsers);

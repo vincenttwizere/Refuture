@@ -1,5 +1,6 @@
 import Message from '../models/MessageModel.js';
 import User from '../models/UserModel.js';
+import mongoose from 'mongoose';
 
 // Helper function to verify recipient exists
 const verifyRecipient = async (recipientId) => {
@@ -17,13 +18,21 @@ const verifyRecipient = async (recipientId) => {
 // Helper function to verify recipient exists (by ID or email)
 const verifyRecipientFlexible = async (recipient) => {
   if (!recipient) throw new Error('Recipient is required');
+  console.log('Verifying recipient:', recipient, 'Type:', typeof recipient);
+  
   // If recipient looks like an email, find by email
   if (typeof recipient === 'string' && recipient.includes('@')) {
+    console.log('Looking up user by email:', recipient);
     const user = await User.findOne({ email: recipient });
-    if (!user) throw new Error('Recipient user not found by email');
+    if (!user) {
+      console.log('User not found by email:', recipient);
+      throw new Error('Recipient user not found by email');
+    }
+    console.log('User found by email:', user._id, user.email);
     return user;
   } else {
     // Otherwise, treat as user ID
+    console.log('Looking up user by ID:', recipient);
     return verifyRecipient(recipient);
   }
 };
@@ -85,40 +94,70 @@ export const sendMessage = async (req, res) => {
   try {
     let { recipient, content, metadata } = req.body;
     console.log('=== SEND MESSAGE DEBUG ===');
+    console.log('Request body:', req.body);
     console.log('Sender ID:', req.user._id);
     console.log('Sender email:', req.user.email);
     console.log('Recipient (ID or email):', recipient);
     console.log('Message content:', content);
     console.log('Metadata:', metadata);
     
-    // Verify recipient exists (by ID or email)
-    const recipientUser = await verifyRecipientFlexible(recipient);
-    console.log('Recipient verified:', {
-      id: recipientUser._id,
-      email: recipientUser.email,
-      firstName: recipientUser.firstName,
-      lastName: recipientUser.lastName
-    });
-    // Store recipientEmail for reference
-    const message = new Message({
-      sender: req.user._id,
-      recipient: recipientUser._id,
-      recipientEmail: recipientUser.email,
-      content,
-      metadata
-    });
+    if (!content) {
+      console.log('Error: Content is required');
+      return res.status(400).json({ success: false, message: 'Message content is required' });
+    }
     
-    console.log('Message object before save:', {
-      sender: message.sender,
-      recipient: message.recipient,
-      content: message.content,
-      metadata: message.metadata
-    });
+    if (!recipient) {
+      console.log('Error: Recipient is required');
+      return res.status(400).json({ success: false, message: 'Recipient is required' });
+    }
     
-    await message.save();
-    console.log('Message saved successfully with ID:', message._id);
-    console.log('=== END SEND MESSAGE DEBUG ===');
-    res.status(201).json({ success: true, message });
+    try {
+      // Verify recipient exists (by ID or email)
+      const recipientUser = await verifyRecipientFlexible(recipient);
+      console.log('Recipient verified:', {
+        id: recipientUser._id,
+        email: recipientUser.email,
+        firstName: recipientUser.firstName,
+        lastName: recipientUser.lastName
+      });
+      
+      // Prevent sending message to self
+      if (recipientUser._id.toString() === req.user._id.toString()) {
+        console.log('Error: Cannot send message to self');
+        return res.status(400).json({ 
+          success: false, 
+          message: 'Cannot send message to yourself' 
+        });
+      }
+      
+      // Create message object
+      const message = new Message({
+        sender: req.user._id,
+        recipient: recipientUser._id,
+        recipientEmail: recipientUser.email,
+        content,
+        metadata
+      });
+      
+      console.log('Message object before save:', {
+        sender: message.sender,
+        recipient: message.recipient,
+        content: message.content,
+        metadata: message.metadata
+      });
+      
+      await message.save();
+      console.log('Message saved successfully with ID:', message._id);
+      console.log('=== END SEND MESSAGE DEBUG ===');
+      res.status(201).json({ success: true, message });
+    } catch (verifyError) {
+      console.error('Error verifying recipient:', verifyError);
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Invalid recipient', 
+        error: verifyError.message 
+      });
+    }
   } catch (error) {
     console.error('Error sending message:', error);
     res.status(500).json({ success: false, message: 'Error sending message', error: error.message });
@@ -152,5 +191,37 @@ export const deleteMessage = async (req, res) => {
     res.json({ success: true, message: 'Message deleted' });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Error deleting message', error: error.message });
+  }
+};
+
+// Test endpoint to check if database is working
+export const testMessage = async (req, res) => {
+  try {
+    console.log('Testing message endpoint');
+    console.log('User:', req.user);
+    console.log('Database connection status:', mongoose.connection.readyState);
+    
+    // Test User model
+    const userCount = await User.countDocuments();
+    console.log('Total users in database:', userCount);
+    
+    // Test Message model
+    const messageCount = await Message.countDocuments();
+    console.log('Total messages in database:', messageCount);
+    
+    res.json({ 
+      success: true, 
+      message: 'Database connection working',
+      userCount,
+      messageCount,
+      userId: req.user._id
+    });
+  } catch (error) {
+    console.error('Test endpoint error:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Database test failed', 
+      error: error.message 
+    });
   }
 }; 

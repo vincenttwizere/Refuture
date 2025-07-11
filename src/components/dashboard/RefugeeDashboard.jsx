@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect, useRef } from 'react';
 import { 
   Home, 
   User, 
@@ -28,10 +28,11 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { useOpportunities } from '../../hooks/useOpportunities';
 import { useInterviews } from '../../hooks/useInterviews';
+import { useApplications } from '../../hooks/useApplications';
 import { useProfiles } from '../../hooks/useProfiles';
 import { useNotifications } from '../../hooks/useNotifications';
 import { useMessages } from '../../hooks/useMessages';
-import { messagesAPI } from '../../services/api';
+import { messagesAPI, notificationsAPI } from '../../services/api';
 import ProfileView from '../profiles/ProfileView';
 import CreateProfile from '../profiles/CreateProfile';
 import MessageCenter from '../messaging/MessageCenter';
@@ -63,6 +64,12 @@ const RefugeeDashboard = () => {
   } = useInterviews('refugee');
 
   const { 
+    applications, 
+    loading: applicationsLoading, 
+    error: applicationsError 
+  } = useApplications(null, 'refugee');
+
+  const { 
     profiles, 
     loading: profileLoading, 
     error: profileError,
@@ -77,12 +84,114 @@ const RefugeeDashboard = () => {
   const [conversations, setConversations] = useState([]);
   const [newMessage, setNewMessage] = useState('');
   const [sendingMessage, setSendingMessage] = useState(false);
+  const [showNewMessageToast, setShowNewMessageToast] = useState(false);
+  const [showNewNotificationToast, setShowNewNotificationToast] = useState(false);
+  const [showNewApplicationToast, setShowNewApplicationToast] = useState(false);
+  const [showNewInterviewToast, setShowNewInterviewToast] = useState(false);
+
+  // Settings state
+  const [settings, setSettings] = useState({
+    profileVisibility: profile?.isPublic || false,
+    emailNotifications: true,
+    pushNotifications: true,
+    showContactInfo: true,
+    showLocation: true,
+    language: 'English',
+    timeZone: 'UTC-5 (Eastern Time)',
+    email: user?.email || ''
+  });
+  const [savingSettings, setSavingSettings] = useState(false);
+  const [settingsSaved, setSettingsSaved] = useState(false);
+
+  // Track previous unread counts
+  const prevUnreadMessagesRef = useRef(0);
+  const prevUnreadNotificationsRef = useRef(0);
 
   // Calculate unread notifications count
   const unreadNotificationsCount = notifications.filter(notification => !notification.isRead).length;
 
   // Calculate unread messages count
   const unreadMessagesCount = messages.filter(message => !message.isRead && message.recipient === user?._id).length;
+
+  // Function to mark a message as read
+  const markMessageAsRead = async (messageId) => {
+    try {
+      await messagesAPI.markAsRead(messageId);
+      // Refetch messages to update the UI
+      refetchMessages();
+    } catch (error) {
+      console.error('Error marking message as read:', error);
+    }
+  };
+
+  // Function to mark a notification as read
+  const markNotificationAsRead = async (notificationId) => {
+    try {
+      await notificationsAPI.markAsRead(notificationId);
+      // Refetch notifications to update the UI
+      refetchNotifications();
+    } catch (error) {
+      console.error('Error marking notification as read:', error);
+    }
+  };
+
+  // Function to mark all messages in a conversation as read
+  const markConversationAsRead = async (conversation) => {
+    try {
+      // Mark all unread messages in this conversation as read
+      const unreadMessages = conversation.messages.filter(message => 
+        !message.isRead && message.recipient === user?._id
+      );
+      
+      for (const message of unreadMessages) {
+        await markMessageAsRead(message._id);
+      }
+    } catch (error) {
+      console.error('Error marking conversation as read:', error);
+    }
+  };
+
+  // Function to save settings
+  const saveSettings = async () => {
+    try {
+      setSavingSettings(true);
+      setSettingsSaved(false);
+      
+      // Simulate API call to save settings
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      // Update profile visibility if changed
+      if (settings.profileVisibility !== profile?.isPublic) {
+        // Here you would call the API to update the profile
+        console.log('Updating profile visibility:', settings.profileVisibility);
+      }
+      
+      // Save settings to localStorage for persistence
+      localStorage.setItem('userSettings', JSON.stringify(settings));
+      
+      setSettingsSaved(true);
+      setTimeout(() => setSettingsSaved(false), 3000);
+      
+      console.log('Settings saved:', settings);
+    } catch (error) {
+      console.error('Error saving settings:', error);
+    } finally {
+      setSavingSettings(false);
+    }
+  };
+
+  // Load settings from localStorage on component mount
+  useEffect(() => {
+    const savedSettings = localStorage.getItem('userSettings');
+    if (savedSettings) {
+      try {
+        const parsedSettings = JSON.parse(savedSettings);
+        setSettings(prev => ({ ...prev, ...parsedSettings }));
+      } catch (error) {
+        console.error('Error loading saved settings:', error);
+      }
+    }
+  }, []);
 
   // Group messages into conversations
   useEffect(() => {
@@ -233,6 +342,46 @@ const RefugeeDashboard = () => {
     console.log('Refugee Dashboard - Conversations:', conversations);
   }, [messages, messagesLoading, messagesError, conversations]);
 
+  // Show toast when new message arrives
+  useEffect(() => {
+    if (unreadMessagesCount > prevUnreadMessagesRef.current) {
+      setShowNewMessageToast(true);
+      setTimeout(() => setShowNewMessageToast(false), 3000);
+    }
+    prevUnreadMessagesRef.current = unreadMessagesCount;
+  }, [unreadMessagesCount]);
+
+  // Show toast when new notification arrives
+  useEffect(() => {
+    if (unreadNotificationsCount > prevUnreadNotificationsRef.current) {
+      setShowNewNotificationToast(true);
+      setTimeout(() => setShowNewNotificationToast(false), 3000);
+    }
+    prevUnreadNotificationsRef.current = unreadNotificationsCount;
+  }, [unreadNotificationsCount]);
+
+  // Track previous application and interview counts for real-time updates
+  const prevApplicationsRef = useRef(applications.length);
+  const prevInterviewsRef = useRef(interviews.length);
+
+  // Show toast when new application is submitted
+  useEffect(() => {
+    if (applications.length > prevApplicationsRef.current) {
+      setShowNewApplicationToast(true);
+      setTimeout(() => setShowNewApplicationToast(false), 3000);
+    }
+    prevApplicationsRef.current = applications.length;
+  }, [applications.length]);
+
+  // Show toast when new interview is scheduled
+  useEffect(() => {
+    if (interviews.length > prevInterviewsRef.current) {
+      setShowNewInterviewToast(true);
+      setTimeout(() => setShowNewInterviewToast(false), 3000);
+    }
+    prevInterviewsRef.current = interviews.length;
+  }, [interviews.length]);
+
   // Defensive loading state (must be after all hooks)
   if (loading) return <div className="min-h-screen flex items-center justify-center">Loading user...</div>;
   if (!user) return <div className="min-h-screen flex items-center justify-center text-red-600">User not found. Please log in again.</div>;
@@ -326,26 +475,44 @@ const RefugeeDashboard = () => {
   const renderMainContent = () => {
     if (activeItem === 'overview') {
       // Calculate real statistics
-      const activeApplications = interviews.filter(int => int.status === 'pending' || int.status === 'accepted').length;
-      const interviewsScheduled = interviews.filter(int => int.status === 'accepted').length;
+      const activeApplications = applications.filter(app => 
+        app.status === 'pending' || app.status === 'accepted' || app.status === 'under_review'
+      ).length;
+      
+      const interviewsScheduled = interviews.filter(int => 
+        int.status === 'accepted' || int.status === 'scheduled'
+      ).length;
+      
       const newOpportunities = opportunities.filter(opp => opp.isActive).length;
+
+      // Debug logging
+      console.log('Refugee Dashboard Stats:', {
+        applications: applications.length,
+        activeApplications,
+        interviews: interviews.length,
+        interviewsScheduled,
+        opportunities: opportunities.length,
+        newOpportunities,
+        applicationsData: applications,
+        interviewsData: interviews
+      });
 
       return (
         <div className="space-y-6">
           {/* Error Display */}
-          {(opportunitiesError || interviewsError || profileError) && (
+          {(opportunitiesError || interviewsError || applicationsError || profileError) && (
             <div className="bg-red-50 border border-red-200 rounded-lg p-4">
               <div className="flex items-center">
                 <AlertCircle className="h-5 w-5 text-red-400 mr-2" />
                 <p className="text-red-800 text-sm">
-                  {opportunitiesError || interviewsError || profileError}
+                  {opportunitiesError || interviewsError || applicationsError || profileError}
                 </p>
               </div>
             </div>
           )}
 
           {/* Loading State */}
-          {(opportunitiesLoading || interviewsLoading || profileLoading) && (
+          {(opportunitiesLoading || interviewsLoading || applicationsLoading || profileLoading) && (
             <div className="space-y-4">
               <div className="animate-pulse">
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -358,7 +525,7 @@ const RefugeeDashboard = () => {
           )}
 
           {/* Real Data Display */}
-          {!opportunitiesLoading && !interviewsLoading && !profileLoading && (
+          {!opportunitiesLoading && !interviewsLoading && !applicationsLoading && !profileLoading && (
             <>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="bg-blue-50 p-4 rounded-lg">
@@ -378,27 +545,53 @@ const RefugeeDashboard = () => {
               <div>
                 <h3 className="font-medium text-gray-900 mb-3">Recent Activity</h3>
                 <div className="space-y-2">
-                  {interviews.slice(0, 3).map((interview) => (
-                    <div key={interview._id} className="flex items-center text-sm">
+                  {/* Show recent applications and interviews */}
+                  {[...applications.slice(0, 2), ...interviews.slice(0, 2)]
+                    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+                    .slice(0, 4)
+                    .map((item) => {
+                      const isApplication = item.hasOwnProperty('opportunityId');
+                      return (
+                        <div key={item._id} className="flex items-center text-sm">
                       <div className={`w-2 h-2 rounded-full mr-3 ${
-                        interview.status === 'pending' ? 'bg-yellow-500' :
-                        interview.status === 'accepted' ? 'bg-green-500' :
-                        interview.status === 'declined' ? 'bg-red-500' :
+                            isApplication ? (
+                              item.status === 'pending' ? 'bg-yellow-500' :
+                              item.status === 'accepted' ? 'bg-green-500' :
+                              item.status === 'rejected' ? 'bg-red-500' :
                         'bg-blue-500'
+                            ) : (
+                              item.status === 'pending' ? 'bg-yellow-500' :
+                              item.status === 'accepted' ? 'bg-green-500' :
+                              item.status === 'declined' ? 'bg-red-500' :
+                              'bg-blue-500'
+                            )
                       }`}></div>
                       <span>
-                        {interview.status === 'pending' ? 'Interview invitation received from ' :
-                         interview.status === 'accepted' ? 'Interview accepted with ' :
-                         interview.status === 'declined' ? 'Interview declined with ' :
+                            {isApplication ? (
+                              <>
+                                {item.status === 'pending' ? 'Application submitted for ' :
+                                 item.status === 'accepted' ? 'Application accepted for ' :
+                                 item.status === 'rejected' ? 'Application rejected for ' :
+                                 'Application for '}
+                                {item.opportunityId?.title || 'Opportunity'}
+                              </>
+                            ) : (
+                              <>
+                                {item.status === 'pending' ? 'Interview invitation received from ' :
+                                 item.status === 'accepted' ? 'Interview accepted with ' :
+                                 item.status === 'declined' ? 'Interview declined with ' :
                          'Interview with '}
-                        {interview.providerId?.firstName} {interview.providerId?.lastName}
+                                {item.providerId?.firstName} {item.providerId?.lastName}
+                              </>
+                            )}
                       </span>
                       <span className="text-gray-500 ml-auto">
-                        {new Date(interview.createdAt).toLocaleDateString()}
+                            {new Date(item.createdAt).toLocaleDateString()}
                       </span>
                     </div>
-                  ))}
-                  {interviews.length === 0 && (
+                      );
+                    })}
+                  {applications.length === 0 && interviews.length === 0 && (
                     <div className="text-center py-8 text-gray-500">
                       <MessageCircle className="h-12 w-12 mx-auto mb-2 text-gray-300" />
                       <p>No recent activity</p>
@@ -495,23 +688,23 @@ const RefugeeDashboard = () => {
                       </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-100">
-                      {filteredOpportunities.map((opportunity) => (
+                  {filteredOpportunities.map((opportunity) => (
                         <tr key={opportunity._id} className="hover:bg-blue-50 transition-colors">
                           <td className="px-4 py-2">
                             <span className="font-semibold text-gray-900">{opportunity.title}</span>
                           </td>
                           <td className="px-4 py-2 text-gray-700">{opportunity.providerName}</td>
                           <td className="px-4 py-2">
-                            <span className={`text-xs px-2 py-1 rounded-full ${
-                              opportunity.type === 'scholarship' ? 'bg-green-100 text-green-800' :
-                              opportunity.type === 'job' ? 'bg-blue-100 text-blue-800' :
-                              opportunity.type === 'mentorship' ? 'bg-purple-100 text-purple-800' :
-                              opportunity.type === 'internship' ? 'bg-yellow-100 text-yellow-800' :
-                              opportunity.type === 'funding' ? 'bg-orange-100 text-orange-800' :
-                              'bg-gray-100 text-gray-800'
-                            }`}>
-                              {opportunity.type}
-                            </span>
+                        <span className={`text-xs px-2 py-1 rounded-full ${
+                          opportunity.type === 'scholarship' ? 'bg-green-100 text-green-800' :
+                          opportunity.type === 'job' ? 'bg-blue-100 text-blue-800' :
+                          opportunity.type === 'mentorship' ? 'bg-purple-100 text-purple-800' :
+                          opportunity.type === 'internship' ? 'bg-yellow-100 text-yellow-800' :
+                          opportunity.type === 'funding' ? 'bg-orange-100 text-orange-800' :
+                          'bg-gray-100 text-gray-800'
+                        }`}>
+                          {opportunity.type}
+                        </span>
                           </td>
                           <td className="px-4 py-2 text-gray-700">{opportunity.location}</td>
                           <td className="px-4 py-2 text-gray-700">{opportunity.category}</td>
@@ -519,12 +712,12 @@ const RefugeeDashboard = () => {
                             {new Date(opportunity.applicationDeadline).toLocaleDateString()}
                           </td>
                           <td className="px-4 py-2">
-                            <button 
-                              onClick={() => navigate(`/opportunity/${opportunity._id}`)}
+                        <button 
+                          onClick={() => navigate(`/opportunity/${opportunity._id}`)}
                               className="bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700 text-sm"
-                            >
+                        >
                               View
-                            </button>
+                        </button>
                           </td>
                         </tr>
                       ))}
@@ -567,7 +760,7 @@ const RefugeeDashboard = () => {
                   placeholder="Search conversations..."
                   className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 />
-              </div>
+            </div>
             </div>
 
             {/* Conversations List */}
@@ -577,7 +770,7 @@ const RefugeeDashboard = () => {
                   conversations.map((conversation) => (
                     <div
                       key={conversation.userId}
-                      onClick={() => {
+                      onClick={async () => {
                         console.log('Selected conversation:', {
                           userId: conversation.userId,
                           userName: conversation.userName,
@@ -592,6 +785,9 @@ const RefugeeDashboard = () => {
                           }))
                         });
                         setSelectedConversation(conversation);
+                        
+                        // Mark all unread messages in this conversation as read
+                        await markConversationAsRead(conversation);
                       }}
                       className={`p-4 border-b border-gray-100 cursor-pointer hover:bg-gray-50 transition-colors ${
                         selectedConversation?.userId === conversation.userId ? 'bg-blue-50 border-l-4 border-l-blue-500' : ''
@@ -657,12 +853,12 @@ const RefugeeDashboard = () => {
                         <div className="flex-1">
                           <div className="h-4 bg-gray-200 rounded w-3/4 mb-2"></div>
                           <div className="h-3 bg-gray-200 rounded w-1/2"></div>
-                        </div>
-                      </div>
+                </div>
+              </div>
                     </div>
                   ))}
-                </div>
-              )}
+            </div>
+          )}
             </div>
           </div>
 
@@ -675,11 +871,11 @@ const RefugeeDashboard = () => {
                   <div className="flex items-center space-x-3">
                     <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-medium ${getAvatarColor(selectedConversation.userName)}`}>
                       {getInitials(selectedConversation.userName)}
-                    </div>
-                    <div>
+              </div>
+                        <div>
                       <h2 className="text-lg font-semibold text-gray-900">{selectedConversation.userName}</h2>
                       <p className="text-sm text-green-500">Open Conversation</p>
-                    </div>
+                        </div>
                   </div>
                 </div>
 
@@ -705,19 +901,19 @@ const RefugeeDashboard = () => {
                               <div className="flex items-center justify-end mb-1">
                                 <span className="text-xs text-gray-500">
                                   {new Date(message.createdAt).toLocaleString()}
-                                </span>
-                              </div>
+                        </span>
+                      </div>
                               <p className={`${isOwnMessage ? 'text-white' : 'text-gray-800'}`}>
                                 {message.content}
                               </p>
-                            </div>
+                          </div>
                           </div>
                         </div>
                       );
                     })}
-                  </div>
-                </div>
-
+                          </div>
+                        </div>
+                        
                 {/* Input Area */}
                 <div className="bg-white border-t border-gray-200 px-6 py-4">
                   <div className="max-w-4xl mx-auto flex items-center space-x-4">
@@ -736,9 +932,9 @@ const RefugeeDashboard = () => {
                       className="px-6 py-2 bg-blue-500 text-white rounded-full hover:bg-blue-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       {sendingMessage ? 'Sending...' : 'Send'}
-                    </button>
-                  </div>
-                </div>
+                          </button>
+                        </div>
+                      </div>
               </>
             ) : (
               /* No Conversation Selected */
@@ -748,8 +944,8 @@ const RefugeeDashboard = () => {
                   <h3 className="text-lg font-medium text-gray-900 mb-2">Select a conversation</h3>
                   <p className="text-gray-500">Choose a conversation from the sidebar to start messaging</p>
                 </div>
-              </div>
-            )}
+                </div>
+          )}
           </div>
         </div>
       );
@@ -1131,21 +1327,13 @@ const RefugeeDashboard = () => {
             <h3 className="text-lg font-semibold text-gray-900">Notifications</h3>
             <div className="flex space-x-2">
               <button 
-                onClick={() => {
+                onClick={async () => {
                   // Mark all notifications as read
-                  notifications.forEach(notification => {
+                  for (const notification of notifications) {
                     if (!notification.isRead) {
-                      // Call API to mark as read
-                      fetch(`http://localhost:5001/api/notifications/${notification._id}/read`, {
-                        method: 'PUT',
-                        headers: {
-                          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-                          'Content-Type': 'application/json'
-                        }
-                      });
+                      await markNotificationAsRead(notification._id);
                     }
-                  });
-                  refetchNotifications();
+                  }
                 }}
                 className="bg-gray-100 text-gray-700 px-3 py-2 rounded-lg text-sm hover:bg-gray-200 transition-colors"
               >
@@ -1167,16 +1355,10 @@ const RefugeeDashboard = () => {
                   className={`bg-white rounded-lg shadow border p-4 cursor-pointer transition-colors ${
                     !notification.isRead ? 'border-blue-200 bg-blue-50' : 'border-gray-200'
                   }`}
-                  onClick={() => {
+                  onClick={async () => {
                     // Mark notification as read
                     if (!notification.isRead) {
-                      fetch(`http://localhost:5001/api/notifications/${notification._id}/read`, {
-                        method: 'PUT',
-                        headers: {
-                          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-                          'Content-Type': 'application/json'
-                        }
-                      }).then(() => refetchNotifications());
+                      await markNotificationAsRead(notification._id);
                     }
                     
                     // Navigate based on notification type
@@ -1268,7 +1450,8 @@ const RefugeeDashboard = () => {
                     <input 
                       type="checkbox" 
                       className="sr-only peer" 
-                      defaultChecked={profile?.isPublic}
+                      checked={settings.profileVisibility}
+                      onChange={(e) => setSettings(prev => ({ ...prev, profileVisibility: e.target.checked }))}
                     />
                     <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
                   </label>
@@ -1279,7 +1462,12 @@ const RefugeeDashboard = () => {
                     <p className="text-xs text-gray-500">Receive email updates about opportunities</p>
                   </div>
                   <label className="relative inline-flex items-center cursor-pointer">
-                    <input type="checkbox" className="sr-only peer" defaultChecked />
+                    <input 
+                      type="checkbox" 
+                      className="sr-only peer" 
+                      checked={settings.emailNotifications}
+                      onChange={(e) => setSettings(prev => ({ ...prev, emailNotifications: e.target.checked }))}
+                    />
                     <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
                   </label>
                 </div>
@@ -1289,7 +1477,12 @@ const RefugeeDashboard = () => {
                     <p className="text-xs text-gray-500">Receive notifications in your browser</p>
                   </div>
                   <label className="relative inline-flex items-center cursor-pointer">
-                    <input type="checkbox" className="sr-only peer" defaultChecked />
+                    <input 
+                      type="checkbox" 
+                      className="sr-only peer" 
+                      checked={settings.pushNotifications}
+                      onChange={(e) => setSettings(prev => ({ ...prev, pushNotifications: e.target.checked }))}
+                    />
                     <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
                   </label>
                 </div>
@@ -1309,7 +1502,12 @@ const RefugeeDashboard = () => {
                     <p className="text-xs text-gray-500">Display your email and phone to providers</p>
                   </div>
                   <label className="relative inline-flex items-center cursor-pointer">
-                    <input type="checkbox" className="sr-only peer" defaultChecked />
+                    <input 
+                      type="checkbox" 
+                      className="sr-only peer" 
+                      checked={settings.showContactInfo}
+                      onChange={(e) => setSettings(prev => ({ ...prev, showContactInfo: e.target.checked }))}
+                    />
                     <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
                   </label>
                 </div>
@@ -1319,7 +1517,12 @@ const RefugeeDashboard = () => {
                     <p className="text-xs text-gray-500">Display your current location</p>
                   </div>
                   <label className="relative inline-flex items-center cursor-pointer">
-                    <input type="checkbox" className="sr-only peer" defaultChecked />
+                    <input 
+                      type="checkbox" 
+                      className="sr-only peer" 
+                      checked={settings.showLocation}
+                      onChange={(e) => setSettings(prev => ({ ...prev, showLocation: e.target.checked }))}
+                    />
                     <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
                   </label>
                 </div>
@@ -1337,13 +1540,18 @@ const RefugeeDashboard = () => {
                   <label className="block text-sm font-medium text-gray-700 mb-2">Email Address</label>
                   <input
                     type="email"
-                    defaultValue={user?.email}
+                    value={settings.email}
+                    onChange={(e) => setSettings(prev => ({ ...prev, email: e.target.value }))}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Language</label>
-                  <select className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                  <select 
+                    value={settings.language}
+                    onChange={(e) => setSettings(prev => ({ ...prev, language: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
                     <option>English</option>
                     <option>Spanish</option>
                     <option>French</option>
@@ -1352,7 +1560,11 @@ const RefugeeDashboard = () => {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Time Zone</label>
-                  <select className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                  <select 
+                    value={settings.timeZone}
+                    onChange={(e) => setSettings(prev => ({ ...prev, timeZone: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
                     <option>UTC-5 (Eastern Time)</option>
                     <option>UTC-6 (Central Time)</option>
                     <option>UTC-7 (Mountain Time)</option>
@@ -1363,9 +1575,23 @@ const RefugeeDashboard = () => {
             </div>
 
             {/* Save Button */}
-            <div className="flex justify-end">
-              <button className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition-colors">
-                Save Settings
+            <div className="flex justify-end items-center space-x-3">
+              {settingsSaved && (
+                <div className="text-green-600 text-sm flex items-center">
+                  <span className="w-2 h-2 bg-green-600 rounded-full mr-2"></span>
+                  Settings saved successfully!
+                </div>
+              )}
+              <button 
+                onClick={saveSettings}
+                disabled={savingSettings}
+                className={`px-6 py-2 rounded-lg transition-colors ${
+                  savingSettings 
+                    ? 'bg-gray-400 text-white cursor-not-allowed' 
+                    : 'bg-blue-600 text-white hover:bg-blue-700'
+                }`}
+              >
+                {savingSettings ? 'Saving...' : 'Save Settings'}
               </button>
             </div>
           </div>
@@ -1595,6 +1821,27 @@ const RefugeeDashboard = () => {
   };
 
   return (
+    <div>
+          {showNewMessageToast && (
+      <div className="fixed top-4 right-4 z-50 bg-blue-600 text-white px-4 py-2 rounded shadow-lg animate-fade-in">
+        New message received!
+      </div>
+    )}
+    {showNewNotificationToast && (
+      <div className="fixed top-4 right-4 z-50 bg-green-600 text-white px-4 py-2 rounded shadow-lg animate-fade-in">
+        New notification received!
+      </div>
+    )}
+    {showNewApplicationToast && (
+      <div className="fixed top-4 right-4 z-50 bg-orange-600 text-white px-4 py-2 rounded shadow-lg animate-fade-in">
+        New application submitted!
+      </div>
+    )}
+    {showNewInterviewToast && (
+      <div className="fixed top-4 right-4 z-50 bg-purple-600 text-white px-4 py-2 rounded shadow-lg animate-fade-in">
+        New interview scheduled!
+      </div>
+    )}
     <div className="flex h-screen bg-gray-50">
       {/* Sidebar - Fixed */}
       <div className="w-80 bg-white shadow-lg fixed h-full overflow-y-auto">
@@ -1635,13 +1882,14 @@ const RefugeeDashboard = () => {
             </div>
           </div>
         </div>
+        </div>
+        
+        {/* MessageCenter Modal */}
+        <MessageCenter
+          isOpen={showMessageCenter}
+          onClose={() => setShowMessageCenter(false)}
+        />
       </div>
-      
-      {/* MessageCenter Modal */}
-      <MessageCenter
-        isOpen={showMessageCenter}
-        onClose={() => setShowMessageCenter(false)}
-      />
     </div>
   );
 };
