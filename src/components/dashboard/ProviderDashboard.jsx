@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback, useEffect } from 'react';
+import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { 
   Home, 
   Users, 
@@ -37,7 +37,8 @@ import {
   ArrowLeft,
   BookOpen,
   Languages,
-  Palette
+  Palette,
+  Search
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
@@ -146,17 +147,125 @@ const ProviderDashboard = () => {
   const { messages, loading: messagesLoading, error: messagesError, refetch: refetchMessages } = useMessages();
   const { applications, loading: applicationsLoading, error: applicationsError, refetch: refetchApplications, updateApplicationStatus } = useApplications();
   const [showMessageCenter, setShowMessageCenter] = useState(false);
+  const [selectedConversation, setSelectedConversation] = useState(null);
+  const [conversations, setConversations] = useState([]);
+  const [newMessage, setNewMessage] = useState('');
+  const [sendingMessage, setSendingMessage] = useState(false);
+  const [showNewMessageToast, setShowNewMessageToast] = useState(false);
+  const [showNewNotificationToast, setShowNewNotificationToast] = useState(false);
 
   // Success toast state
   const [showSuccessToast, setShowSuccessToast] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
   const [isUpdatingProfile, setIsUpdatingProfile] = useState(false);
 
+  // Track previous unread counts
+  const prevUnreadMessagesRef = useRef(0);
+  const prevUnreadNotificationsRef = useRef(0);
+
   // Function to show success toast
   const displaySuccessToast = (message) => {
     setSuccessMessage(message);
     setShowSuccessToast(true);
     setTimeout(() => setShowSuccessToast(false), 5000);
+  };
+
+  // Function to mark a message as read
+  const markMessageAsRead = async (messageId) => {
+    try {
+      await messagesAPI.markAsRead(messageId);
+      // Refetch messages to update the UI
+      refetchMessages();
+    } catch (error) {
+      console.error('Error marking message as read:', error);
+    }
+  };
+
+  // Function to mark a notification as read
+  const markNotificationAsRead = async (notificationId) => {
+    try {
+      await notificationsAPI.markAsRead(notificationId);
+      // Refetch notifications to update the UI
+      refetchNotifications();
+    } catch (error) {
+      console.error('Error marking notification as read:', error);
+    }
+  };
+
+  // Function to mark all messages in a conversation as read
+  const markConversationAsRead = async (conversation) => {
+    try {
+      // Mark all unread messages in this conversation as read
+      const unreadMessages = conversation.messages.filter(message => 
+        !message.isRead && message.recipient === user?._id
+      );
+      
+      for (const message of unreadMessages) {
+        await markMessageAsRead(message._id);
+      }
+    } catch (error) {
+      console.error('Error marking conversation as read:', error);
+    }
+  };
+
+  // Helper functions for avatar and initials
+  const getAvatarColor = (name) => {
+    const colors = [
+      'bg-blue-500', 'bg-green-500', 'bg-purple-500', 'bg-pink-500', 
+      'bg-indigo-500', 'bg-yellow-500', 'bg-red-500', 'bg-teal-500'
+    ];
+    const hash = name.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+    return colors[hash % colors.length];
+  };
+
+  const getInitials = (name) => {
+    if (!name) return '';
+    const names = name.split(' ');
+    if (names.length === 1) return names[0].charAt(0).toUpperCase();
+    return names[0].charAt(0).toUpperCase() + names[names.length - 1].charAt(0).toUpperCase();
+  };
+
+  // Send message function
+  const sendMessage = async () => {
+    if (!newMessage.trim() || !selectedConversation || sendingMessage) return;
+
+    try {
+      setSendingMessage(true);
+      
+      const messageData = {
+        recipient: selectedConversation.userId,
+        content: newMessage.trim(),
+        metadata: {
+          type: 'direct_message'
+        }
+      };
+
+      console.log('Sending message:', messageData);
+      
+      // Send the message using the messages API service
+      const response = await messagesAPI.send(messageData);
+      console.log('Message sent successfully:', response.data);
+
+      // Clear the input
+      setNewMessage('');
+      
+      // Refresh messages to show the new message
+      refetchMessages();
+      
+    } catch (error) {
+      console.error('Error sending message:', error);
+      alert('Failed to send message. Please try again.');
+    } finally {
+      setSendingMessage(false);
+    }
+  };
+
+  // Handle Enter key press
+  const handleKeyPress = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage();
+    }
   };
 
   // Calculate unread messages count
@@ -281,10 +390,16 @@ const ProviderDashboard = () => {
       badge: applications.filter(app => app.status === 'pending').length > 0 ? applications.filter(app => app.status === 'pending').length : null
     },
     { 
+      id: 'messages', 
+      label: 'Messages', 
+      icon: MessageCircle,
+      badge: unreadMessagesCount > 0 ? unreadMessagesCount : null
+    },
+    { 
       id: 'communications', 
       label: 'Communications', 
       icon: MessageCircle,
-      badge: (unreadMessagesCount + unreadNotificationsCount) > 0 ? (unreadMessagesCount + unreadNotificationsCount) : null
+      badge: unreadNotificationsCount > 0 ? unreadNotificationsCount : null
     },
     { id: 'analytics', label: 'Analytics', icon: BarChart3 },
     { id: 'interviews', label: 'Interview Manager', icon: Calendar },
@@ -2384,6 +2499,173 @@ const ProviderDashboard = () => {
       alert('Failed to cancel interview.');
     }
   };
+
+  // Group messages into conversations
+  useEffect(() => {
+    if (messages.length > 0) {
+      console.log('=== START MESSAGE GROUPING ===');
+      console.log('Raw messages from API:', messages);
+      console.log('Current user ID:', user._id);
+      
+      // Create a map to group messages by conversation partner
+      const conversationMap = new Map();
+      
+      messages.forEach(message => {
+        const isReceived = message.recipient === user._id;
+        const otherUserId = isReceived ? message.sender : message.recipient;
+        const otherUserName = isReceived ? message.senderName : message.recipientName;
+        
+        console.log('Processing message:', {
+          messageId: message._id,
+          content: message.content.substring(0, 30) + '...',
+          isReceived,
+          otherUserId,
+          otherUserName,
+          sender: message.sender,
+          recipient: message.recipient,
+          senderName: message.senderName,
+          recipientName: message.recipientName,
+          currentUserId: user._id,
+          senderType: typeof message.sender,
+          recipientType: typeof message.recipient,
+          currentUserIdType: typeof user._id
+        });
+        
+        // Check if user IDs are strings or objects
+        const senderId = typeof message.sender === 'object' ? message.sender._id : message.sender;
+        const recipientId = typeof message.recipient === 'object' ? message.recipient._id : message.recipient;
+        const currentUserId = typeof user._id === 'object' ? user._id.toString() : user._id;
+        
+        console.log('Normalized IDs:', {
+          senderId,
+          recipientId,
+          currentUserId,
+          isReceivedAfterNormalization: recipientId === currentUserId
+        });
+        
+        const normalizedIsReceived = recipientId === currentUserId;
+        const normalizedOtherUserId = normalizedIsReceived ? senderId : recipientId;
+        
+        // Determine the conversation partner name - always show the other person's name
+        let normalizedOtherUserName;
+        if (normalizedIsReceived) {
+          // Message was received by current user, so show sender's name
+          normalizedOtherUserName = message.senderName;
+        } else {
+          // Message was sent by current user, so show recipient's name
+          normalizedOtherUserName = message.recipientName;
+        }
+        
+        console.log('Conversation partner determination:', {
+          isReceived: normalizedIsReceived,
+          otherUserId: normalizedOtherUserId,
+          otherUserName: normalizedOtherUserName,
+          senderName: message.senderName,
+          recipientName: message.recipientName,
+          currentUserName: user.firstName + ' ' + user.lastName
+        });
+        
+        if (!conversationMap.has(normalizedOtherUserId)) {
+          conversationMap.set(normalizedOtherUserId, {
+            userId: normalizedOtherUserId,
+            userName: normalizedOtherUserName,
+            messages: [],
+            messageCount: 0,
+            unreadCount: 0,
+            lastMessage: null,
+            date: '',
+            status: 'Open Conversation'
+          });
+        }
+        
+        const conversation = conversationMap.get(normalizedOtherUserId);
+        conversation.messages.push(message);
+        conversation.messageCount = conversation.messages.length;
+        
+        // Update last message if this one is more recent
+        if (!conversation.lastMessage || new Date(message.createdAt) > new Date(conversation.lastMessage.createdAt)) {
+          conversation.lastMessage = message;
+          conversation.date = new Date(message.createdAt).toLocaleDateString();
+        }
+        
+        // Count unread messages
+        if (normalizedIsReceived && !message.isRead) {
+          conversation.unreadCount++;
+        }
+      });
+      
+      // Convert map to array and sort messages within each conversation
+      const conversations = Array.from(conversationMap.values()).map(conversation => {
+        // Sort messages by date
+        conversation.messages.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+        console.log(`Conversation with ${conversation.userName}: ${conversation.messages.length} messages`);
+        return conversation;
+      });
+      
+      // Sort conversations by most recent message
+      const sortedConversations = conversations.sort((a, b) => 
+        new Date(b.lastMessage.createdAt) - new Date(a.lastMessage.createdAt)
+      );
+      
+      console.log('Final grouped conversations:', sortedConversations.map(c => ({
+        userName: c.userName,
+        userId: c.userId,
+        messageCount: c.messages.length,
+        unreadCount: c.unreadCount,
+        lastMessage: c.lastMessage.content.substring(0, 50)
+      })));
+      console.log('=== END MESSAGE GROUPING ===');
+      
+      setConversations(sortedConversations);
+    } else {
+      console.log('No messages to group');
+      setConversations([]);
+    }
+  }, [messages, user._id]);
+
+  // Real-time polling for notifications (every 30 seconds)
+  useEffect(() => {
+    const interval = setInterval(() => {
+      refetchNotifications();
+    }, 30000);
+
+    return () => clearInterval(interval);
+  }, [refetchNotifications]);
+
+  // Real-time polling for messages (every 30 seconds)
+  useEffect(() => {
+    const interval = setInterval(() => {
+      refetchMessages();
+    }, 30000);
+
+    return () => clearInterval(interval);
+  }, [refetchMessages]);
+
+  // Debug logging for messages
+  useEffect(() => {
+    console.log('Provider Dashboard - Messages:', messages);
+    console.log('Provider Dashboard - Messages Loading:', messagesLoading);
+    console.log('Provider Dashboard - Messages Error:', messagesError);
+    console.log('Provider Dashboard - Conversations:', conversations);
+  }, [messages, messagesLoading, messagesError, conversations]);
+
+  // Show toast when new message arrives
+  useEffect(() => {
+    if (unreadMessagesCount > prevUnreadMessagesRef.current) {
+      setShowNewMessageToast(true);
+      setTimeout(() => setShowNewMessageToast(false), 3000);
+    }
+    prevUnreadMessagesRef.current = unreadMessagesCount;
+  }, [unreadMessagesCount]);
+
+  // Show toast when new notification arrives
+  useEffect(() => {
+    if (unreadNotificationsCount > prevUnreadNotificationsRef.current) {
+      setShowNewNotificationToast(true);
+      setTimeout(() => setShowNewNotificationToast(false), 3000);
+    }
+    prevUnreadNotificationsRef.current = unreadNotificationsCount;
+  }, [unreadNotificationsCount]);
 
   return (
     <div className="h-screen bg-gray-50 flex flex-col">
