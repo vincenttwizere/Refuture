@@ -32,6 +32,6 @@ export const usePlatformStats = () => {
     stats,
     loading,
     error,
-    refetch: fetchStats
+    refetchStats: fetchStats
   };
 }; 

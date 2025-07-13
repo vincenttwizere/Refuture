@@ -1,4 +1,4 @@
-﻿import { useState, useEffect } from 'react';
+﻿import { useState, useEffect, useCallback } from 'react';
 import { profilesAPI } from '../services/api';
 
 export const useProfiles = (filters = {}) => {
@@ -6,7 +6,7 @@ export const useProfiles = (filters = {}) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  const fetchProfiles = async (params = {}) => {
+  const fetchProfiles = useCallback(async (params = {}) => {
     try {
       setLoading(true);
       setError(null);
@@ -18,12 +18,12 @@ export const useProfiles = (filters = {}) => {
       
       setProfiles(response.data.profiles || []);
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to fetch profiles');
+      setError(err.response?.data?.message || err.message || 'Failed to fetch profiles');
       console.error('Error fetching profiles:', err);
     } finally {
       setLoading(false);
     }
-  };
+  }, [filters]);
 
   const createProfile = async (profileData) => {
     try {
@@ -66,7 +66,7 @@ export const useProfiles = (filters = {}) => {
 
   useEffect(() => {
     fetchProfiles();
-  }, [JSON.stringify(filters)]);
+  }, [fetchProfiles]);
 
   return {
     profiles,

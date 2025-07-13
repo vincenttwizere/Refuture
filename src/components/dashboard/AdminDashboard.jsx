@@ -71,8 +71,8 @@ const AdminDashboard = () => {
   const { notifications } = useNotifications();
   const { messages } = useMessages();
   const { users, loading: usersLoading, error: usersError, fetchUsers, updateUserStatus, deleteUser, refetchUsers } = useUsers();
-  const { profiles, loading: profilesLoading, error: profilesError, fetchProfiles, deleteProfile, refetchProfiles } = useProfiles();
-  const { opportunities, loading: opportunitiesLoading, error: opportunitiesError, fetchOpportunities, deleteOpportunity, refetchOpportunities } = useOpportunities();
+  const { profiles, loading: profilesLoading, error: profilesError, fetchProfiles, deleteProfile, refetch: refetchProfiles } = useProfiles();
+  const { opportunities, loading: opportunitiesLoading, error: opportunitiesError, fetchOpportunities, deleteOpportunity, updateOpportunityStatus, refetch: refetchOpportunities } = useOpportunities();
   const { stats, loading: statsLoading, error: statsError, refetchStats } = usePlatformStats();
 
   // Calculate unread messages count
@@ -110,6 +110,9 @@ const AdminDashboard = () => {
   // Defensive loading state (must be after all hooks)
   if (loading) return <div className="min-h-screen flex items-center justify-center">Loading user...</div>;
   if (!user) return <div className="min-h-screen flex items-center justify-center text-red-600">User not found. Please log in again.</div>;
+  
+  // Debug logging to prevent infinite re-renders
+  console.log('AdminDashboard render - user:', user?._id, 'activeItem:', activeItem);
 
   const toggleSection = (section) => {
     setExpandedSections(prev => ({
@@ -213,13 +216,8 @@ const AdminDashboard = () => {
   // Handle opportunity status update
   const handleOpportunityStatusUpdate = async (opportunityId, newStatus) => {
     try {
-      // You may need to implement updateOpportunityStatus in your useOpportunities hook
-      if (typeof updateOpportunityStatus === 'function') {
-        await updateOpportunityStatus(opportunityId, newStatus);
-        refetchOpportunities();
-      } else {
-        alert('Status update not implemented.');
-      }
+      await updateOpportunityStatus(opportunityId, newStatus);
+      refetchOpportunities();
     } catch (error) {
       console.error('Error updating opportunity status:', error);
     }
@@ -249,7 +247,24 @@ const AdminDashboard = () => {
       return (
         <div className="space-y-6">
           {/* Stats Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+          {statsLoading ? (
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+              {[1, 2, 3, 4].map(i => (
+                <div key={i} className="bg-white p-6 rounded-lg border">
+                  <div className="animate-pulse">
+                    <div className="flex items-center">
+                      <div className="p-2 bg-gray-200 rounded-lg w-10 h-10"></div>
+                      <div className="ml-4 flex-1">
+                        <div className="h-4 bg-gray-200 rounded w-24 mb-2"></div>
+                        <div className="h-8 bg-gray-200 rounded w-16"></div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
             <div className="bg-white p-6 rounded-lg border">
               <div className="flex items-center">
                 <div className="p-2 bg-blue-100 rounded-lg">
@@ -294,10 +309,11 @@ const AdminDashboard = () => {
                 <div className="ml-4">
                   <p className="text-sm font-medium text-gray-600">Pending Approvals</p>
                   <p className="text-2xl font-bold text-gray-900">{stats?.pendingApprovals || 0}</p>
-            </div>
+                </div>
               </div>
             </div>
           </div>
+        )}
 
           {/* User Distribution Chart */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -573,7 +589,15 @@ const AdminDashboard = () => {
           <p className="text-gray-600">Review and manage user profiles</p>
 
           {/* Profiles Grid */}
-          {profilesError ? (
+          {profilesLoading ? (
+            <div className="bg-white rounded-lg border p-6">
+              <div className="animate-pulse space-y-4">
+                {[1, 2, 3].map(i => (
+                  <div key={i} className="bg-gray-200 h-32 rounded-lg"></div>
+                ))}
+              </div>
+            </div>
+          ) : profilesError ? (
             <div className="bg-red-50 border border-red-200 rounded-lg p-4">
               <div className="flex items-center">
                 <AlertCircle className="h-5 w-5 text-red-400 mr-2" />
@@ -726,7 +750,15 @@ const AdminDashboard = () => {
           </div>
 
           {/* Opportunities Grid */}
-          {opportunitiesError ? (
+          {opportunitiesLoading ? (
+            <div className="bg-white rounded-lg border p-6">
+              <div className="animate-pulse space-y-4">
+                {[1, 2, 3].map(i => (
+                  <div key={i} className="bg-gray-200 h-32 rounded-lg"></div>
+                ))}
+              </div>
+            </div>
+          ) : opportunitiesError ? (
             <div className="bg-red-50 border border-red-200 rounded-lg p-4">
             <div className="flex items-center">
                 <AlertCircle className="h-5 w-5 text-red-400 mr-2" />

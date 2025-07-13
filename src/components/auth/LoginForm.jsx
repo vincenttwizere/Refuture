@@ -145,31 +145,6 @@ const LoginForm = () => {
                 Create new account
               </button>
             </div>
-            
-            {/* Debug links for testing */}
-            <div className="mt-4 text-center">
-              <p className="text-xs text-gray-500 mb-2">Debug Links:</p>
-              <div className="flex justify-center space-x-2">
-                <button
-                  onClick={() => navigate('/admin-dashboard')}
-                  className="text-xs text-blue-600 hover:text-blue-800"
-                >
-                  Admin Dashboard
-                </button>
-                <button
-                  onClick={() => navigate('/provider-dashboard')}
-                  className="text-xs text-blue-600 hover:text-blue-800"
-                >
-                  Provider Dashboard
-                </button>
-                <button
-                  onClick={() => navigate('/refugee-dashboard')}
-                  className="text-xs text-blue-600 hover:text-blue-800"
-                >
-                  Refugee Dashboard
-                </button>
-              </div>
-            </div>
           </div>
         </div>
       </div>

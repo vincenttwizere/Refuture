@@ -35,7 +35,7 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    console.log('API Error:', error.response?.status, error.response?.data); // Debug log
+    console.log('API Error:', error.response?.status, error.response?.data, error.message); // Debug log
     if (error.response?.status === 401) {
       console.log('401 Unauthorized - clearing auth data'); // Debug log
       localStorage.removeItem('token');
@@ -66,7 +66,8 @@ export const opportunitiesAPI = {
   getSaved: () => api.get('/opportunities/saved'),
   checkIfSaved: (id) => api.get(`/opportunities/${id}/saved`),
   save: (id) => api.post(`/opportunities/${id}/save`),
-  unsave: (id) => api.delete(`/opportunities/${id}/save`)
+  unsave: (id) => api.delete(`/opportunities/${id}/save`),
+  updateStatus: (id, data) => api.put(`/opportunities/${id}/status`, data)
 };
 
 // Profiles API
@@ -87,6 +88,11 @@ export const interviewsAPI = {
   // Talent endpoints
   getTalentInterviews: (params = {}) => api.get('/interviews/talent', { params }),
   respondToInterview: (id, data) => api.put(`/interviews/${id}/respond`, data),
+  
+  // Enhanced interview flow endpoints
+  confirmInterview: (id, data) => api.put(`/interviews/${id}/confirm`, data),
+  completeInterview: (id) => api.put(`/interviews/${id}/complete`),
+  sendReminder: (id, data) => api.put(`/interviews/${id}/remind`, data),
   
   // Common endpoints
   getById: (id) => api.get(`/interviews/${id}`),

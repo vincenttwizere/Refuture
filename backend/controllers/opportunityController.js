@@ -2,6 +2,7 @@ import Opportunity from '../models/OpportunityModel.js';
 import SavedOpportunity from '../models/SavedOpportunityModel.js';
 import Notification from '../models/NotificationModel.js';
 import User from '../models/UserModel.js';
+import { sendOpportunityUpdate } from '../utils/sendEmail.js';
 
 // @desc    Create new opportunity
 // @route   POST /api/opportunities
@@ -221,6 +222,28 @@ const updateOpportunity = async (req, res) => {
       { new: true, runValidators: true }
     );
 
+    // Send email notifications to users who saved this opportunity
+    try {
+      const savedUsers = await SavedOpportunity.find({ opportunity: req.params.id })
+        .populate('user', 'firstName email')
+        .populate('opportunity', 'title');
+
+      for (const saved of savedUsers) {
+        if (saved.user && saved.opportunity) {
+          await sendOpportunityUpdate(
+            saved.user.email,
+            saved.user.firstName,
+            saved.opportunity.title,
+            'Opportunity details have been updated'
+          );
+        }
+      }
+      console.log(`Sent update emails to ${savedUsers.length} users`);
+    } catch (emailError) {
+      console.error('Failed to send opportunity update emails:', emailError);
+      // Don't fail the update if emails fail
+    }
+
     res.json({
       success: true,
       message: 'Opportunity updated successfully',
@@ -233,6 +256,25 @@ const updateOpportunity = async (req, res) => {
       message: 'Error updating opportunity',
       error: error.message
     });
+  }
+};
+
+// @desc    Update opportunity status
+// @route   PUT /api/opportunities/:id/status
+// @access  Private (Admin only)
+export const updateOpportunityStatus = async (req, res) => {
+  try {
+    const { status } = req.body;
+    const opportunity = await Opportunity.findById(req.params.id);
+    if (!opportunity) {
+      return res.status(404).json({ success: false, message: 'Opportunity not found' });
+    }
+    opportunity.status = status;
+    await opportunity.save();
+    res.json({ success: true, message: 'Opportunity status updated', opportunity });
+  } catch (error) {
+    console.error('Update opportunity status error:', error);
+    res.status(500).json({ success: false, message: 'Error updating opportunity status', error: error.message });
   }
 };
 

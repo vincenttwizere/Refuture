@@ -38,7 +38,8 @@ import {
   BookOpen,
   Languages,
   Palette,
-  Search
+  Search,
+  User
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
@@ -49,7 +50,7 @@ import { useNotifications } from '../../hooks/useNotifications';
 import { useMessages } from '../../hooks/useMessages';
 import { useApplications } from '../../hooks/useApplications';
 import MessageCenter from '../messaging/MessageCenter';
-import { messagesAPI } from '../../services/api';
+import { messagesAPI, notificationsAPI, interviewsAPI } from '../../services/api';
 import { Line, Bar } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
@@ -143,7 +144,7 @@ const ProviderDashboard = () => {
     fetchProfileById
   } = useProfiles();
 
-  const { notifications } = useNotifications();
+  const { notifications, refetch: refetchNotifications } = useNotifications();
   const { messages, loading: messagesLoading, error: messagesError, refetch: refetchMessages } = useMessages();
   const { applications, loading: applicationsLoading, error: applicationsError, refetch: refetchApplications, updateApplicationStatus } = useApplications();
   const [showMessageCenter, setShowMessageCenter] = useState(false);
@@ -151,24 +152,14 @@ const ProviderDashboard = () => {
   const [conversations, setConversations] = useState([]);
   const [newMessage, setNewMessage] = useState('');
   const [sendingMessage, setSendingMessage] = useState(false);
-  const [showNewMessageToast, setShowNewMessageToast] = useState(false);
-  const [showNewNotificationToast, setShowNewNotificationToast] = useState(false);
 
-  // Success toast state
-  const [showSuccessToast, setShowSuccessToast] = useState(false);
-  const [successMessage, setSuccessMessage] = useState('');
+
+
   const [isUpdatingProfile, setIsUpdatingProfile] = useState(false);
 
-  // Track previous unread counts
-  const prevUnreadMessagesRef = useRef(0);
-  const prevUnreadNotificationsRef = useRef(0);
 
-  // Function to show success toast
-  const displaySuccessToast = (message) => {
-    setSuccessMessage(message);
-    setShowSuccessToast(true);
-    setTimeout(() => setShowSuccessToast(false), 5000);
-  };
+
+
 
   // Function to mark a message as read
   const markMessageAsRead = async (messageId) => {
@@ -254,7 +245,6 @@ const ProviderDashboard = () => {
       
     } catch (error) {
       console.error('Error sending message:', error);
-      alert('Failed to send message. Please try again.');
     } finally {
       setSendingMessage(false);
     }
@@ -607,7 +597,7 @@ const ProviderDashboard = () => {
     try {
       // Here you would implement the actual contact functionality
       // For now, we'll just show a success message
-      alert(`Contact message sent to ${selectedProfile?.fullName}!`);
+      // Contact message sent successfully
       closeContactModal();
     } catch (error) {
       console.error('Error sending contact message:', error);
@@ -1163,70 +1153,230 @@ const ProviderDashboard = () => {
       );
     }
 
+    if (activeItem === 'messages') {
+      return (
+        <div className="flex h-screen bg-gray-100">
+          {/* Sidebar - Conversations List */}
+          <div className="w-1/3 bg-white border-r border-gray-200 flex flex-col">
+            {/* Header */}
+            <div className="p-4 border-b border-gray-200">
+              <div className="flex items-center justify-between mb-4">
+                <h1 className="text-xl font-semibold text-gray-900">Messages</h1>
+                <button 
+                  onClick={() => setShowMessageCenter(true)}
+                  className="p-2 hover:bg-gray-100 rounded-full"
+                >
+                  <MessageCircle className="w-5 h-5 text-gray-500" />
+                </button>
+              </div>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="Search conversations..."
+                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+            </div>
+          </div>
+
+            {/* Conversations List */}
+            <div className="flex-1 overflow-y-auto">
+              {!messagesLoading ? (
+                conversations.length > 0 ? (
+                  conversations.map((conversation) => (
+                    <div
+                      key={conversation.userId}
+                      onClick={async () => {
+                        console.log('Selected conversation:', {
+                          userId: conversation.userId,
+                          userName: conversation.userName,
+                          messageCount: conversation.messages.length,
+                          messages: conversation.messages.map(m => ({
+                            id: m._id,
+                            sender: m.sender,
+                            recipient: m.recipient,
+                            senderName: m.senderName,
+                            recipientName: m.recipientName,
+                            content: m.content.substring(0, 30)
+                          }))
+                        });
+                        setSelectedConversation(conversation);
+                        
+                        // Mark all unread messages in this conversation as read
+                        await markConversationAsRead(conversation);
+                      }}
+                      className={`p-4 border-b border-gray-100 cursor-pointer hover:bg-gray-50 transition-colors ${
+                        selectedConversation?.userId === conversation.userId ? 'bg-blue-50 border-l-4 border-l-blue-500' : ''
+                      }`}
+                    >
+                      <div className="flex items-start space-x-3">
+                        {/* Avatar */}
+                        <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-medium text-sm ${getAvatarColor(conversation.userName)}`}>
+                          {getInitials(conversation.userName)}
+                        </div>
+                        
+                        {/* Message Info */}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between mb-1">
+                            <h3 className="font-semibold text-gray-900 truncate">{conversation.userName}</h3>
+                            <span className="text-xs text-gray-500">
+                              {new Date(conversation.lastMessage.createdAt).toLocaleDateString()}
+                            </span>
+                          </div>
+                          
+                          <div className="flex items-center text-sm text-gray-600 mb-1">
+                            <span>{conversation.messages.length} message{conversation.messages.length > 1 ? 's' : ''}</span>
+                            <span className="mx-2">•</span>
+                            <span className="truncate">
+                              {conversation.lastMessage.content.length > 30 
+                                ? conversation.lastMessage.content.substring(0, 30) + '...'
+                                : conversation.lastMessage.content
+                              }
+                            </span>
+                          </div>
+                          
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs text-green-600">Open Conversation</span>
+                            {conversation.unreadCount > 0 && (
+                <span className="bg-blue-100 text-blue-800 text-xs font-medium px-2 py-1 rounded-full">
+                                {conversation.unreadCount}
+                </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-center py-12">
+                    <MessageCircle className="h-16 w-16 mx-auto mb-4 text-gray-300" />
+                    <h3 className="text-lg font-medium text-gray-900 mb-2">No conversations yet</h3>
+                    <p className="text-gray-600 mb-6">When refugees reach out to you, their messages will appear here</p>
+                  <button
+                    onClick={() => setShowMessageCenter(true)}
+                      className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
+                  >
+                      Start a Conversation
+                  </button>
+                </div>
+                )
+              ) : (
+                <div className="space-y-4 p-4">
+                  {[1, 2, 3].map(i => (
+                    <div key={i} className="animate-pulse">
+                      <div className="flex items-start space-x-3">
+                        <div className="w-10 h-10 bg-gray-200 rounded-full"></div>
+                        <div className="flex-1">
+                          <div className="h-4 bg-gray-200 rounded w-3/4 mb-2"></div>
+                          <div className="h-3 bg-gray-200 rounded w-1/2"></div>
+              </div>
+              </div>
+                    </div>
+                  ))}
+            </div>
+          )}
+            </div>
+          </div>
+
+          {/* Main Chat Area */}
+          <div className="flex-1 flex flex-col">
+            {selectedConversation ? (
+              <>
+                {/* Chat Header */}
+                <div className="bg-white border-b border-gray-200 px-6 py-4">
+                  <div className="flex items-center space-x-3">
+                    <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-medium ${getAvatarColor(selectedConversation.userName)}`}>
+                      {getInitials(selectedConversation.userName)}
+              </div>
+                        <div>
+                      <h2 className="text-lg font-semibold text-gray-900">{selectedConversation.userName}</h2>
+                      <p className="text-sm text-green-500">Open Conversation</p>
+                        </div>
+                  </div>
+                </div>
+
+                {/* Messages Area */}
+                <div className="flex-1 overflow-y-auto p-6 bg-gray-50">
+                  <div className="max-w-4xl mx-auto space-y-4">
+                    {selectedConversation.messages.map((message) => {
+                      // Use the same normalization logic as in the grouping
+                    const senderId = typeof message.sender === 'object' ? message.sender._id : message.sender;
+                    const recipientId = typeof message.recipient === 'object' ? message.recipient._id : message.recipient;
+                    const currentUserId = typeof user._id === 'object' ? user._id.toString() : user._id;
+                    const isReceived = recipientId === currentUserId;
+                      const isOwnMessage = senderId === currentUserId;
+                    
+                    return (
+                        <div key={message._id} className={`flex ${isOwnMessage ? 'justify-end' : 'justify-start'}`}>
+                          <div className={`max-w-md px-4 py-2 rounded-lg ${
+                            isOwnMessage 
+                              ? 'bg-blue-500 text-white ml-auto' 
+                              : 'bg-gray-100 text-gray-900'
+                          }`}>
+                            <div className="flex-1">
+                              <div className="flex items-center justify-end mb-1">
+                                <span className="text-xs text-gray-500">
+                                  {new Date(message.createdAt).toLocaleString()}
+                        </span>
+                      </div>
+                              <p className={`${isOwnMessage ? 'text-white' : 'text-gray-800'}`}>
+                                {message.content}
+                              </p>
+                      </div>
+                    </div>
+                      </div>
+                    );
+                    })}
+                          </div>
+                        </div>
+                        
+                {/* Input Area */}
+                <div className="bg-white border-t border-gray-200 px-6 py-4">
+                  <div className="max-w-4xl mx-auto flex items-center space-x-4">
+                    <input
+                      type="text"
+                      value={newMessage}
+                      onChange={(e) => setNewMessage(e.target.value)}
+                      onKeyPress={handleKeyPress}
+                      placeholder={`Reply to ${selectedConversation.userName}...`}
+                      className="flex-1 px-4 py-2 border border-gray-300 rounded-full focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      disabled={sendingMessage}
+                    />
+                    <button 
+                      onClick={sendMessage}
+                      disabled={!newMessage.trim() || sendingMessage}
+                      className="px-4 py-2 bg-blue-600 text-white rounded-full hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {sendingMessage ? 'Sending...' : 'Send'}
+                    </button>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <div className="flex-1 flex items-center justify-center bg-gray-50">
+                <div className="text-center">
+                  <MessageCircle className="h-16 w-16 mx-auto mb-4 text-gray-300" />
+                  <h3 className="text-lg font-medium text-gray-900 mb-2">Select a conversation</h3>
+                  <p className="text-gray-600">Choose a conversation from the list to start messaging</p>
+                </div>
+              </div>
+                )}
+              </div>
+            </div>
+      );
+    }
+
     if (activeItem === 'communications') {
       return (
         <div className="space-y-6">
           <div className="flex justify-between items-center">
             <div>
               <h2 className="text-2xl font-bold text-gray-900">Communications</h2>
-              <p className="text-gray-600">Manage messages and notifications</p>
+              <p className="text-gray-600">Manage notifications</p>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Messages */}
-            <div className="bg-white p-6 rounded-lg border border-gray-200">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-semibold text-gray-900">Messages</h3>
-                <div className="flex items-center space-x-2">
-                <span className="bg-blue-100 text-blue-800 text-xs font-medium px-2 py-1 rounded-full">
-                  {messages?.length || 0}
-                </span>
-                  <button
-                    onClick={() => setShowMessageCenter(true)}
-                    className="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700"
-                  >
-                    Open
-                  </button>
-                </div>
-              </div>
-              <div className="space-y-3">
-                {messages && messages.length > 0 ? (
-                  messages.slice(0, 5).map(message => {
-                    // Use the same normalization logic as in RefugeeDashboard
-                    const senderId = typeof message.sender === 'object' ? message.sender._id : message.sender;
-                    const recipientId = typeof message.recipient === 'object' ? message.recipient._id : message.recipient;
-                    const currentUserId = typeof user._id === 'object' ? user._id.toString() : user._id;
-                    const isReceived = recipientId === currentUserId;
-                    const otherUserName = isReceived ? message.senderName : message.recipientName;
-                    
-                    return (
-                    <div key={message._id} className="p-3 bg-gray-50 rounded-lg">
-                      <div className="flex justify-between items-start">
-                        <div>
-                            <p className="font-medium text-sm">{otherUserName || 'Unknown'}</p>
-                            <p className="text-xs text-gray-500">{message.content}</p>
-                        </div>
-                          <div className="text-right">
-                        <span className="text-xs text-gray-400">
-                          {new Date(message.createdAt).toLocaleDateString()}
-                        </span>
-                            {!message.isRead && isReceived && (
-                              <span className="block bg-blue-500 text-white text-xs rounded-full px-2 py-1 mt-1">
-                                New
-                              </span>
-                            )}
-                      </div>
-                    </div>
-                      </div>
-                    );
-                  })
-                ) : (
-                  <p className="text-gray-500 text-sm text-center py-4">No messages yet</p>
-                )}
-              </div>
-            </div>
-
+          <div className="grid grid-cols-1 lg:grid-cols-1 gap-6">
             {/* Notifications */}
             <div className="bg-white p-6 rounded-lg border border-gray-200">
               <div className="flex items-center justify-between mb-4">
@@ -1237,7 +1387,7 @@ const ProviderDashboard = () => {
               </div>
               <div className="space-y-3">
                 {notifications && notifications.length > 0 ? (
-                  notifications.slice(0, 5).map(notification => (
+                  notifications.slice(0, 10).map(notification => (
                     <div key={notification._id} className="p-3 bg-gray-50 rounded-lg">
                       <div className="flex justify-between items-start">
                         <div>
@@ -1397,33 +1547,54 @@ const ProviderDashboard = () => {
                   <div className="flex justify-between items-start mb-4">
                     <div className="flex-1">
                       <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                        Interview with {interview.talent?.fullName || 'Talent'}
+                        Interview with {interview.talentId ? `${interview.talentId.firstName} ${interview.talentId.lastName}` : 'Talent'}
                       </h3>
                       <p className="text-gray-600 mb-3">
-                        For: {interview.opportunity?.title || 'Opportunity'}
+                        For: {interview.title || 'Interview'}
                       </p>
                       <div className="flex items-center space-x-4 text-sm text-gray-500">
                         <div className="flex items-center">
                           <Calendar className="h-4 w-4 mr-1" />
-                          {new Date(interview.scheduledDate).toLocaleDateString()}
+                          {interview.scheduledDate ? new Date(interview.scheduledDate).toLocaleDateString() : 'TBD'}
                         </div>
                         <div className="flex items-center">
                           <Clock className="h-4 w-4 mr-1" />
-                          {new Date(interview.scheduledDate).toLocaleTimeString()}
+                          {interview.scheduledDate ? new Date(interview.scheduledDate).toLocaleTimeString() : 'TBD'}
                         </div>
                         <div className="flex items-center">
                           <MapPin className="h-4 w-4 mr-1" />
-                          {interview.location || 'TBD'}
+                          {interview.format === 'video' ? 'Video Call' : interview.format === 'in-person' ? 'In-Person' : interview.format === 'phone' ? 'Phone Call' : interview.format || 'TBD'}
                         </div>
                       </div>
+                      
+                      {/* Show selected time slot if available */}
+                      {interview.status === 'confirmed' && interview.talentResponse?.selectedSlot && (
+                        <div className="mt-3 p-3 bg-green-50 border border-green-200 rounded-lg">
+                          <div className="flex items-center">
+                            <CheckCircle className="h-4 w-4 text-green-600 mr-2" />
+                            <span className="text-sm font-medium text-green-800">
+                              Candidate selected: {new Date(interview.talentResponse.selectedSlot.date).toLocaleDateString()} at {interview.talentResponse.selectedSlot.startTime}
+                            </span>
+                          </div>
+                        </div>
+                      )}
                     </div>
                     <span className={`text-xs px-2 py-1 rounded-full ${
-                      interview.status === 'scheduled' ? 'bg-blue-100 text-blue-800' :
-                      interview.status === 'completed' ? 'bg-green-100 text-green-800' :
+                      interview.status === 'invited' ? 'bg-yellow-100 text-yellow-800' :
+                      interview.status === 'confirmed' ? 'bg-blue-100 text-blue-800' :
+                      interview.status === 'scheduled' ? 'bg-green-100 text-green-800' :
+                      interview.status === 'completed' ? 'bg-purple-100 text-purple-800' :
                       interview.status === 'cancelled' ? 'bg-red-100 text-red-800' :
+                      interview.status === 'declined' ? 'bg-red-100 text-red-800' :
                       'bg-gray-100 text-gray-800'
                     }`}>
-                      {interview.status}
+                      {interview.status === 'invited' ? 'Invitation Sent' :
+                       interview.status === 'confirmed' ? 'Confirmed' :
+                       interview.status === 'scheduled' ? 'Scheduled' :
+                       interview.status === 'completed' ? 'Completed' :
+                       interview.status === 'cancelled' ? 'Cancelled' :
+                       interview.status === 'declined' ? 'Declined' :
+                       interview.status}
                     </span>
                   </div>
                   
@@ -1431,6 +1602,26 @@ const ProviderDashboard = () => {
                     <button className="text-blue-600 hover:text-blue-700 text-sm font-medium" onClick={() => handleViewInterviewDetails(interview)}>
                       View Details
                     </button>
+                    {interview.status === 'invited' && (
+                      <button className="text-green-600 hover:text-green-700 text-sm font-medium" onClick={() => handleConfirmInterview(interview)}>
+                        Confirm
+                      </button>
+                    )}
+                    {interview.status === 'confirmed' && (
+                      <button className="text-green-600 hover:text-green-700 text-sm font-medium" onClick={() => handleScheduleInterview(interview)}>
+                        Schedule
+                      </button>
+                    )}
+                    {interview.status === 'scheduled' && (
+                      <>
+                        <button className="text-purple-600 hover:text-purple-700 text-sm font-medium" onClick={() => handleCompleteInterview(interview._id)}>
+                          Complete
+                        </button>
+                        <button className="text-blue-600 hover:text-blue-700 text-sm font-medium" onClick={() => handleSendReminder(interview._id)}>
+                          Send Reminder
+                        </button>
+                      </>
+                    )}
                     <button className="text-green-600 hover:text-green-700 text-sm font-medium" onClick={() => handleReschedule(interview)}>
                       Reschedule
                     </button>
@@ -1468,12 +1659,13 @@ const ProviderDashboard = () => {
               <h3 className="text-lg font-semibold text-gray-900 mb-4">Profile Settings</h3>
               <div className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Company Name</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Provider Name</label>
                   <input
                     type="text"
-                    value={user?.companyName || ''}
+                    value={`${user?.firstName || ''} ${user?.lastName || ''}`}
                     className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    placeholder="Your company name"
+                    placeholder="Your name"
+                    disabled
                   />
                 </div>
                 <div>
@@ -1489,9 +1681,10 @@ const ProviderDashboard = () => {
                   <label className="block text-sm font-medium text-gray-700 mb-2">Phone</label>
                   <input
                     type="tel"
-                    value={user?.phone || ''}
+                    value=""
                     className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     placeholder="+1 (555) 123-4567"
+                    disabled
                   />
                 </div>
                 <button 
@@ -2267,8 +2460,30 @@ const ProviderDashboard = () => {
   const [interviewDate, setInterviewDate] = useState('');
   const [interviewTime, setInterviewTime] = useState('');
   const [interviewMessage, setInterviewMessage] = useState('');
+  const [interviewFormat, setInterviewFormat] = useState('video');
+  const [meetingPlatform, setMeetingPlatform] = useState('zoom');
+  const [interviewMaterials, setInterviewMaterials] = useState('');
+  const [interviewInstructions, setInterviewInstructions] = useState('');
   const [interviewLoading, setInterviewLoading] = useState(false);
   const [interviewError, setInterviewError] = useState(null);
+  
+  // Enhanced interview form state
+  const [interviewType, setInterviewType] = useState('job');
+  const [interviewTitle, setInterviewTitle] = useState('');
+  const [interviewDuration, setInterviewDuration] = useState('60');
+  const [interviewLocation, setInterviewLocation] = useState('');
+  const [sendReminder24h, setSendReminder24h] = useState(false);
+  const [sendReminder1h, setSendReminder1h] = useState(false);
+  const [sendReminder15min, setSendReminder15min] = useState(false);
+  
+  // Availability slots state
+  const [availabilitySlots, setAvailabilitySlots] = useState([]);
+  const [newSlotDate, setNewSlotDate] = useState('');
+  const [newSlotTime, setNewSlotTime] = useState('');
+  const [newSlotDuration, setNewSlotDuration] = useState('60');
+  
+  // Custom Google Meet link
+  const [customGoogleMeetLink, setCustomGoogleMeetLink] = useState('');
 
   // Add a handler to open the interview modal
   const openInterviewModal = (profile) => {
@@ -2277,6 +2492,22 @@ const ProviderDashboard = () => {
     setInterviewTime('');
     setInterviewMessage('');
     setInterviewError(null);
+    setInterviewType('job');
+    setInterviewTitle('');
+    setInterviewDuration('60');
+    setInterviewLocation('');
+    setInterviewFormat('video');
+    setMeetingPlatform('zoom');
+    setInterviewMaterials('');
+    setInterviewInstructions('');
+    setSendReminder24h(false);
+    setSendReminder1h(false);
+    setSendReminder15min(false);
+    setAvailabilitySlots([]);
+    setNewSlotDate('');
+    setNewSlotTime('');
+    setNewSlotDuration('60');
+    setCustomGoogleMeetLink('');
     setShowInterviewModal(true);
   };
 
@@ -2287,18 +2518,87 @@ const ProviderDashboard = () => {
     setInterviewTime('');
     setInterviewMessage('');
     setInterviewError(null);
+    setInterviewType('job');
+    setInterviewTitle('');
+    setInterviewDuration('60');
+    setInterviewLocation('');
+    setInterviewFormat('video');
+    setMeetingPlatform('zoom');
+    setInterviewMaterials('');
+    setInterviewInstructions('');
+    setSendReminder24h(false);
+    setSendReminder1h(false);
+    setSendReminder15min(false);
+    setAvailabilitySlots([]);
+    setNewSlotDate('');
+    setNewSlotTime('');
+    setNewSlotDuration('60');
+    setCustomGoogleMeetLink('');
+  };
+
+  // Availability slot functions
+  const addAvailabilitySlot = () => {
+    if (!newSlotDate || !newSlotTime) {
+      setInterviewError('Please select both date and time for the slot.');
+      return;
+    }
+    
+    const newSlot = {
+      date: newSlotDate,
+      time: newSlotTime,
+      duration: newSlotDuration
+    };
+    
+    // Check if slot already exists
+    const slotExists = availabilitySlots.some(slot => 
+      slot.date === newSlotDate && slot.time === newSlotTime
+    );
+    
+    if (slotExists) {
+      setInterviewError('This time slot already exists.');
+      return;
+    }
+    
+    setAvailabilitySlots([...availabilitySlots, newSlot]);
+    setNewSlotDate('');
+    setNewSlotTime('');
+    setNewSlotDuration('60');
+    setInterviewError(null);
+  };
+
+  const removeAvailabilitySlot = (index) => {
+    const updatedSlots = availabilitySlots.filter((_, i) => i !== index);
+    setAvailabilitySlots(updatedSlots);
   };
 
   const handleBookInterview = async (e) => {
     e.preventDefault();
-    if (!interviewDate || !interviewTime) {
-      setInterviewError('Please select date and time.');
+    
+    // Enhanced validation
+    if (!interviewTitle.trim()) {
+      setInterviewError('Please enter an interview title.');
       return;
     }
+    
+    if (availabilitySlots.length === 0) {
+      setInterviewError('Please add at least one availability slot.');
+      return;
+    }
+    
+    if (interviewFormat === 'in-person' && !interviewLocation.trim()) {
+      setInterviewError('Please enter a location for in-person interviews.');
+      return;
+    }
+    
+    if (interviewFormat === 'video' && !meetingPlatform) {
+      setInterviewError('Please select a meeting platform for video interviews.');
+      return;
+    }
+    
     setInterviewLoading(true);
     setInterviewError(null);
+    
     try {
-      const dateTime = new Date(`${interviewDate}T${interviewTime}`);
       // Find the user ID by email since profiles don't have userId field
       const userResponse = await fetch(`http://localhost:5001/api/users/by-email/${encodeURIComponent(interviewProfile.email)}`, {
         headers: {
@@ -2313,18 +2613,28 @@ const ProviderDashboard = () => {
       const userData = await userResponse.json();
       const talentId = userData.user._id;
       
+      // Create interview invitation with availability slots
       const inviteData = {
         talentId: talentId,
-        type: 'job', // Default to job interview
-        title: 'Interview Invitation',
-        description: interviewMessage || 'Interview invitation',
-        organization: user.organization || 'Unknown',
+        type: interviewType,
+        title: interviewTitle.trim(),
+        description: interviewMessage || `${interviewType.charAt(0).toUpperCase() + interviewType.slice(1)} interview invitation`,
+        organization: `${user.firstName} ${user.lastName}`,
         position: '',
-        location: 'remote',
-        address: '',
-        scheduledDate: dateTime,
-        duration: 60,
-        providerNotes: interviewMessage || ''
+        location: interviewFormat === 'in-person' ? 'onsite' : 'remote',
+        address: interviewFormat === 'in-person' ? interviewLocation : '',
+        availabilitySlots: availabilitySlots,
+        providerNotes: interviewMessage || '',
+        format: interviewFormat,
+        meetingPlatform: interviewFormat === 'video' ? meetingPlatform : undefined,
+        customGoogleMeetLink: interviewFormat === 'video' && meetingPlatform === 'google-meet' ? customGoogleMeetLink : undefined,
+        materials: interviewMaterials || '',
+        instructions: interviewInstructions || '',
+        reminderSettings: {
+          sendReminder24h,
+          sendReminder1h,
+          sendReminder15min
+        }
       };
       
       console.log('Sending interview invite with data:', inviteData);
@@ -2334,23 +2644,46 @@ const ProviderDashboard = () => {
       if (rescheduleMode && rescheduleInterviewId) {
         console.log('Rescheduling interview:', rescheduleInterviewId);
         await updateInterview(rescheduleInterviewId, inviteData);
-        alert('Interview rescheduled successfully!');
+        // Interview rescheduled successfully
       } else {
         console.log('Creating new interview invite');
         await sendInterviewInvite(inviteData);
-        alert('Interview booked successfully!');
+        // Interview booked successfully
       }
+      
+      // Reset form
       setShowInterviewModal(false);
       setInterviewProfile(null);
       setInterviewDate('');
       setInterviewTime('');
       setInterviewMessage('');
       setInterviewError(null);
+      setInterviewType('job');
+      setInterviewTitle('');
+      setInterviewDuration('60');
+      setInterviewLocation('');
+      setInterviewFormat('video');
+      setMeetingPlatform('zoom');
+      setInterviewMaterials('');
+      setInterviewInstructions('');
+      setSendReminder24h(false);
+      setSendReminder1h(false);
+      setSendReminder15min(false);
+      setAvailabilitySlots([]);
+      setNewSlotDate('');
+      setNewSlotTime('');
+      setNewSlotDuration('60');
+      setCustomGoogleMeetLink('');
       setRescheduleMode(false);
       setRescheduleInterviewId(null);
+      
       if (typeof refetchInterviews === 'function') refetchInterviews();
+      
+      // Show success message
+      alert(rescheduleMode ? 'Interview rescheduled successfully!' : 'Interview scheduled successfully! The candidate will be notified to choose their preferred time.');
+      
     } catch (err) {
-      setInterviewError(err.response?.data?.message || 'Failed to book/reschedule interview');
+      setInterviewError(err.response?.data?.message || 'Failed to schedule interview');
     } finally {
       setInterviewLoading(false);
     }
@@ -2368,12 +2701,12 @@ const ProviderDashboard = () => {
       });
       
       if (response.data.success) {
-        alert('Preselection message sent successfully!');
+        // Preselection message sent successfully
         refetchMessages();
       }
     } catch (error) {
       console.error('Error sending preselection:', error);
-      alert('Failed to send preselection message');
+      console.error('Failed to send preselection message');
     }
   };
 
@@ -2382,13 +2715,13 @@ const ProviderDashboard = () => {
       const result = await updateApplicationStatus(applicationId, status);
       
       if (result.success) {
-        alert(`Application ${status} successfully!`);
+        // Application status updated successfully
       } else {
-        alert(`Failed to ${status} application: ${result.error}`);
+        console.error(`Failed to ${status} application: ${result.error}`);
       }
     } catch (error) {
       console.error('Error updating application status:', error);
-      alert('Failed to update application status');
+      console.error('Failed to update application status');
     }
   };
 
@@ -2468,7 +2801,7 @@ const ProviderDashboard = () => {
     console.log('Rescheduling interview:', interview);
     
     // Set the talent profile for the interview modal
-    setInterviewProfile(interview.talent);
+    setInterviewProfile(interview.talentId);
     
     // Set the date and time from the scheduled date
     if (interview.scheduledDate) {
@@ -2493,10 +2826,69 @@ const ProviderDashboard = () => {
     if (!window.confirm('Are you sure you want to cancel this interview?')) return;
     try {
       await deleteInterview(interviewId);
-      alert('Interview canceled successfully!');
+      // Interview canceled successfully
       if (typeof refetchInterviews === 'function') refetchInterviews();
     } catch (err) {
-      alert('Failed to cancel interview.');
+      console.error('Failed to cancel interview.');
+    }
+  };
+
+  // Handle confirming an interview (talent response)
+  const handleConfirmInterview = async (interview) => {
+    try {
+      await interviewsAPI.respondToInterview(interview._id, {
+        status: 'confirmed',
+        message: 'Interview confirmed by provider'
+      });
+      // Interview confirmed successfully
+      if (typeof refetchInterviews === 'function') refetchInterviews();
+    } catch (err) {
+      console.error('Failed to confirm interview.');
+    }
+  };
+
+  // Handle scheduling a confirmed interview
+  const handleScheduleInterview = async (interview) => {
+    // This would typically open a scheduling modal
+    // For now, we'll use the current date/time
+    try {
+      const confirmedDate = interview.scheduledDate ? new Date(interview.scheduledDate).toISOString().split('T')[0] : new Date().toISOString().split('T')[0];
+      const confirmedTime = interview.scheduledDate ? new Date(interview.scheduledDate).toTimeString().slice(0, 5) : '10:00';
+      
+      await interviewsAPI.confirmInterview(interview._id, {
+        confirmedDate,
+        confirmedTime,
+        meetingDetails: interview.meetingLink || '',
+        finalInstructions: interview.instructions || ''
+      });
+      // Interview scheduled successfully
+      if (typeof refetchInterviews === 'function') refetchInterviews();
+    } catch (err) {
+      console.error('Failed to schedule interview.');
+    }
+  };
+
+  // Handle completing an interview
+  const handleCompleteInterview = async (interviewId) => {
+    if (!window.confirm('Mark this interview as completed?')) return;
+    try {
+      await interviewsAPI.completeInterview(interviewId);
+      // Interview marked as completed
+      if (typeof refetchInterviews === 'function') refetchInterviews();
+    } catch (err) {
+      console.error('Failed to complete interview.');
+    }
+  };
+
+  // Handle sending a reminder
+  const handleSendReminder = async (interviewId) => {
+    try {
+      await interviewsAPI.sendReminder(interviewId, {
+        reminderType: '24h'
+      });
+      // Reminder sent successfully
+    } catch (err) {
+      console.error('Failed to send reminder.');
     }
   };
 
@@ -2649,23 +3041,7 @@ const ProviderDashboard = () => {
     console.log('Provider Dashboard - Conversations:', conversations);
   }, [messages, messagesLoading, messagesError, conversations]);
 
-  // Show toast when new message arrives
-  useEffect(() => {
-    if (unreadMessagesCount > prevUnreadMessagesRef.current) {
-      setShowNewMessageToast(true);
-      setTimeout(() => setShowNewMessageToast(false), 3000);
-    }
-    prevUnreadMessagesRef.current = unreadMessagesCount;
-  }, [unreadMessagesCount]);
 
-  // Show toast when new notification arrives
-  useEffect(() => {
-    if (unreadNotificationsCount > prevUnreadNotificationsRef.current) {
-      setShowNewNotificationToast(true);
-      setTimeout(() => setShowNewNotificationToast(false), 3000);
-    }
-    prevUnreadNotificationsRef.current = unreadNotificationsCount;
-  }, [unreadNotificationsCount]);
 
   return (
     <div className="h-screen bg-gray-50 flex flex-col">
@@ -3424,28 +3800,382 @@ const ProviderDashboard = () => {
       />
 
       {showInterviewModal && interviewProfile && (
-        <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl p-6 max-w-2xl w-full">
-            <h2 className="text-2xl font-bold text-gray-900 mb-4">
-              {rescheduleMode ? 'Reschedule Interview with' : 'Book Interview with'} {interviewProfile.fullName || interviewProfile.firstName + ' ' + interviewProfile.lastName}
-            </h2>
+        <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl p-6 max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+            {/* Header */}
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h2 className="text-2xl font-bold text-gray-900">
+                  {rescheduleMode ? 'Reschedule Interview' : 'Schedule Interview'}
+                </h2>
+                <p className="text-gray-600 mt-1">
+                  with {interviewProfile?.fullName || (interviewProfile?.firstName && interviewProfile?.lastName ? `${interviewProfile.firstName} ${interviewProfile.lastName}` : 'Talent')}
+                </p>
+              </div>
+              <button
+                onClick={() => { closeInterviewModal(); setRescheduleMode(false); setRescheduleInterviewId(null); }}
+                className="text-gray-400 hover:text-gray-600 p-2"
+              >
+                <X className="h-6 w-6" />
+              </button>
+            </div>
+
+            {/* Candidate Info Card */}
+            <div className="bg-blue-50 rounded-lg p-4 mb-6">
+              <div className="flex items-center space-x-3">
+                <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
+                  <User className="h-6 w-6 text-blue-600" />
+                </div>
+                <div className="flex-1">
+                  <h3 className="font-medium text-gray-900">{interviewProfile?.fullName || 'Talent'}</h3>
+                  <p className="text-sm text-gray-600">{interviewProfile?.email}</p>
+                  {interviewProfile?.skills && interviewProfile.skills.length > 0 && (
+                    <p className="text-xs text-gray-500 mt-1">
+                      Skills: {interviewProfile.skills.slice(0, 3).join(', ')}
+                      {interviewProfile.skills.length > 3 && ` +${interviewProfile.skills.length - 3} more`}
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+
             <form onSubmit={handleBookInterview} className="space-y-6">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Date</label>
-                <input type="date" value={interviewDate} onChange={e => setInterviewDate(e.target.value)} className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500" required />
+              {/* Interview Type and Basic Info */}
+              <div className="bg-gray-50 rounded-lg p-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                  <Calendar className="h-5 w-5 mr-2 text-blue-500" />
+                  Interview Details
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Interview Type <span className="text-red-500">*</span>
+                    </label>
+                    <select 
+                      value={interviewType || 'job'} 
+                      onChange={e => setInterviewType(e.target.value)} 
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      required
+                    >
+                      <option value="job">Job Interview</option>
+                      <option value="internship">Internship Interview</option>
+                      <option value="scholarship">Scholarship Interview</option>
+                      <option value="mentorship">Mentorship Session</option>
+                      <option value="other">Other</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Interview Title <span className="text-red-500">*</span>
+                    </label>
+                    <input 
+                      type="text" 
+                      value={interviewTitle || ''} 
+                      onChange={e => setInterviewTitle(e.target.value)}
+                      placeholder="e.g., Software Engineer Interview"
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      required
+                    />
+                  </div>
+                </div>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Time</label>
-                <input type="time" value={interviewTime} onChange={e => setInterviewTime(e.target.value)} className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500" required />
+
+              {/* Availability Slots */}
+              <div className="bg-gray-50 rounded-lg p-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                  <Clock className="h-5 w-5 mr-2 text-blue-500" />
+                  Availability Slots
+                </h3>
+                <p className="text-sm text-gray-600 mb-4">
+                  Add multiple time slots when you're available. The candidate will choose their preferred time.
+                </p>
+                
+                {/* Available Slots List */}
+                <div className="space-y-3 mb-4">
+                  {availabilitySlots.map((slot, index) => (
+                    <div key={index} className="flex items-center justify-between p-3 bg-white rounded-lg border border-gray-200">
+                      <div className="flex items-center space-x-3">
+                        <Calendar className="h-4 w-4 text-blue-500" />
+                        <span className="text-sm font-medium text-gray-900">
+                          {new Date(slot.date).toLocaleDateString()} at {slot.time} ({slot.duration} min)
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => removeAvailabilitySlot(index)}
+                        className="text-red-600 hover:text-red-800 p-1 rounded-full hover:bg-red-50 transition-colors"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    </div>
+                  ))}
+                  
+                  {availabilitySlots.length === 0 && (
+                    <div className="text-center py-6 text-gray-500">
+                      <Clock className="h-8 w-8 mx-auto mb-2 text-gray-300" />
+                      <p className="text-sm">No availability slots added yet</p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Add New Slot */}
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Date</label>
+                    <input 
+                      type="date" 
+                      value={newSlotDate} 
+                      onChange={e => setNewSlotDate(e.target.value)}
+                      min={new Date().toISOString().split('T')[0]}
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Time</label>
+                    <input 
+                      type="time" 
+                      value={newSlotTime} 
+                      onChange={e => setNewSlotTime(e.target.value)}
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Duration</label>
+                    <select 
+                      value={newSlotDuration} 
+                      onChange={e => setNewSlotDuration(e.target.value)}
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    >
+                      <option value="30">30 minutes</option>
+                      <option value="45">45 minutes</option>
+                      <option value="60">1 hour</option>
+                      <option value="90">1.5 hours</option>
+                      <option value="120">2 hours</option>
+                    </select>
+                  </div>
+                  <div className="flex items-end">
+                    <button
+                      type="button"
+                      onClick={addAvailabilitySlot}
+                      disabled={!newSlotDate || !newSlotTime}
+                      className="w-full bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center transition-colors"
+                    >
+                      <Plus className="h-4 w-4 mr-1" />
+                      Add Slot
+                    </button>
+                  </div>
+                </div>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Message (optional)</label>
-                <textarea value={interviewMessage} onChange={e => setInterviewMessage(e.target.value)} className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500" rows={3} />
+              
+              {/* Format and Platform */}
+              <div className="bg-gray-50 rounded-lg p-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                  <Video className="h-5 w-5 mr-2 text-blue-500" />
+                  Interview Format
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Interview Format <span className="text-red-500">*</span>
+                    </label>
+                    <select 
+                      value={interviewFormat} 
+                      onChange={e => setInterviewFormat(e.target.value)} 
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      required
+                    >
+                      <option value="video">Video Call</option>
+                      <option value="in-person">In-Person</option>
+                      <option value="phone">Phone Call</option>
+                      <option value="hybrid">Hybrid</option>
+                    </select>
+                  </div>
+                  {interviewFormat === 'video' && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Meeting Platform <span className="text-red-500">*</span>
+                      </label>
+                      <select 
+                        value={meetingPlatform} 
+                        onChange={e => setMeetingPlatform(e.target.value)} 
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        required
+                      >
+                        <option value="zoom">Zoom</option>
+                        <option value="teams">Microsoft Teams</option>
+                        <option value="google-meet">Google Meet</option>
+                        <option value="skype">Skype</option>
+                        <option value="other">Other</option>
+                      </select>
+                    </div>
+                  )}
+                  {interviewFormat === 'in-person' && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Location <span className="text-red-500">*</span>
+                      </label>
+                      <input 
+                        type="text" 
+                        value={interviewLocation || ''} 
+                        onChange={e => setInterviewLocation(e.target.value)}
+                        placeholder="e.g., Office Address, Building, Room"
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        required
+                      />
+                    </div>
+                  )}
+                </div>
               </div>
-              {interviewError && <div className="text-red-600 text-sm">{interviewError}</div>}
-              <div className="flex justify-end space-x-3 pt-6 border-t mt-6">
-                <button type="button" onClick={() => { closeInterviewModal(); setRescheduleMode(false); setRescheduleInterviewId(null); }} className="px-6 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200">Cancel</button>
-                <button type="submit" disabled={interviewLoading} className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50">{interviewLoading ? 'Booking...' : (rescheduleMode ? 'Reschedule Interview' : 'Book Interview')}</button>
+
+              {/* Custom Google Meet Link */}
+              {interviewFormat === 'video' && meetingPlatform === 'google-meet' && (
+                <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
+                  <label className="block text-sm font-medium text-blue-800 mb-2">
+                    Google Meet Link (Optional)
+                  </label>
+                  <input 
+                    type="url" 
+                    value={customGoogleMeetLink || ''} 
+                    onChange={e => setCustomGoogleMeetLink(e.target.value)}
+                    placeholder="https://meet.google.com/xxx-yyyy-zzz"
+                    className="w-full border border-blue-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                  <p className="text-xs text-blue-600 mt-1">
+                    If you have a specific Google Meet link, enter it here. Otherwise, one will be generated automatically.
+                  </p>
+                </div>
+              )}
+
+              {/* Interview Details */}
+              <div className="bg-gray-50 rounded-lg p-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                  <FileText className="h-5 w-5 mr-2 text-blue-500" />
+                  Interview Details
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Materials Required
+                    </label>
+                    <textarea 
+                      value={interviewMaterials} 
+                      onChange={e => setInterviewMaterials(e.target.value)} 
+                      placeholder="e.g., Portfolio, ID documents, test materials, laptop..."
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500" 
+                      rows={3}
+                    />
+                    <p className="text-xs text-gray-500 mt-1">Let the candidate know what to bring or prepare</p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Special Instructions
+                    </label>
+                    <textarea 
+                      value={interviewInstructions} 
+                      onChange={e => setInterviewInstructions(e.target.value)} 
+                      placeholder="e.g., Prepare for technical questions, dress code, arrival instructions..."
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500" 
+                      rows={3}
+                    />
+                    <p className="text-xs text-gray-500 mt-1">Any specific instructions for the candidate</p>
+                  </div>
+                </div>
+              </div>
+              
+              {/* Personal Message */}
+              <div className="bg-gray-50 rounded-lg p-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                  <MessageCircle className="h-5 w-5 mr-2 text-blue-500" />
+                  Personal Message
+                </h3>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Message to Candidate
+                  </label>
+                  <textarea 
+                    value={interviewMessage} 
+                    onChange={e => setInterviewMessage(e.target.value)} 
+                    placeholder="Add a personal touch to your interview invitation..."
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500" 
+                    rows={3}
+                  />
+                  <p className="text-xs text-gray-500 mt-1">This message will be included in the interview invitation</p>
+                </div>
+              </div>
+
+              {/* Reminder Settings */}
+              <div className="bg-gray-50 rounded-lg p-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                  <Bell className="h-5 w-5 mr-2 text-blue-500" />
+                  Reminder Settings
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <label className="flex items-center space-x-2">
+                    <input 
+                      type="checkbox" 
+                      checked={sendReminder24h || false} 
+                      onChange={e => setSendReminder24h(e.target.checked)}
+                      className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                    />
+                    <span className="text-sm text-gray-700">24 hours before</span>
+                  </label>
+                  <label className="flex items-center space-x-2">
+                    <input 
+                      type="checkbox" 
+                      checked={sendReminder1h || false} 
+                      onChange={e => setSendReminder1h(e.target.checked)}
+                      className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                    />
+                    <span className="text-sm text-gray-700">1 hour before</span>
+                  </label>
+                  <label className="flex items-center space-x-2">
+                    <input 
+                      type="checkbox" 
+                      checked={sendReminder15min || false} 
+                      onChange={e => setSendReminder15min(e.target.checked)}
+                      className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                    />
+                    <span className="text-sm text-gray-700">15 minutes before</span>
+                  </label>
+                </div>
+              </div>
+
+              {/* Error Display */}
+              {interviewError && (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                  <div className="flex items-center">
+                    <AlertCircle className="h-5 w-5 text-red-400 mr-2" />
+                    <p className="text-red-800 text-sm">{interviewError}</p>
+                  </div>
+                </div>
+              )}
+
+              {/* Action Buttons */}
+              <div className="flex justify-end space-x-3 pt-6 border-t border-gray-200">
+                <button 
+                  type="button" 
+                  onClick={() => { closeInterviewModal(); setRescheduleMode(false); setRescheduleInterviewId(null); }} 
+                  className="px-6 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button 
+                  type="submit" 
+                  disabled={interviewLoading || availabilitySlots.length === 0} 
+                  className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors flex items-center"
+                >
+                  {interviewLoading ? (
+                    <>
+                      <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                      {rescheduleMode ? 'Rescheduling...' : 'Scheduling...'}
+                    </>
+                  ) : (
+                    <>
+                      <Calendar className="h-4 w-4 mr-2" />
+                      {rescheduleMode ? 'Reschedule Interview' : 'Schedule Interview'}
+                    </>
+                  )}
+                </button>
               </div>
             </form>
           </div>
@@ -3659,35 +4389,13 @@ const ProviderDashboard = () => {
         </div>
       )}
 
-      {/* Success Toast */}
-      {showSuccessToast && (
-        <div className="fixed top-4 right-4 z-50 bg-green-600 text-white px-6 py-3 rounded-lg shadow-lg animate-fade-in flex items-center">
-          <CheckCircle className="h-5 w-5 mr-2" />
-          {successMessage}
-          <button
-            onClick={() => setShowSuccessToast(false)}
-            className="ml-4 text-white hover:text-gray-200"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-      )}
+      {/* MessageCenter Modal */}
+      <MessageCenter
+        isOpen={showMessageCenter}
+        onClose={() => setShowMessageCenter(false)}
+      />
 
-      {/* Error Toast */}
-      {(opportunitiesError || interviewsError || profilesError) && (
-        <div className="fixed top-4 right-4 z-50 bg-red-600 text-white px-6 py-3 rounded-lg shadow-lg animate-fade-in flex items-center">
-          <AlertCircle className="h-5 w-5 mr-2" />
-          {opportunitiesError || interviewsError || profilesError}
-          <button
-            onClick={() => {
-              // Add any additional actions you want to execute when the error toast is closed
-            }}
-            className="ml-4 text-white hover:text-gray-200"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-      )}
+
     </div>
   );
 };
