@@ -1,5 +1,6 @@
 import express from 'express';
 import User from '../models/UserModel.js';
+import Opportunity from '../models/OpportunityModel.js';
 import {
   getAllUsers,
   getUserById,
@@ -29,8 +30,46 @@ router.get('/by-email/:email', protect, async (req, res) => {
   }
 });
 
+// Get all mentors (active providers who have created a mentorship opportunity)
+router.get('/mentors', async (req, res) => {
+  try {
+    // Find all provider IDs who have at least one active mentorship opportunity
+    const mentorshipOpportunities = await Opportunity.find({ type: 'mentorship', isActive: true }).select('provider');
+    const providerIds = mentorshipOpportunities.map(opp => opp.provider.toString());
+    // Find providers who are active and in the above list
+    const mentors = await User.find({
+      _id: { $in: providerIds },
+      role: 'provider',
+      status: 'active',
+      isActive: true
+    }).select('-password');
+    res.json({ success: true, mentors });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Error fetching mentors', error: error.message });
+  }
+});
+
+// Get all investors (active providers who have created a funding opportunity)
+router.get('/investors', async (req, res) => {
+  try {
+    // Find all provider IDs who have at least one active funding opportunity
+    const fundingOpportunities = await Opportunity.find({ type: 'funding', isActive: true }).select('provider');
+    const providerIds = fundingOpportunities.map(opp => opp.provider.toString());
+    // Find providers who are active and in the above list
+    const investors = await User.find({
+      _id: { $in: providerIds },
+      role: 'provider',
+      status: 'active',
+      isActive: true
+    }).select('-password');
+    res.json({ success: true, investors });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Error fetching investors', error: error.message });
+  }
+});
+
 // All other routes require admin access
-router.use(admin);
+router.use(protect, admin);
 
 // Get all users with filtering and pagination
 router.get('/', getAllUsers);

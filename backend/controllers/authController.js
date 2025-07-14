@@ -74,6 +74,20 @@ const loginUser = async (req, res) => {
       return res.status(401).json({ message: 'Invalid email or password' });
     }
 
+    // Block login for suspended, rejected, or deleted users
+    if (user.isActive === false) {
+      return res.status(403).json({ message: 'Your account has been deleted. Please contact support if you believe this is a mistake.' });
+    }
+    if (user.status === 'rejected') {
+      return res.status(403).json({ message: 'Your registration was rejected by the platform administrators.' });
+    }
+    if (user.status === 'suspended') {
+      return res.status(403).json({ message: 'Your account has been suspended. Please contact support for more information.' });
+    }
+    if (user.status !== 'active') {
+      return res.status(403).json({ message: 'Your account is not active. Please contact support.' });
+    }
+
     // Check password
     const isMatch = await user.comparePassword(password);
     if (!isMatch) {

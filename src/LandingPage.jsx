@@ -88,7 +88,7 @@ function LandingPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center space-x-3">
-              <div className="h-10 w-10 bg-gradient-to-br from-blue-600 to-indigo-700 rounded-xl flex items-center justify-center">
+              <div className="h-10 w-10 bg-blue-600 rounded-xl flex items-center justify-center">
                 <GraduationCap className="h-6 w-6 text-white" />
               </div>
               <h1 className="text-lg font-bold text-gray-900">Refuture</h1>
@@ -161,7 +161,7 @@ function LandingPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
             {features.map((feature, index) => (
               <div key={index} className="bg-white rounded-2xl p-8 shadow-sm hover:shadow-lg transition-all duration-200 border border-gray-100 flex flex-col items-center justify-center text-center">
-                <div className="h-16 w-16 bg-gray-100 rounded-full flex items-center justify-center mb-6">
+                <div className="h-16 w-16 bg-blue-100 rounded-full flex items-center justify-center mb-6">
                   <feature.icon className="h-8 w-8 text-blue-600" />
                 </div>
                 <h3 className="text-lg font-bold text-gray-900 mb-4">{feature.title}</h3>
@@ -278,7 +278,7 @@ function LandingPage() {
       </section>
 
       {/* CTA Section */}
-      <section className="py-20 bg-gradient-to-br from-blue-600 to-indigo-800">
+      <section className="py-20 bg-blue-600">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <h2 className="text-2xl font-bold text-white mb-6">Ready to Start Your Journey?</h2>
           <p className="text-base text-blue-100 mb-8 max-w-2xl mx-auto">
@@ -305,7 +305,7 @@ function LandingPage() {
           <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
             <div>
               <div className="flex items-center space-x-3 mb-4">
-                <div className="h-10 w-10 bg-gradient-to-br from-blue-600 to-emerald-600 rounded-xl flex items-center justify-center">
+                <div className="h-10 w-10 bg-blue-600 rounded-xl flex items-center justify-center">
                   <GraduationCap className="h-6 w-6 text-white" />
                 </div>
                 <h3 className="text-lg font-bold">Refuture</h3>
