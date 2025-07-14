@@ -49,7 +49,7 @@ import { useNotifications } from '../../hooks/useNotifications';
 import { useMessages } from '../../hooks/useMessages';
 import { useApplications } from '../../hooks/useApplications';
 import MessageCenter from '../messaging/MessageCenter';
-import { messagesAPI } from '../../services/api';
+import { messagesAPI, notificationsAPI } from '../../services/api';
 import { Line, Bar } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
@@ -143,7 +143,7 @@ const ProviderDashboard = () => {
     fetchProfileById
   } = useProfiles();
 
-  const { notifications } = useNotifications();
+  const { notifications, refetch: refetchNotifications } = useNotifications();
   const { messages, loading: messagesLoading, error: messagesError, refetch: refetchMessages } = useMessages();
   const { applications, loading: applicationsLoading, error: applicationsError, refetch: refetchApplications, updateApplicationStatus } = useApplications();
   const [showMessageCenter, setShowMessageCenter] = useState(false);
