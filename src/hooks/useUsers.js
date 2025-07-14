@@ -103,6 +103,7 @@ export const useUsers = () => {
     fetchUsers,
     updateUserStatus,
     deleteUser,
-    getUserById
+    getUserById,
+    refetchUsers: fetchUsers
   };
 }; 

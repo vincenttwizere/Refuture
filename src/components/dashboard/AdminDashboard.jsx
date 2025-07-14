@@ -89,8 +89,8 @@ const AdminDashboard = () => {
   const navigate = useNavigate();
   const { notifications } = useNotifications();
   const { users, loading: usersLoading, error: usersError, fetchUsers, updateUserStatus, deleteUser, refetchUsers } = useUsers();
-  const { profiles, loading: profilesLoading, error: profilesError, fetchProfiles, deleteProfile, refetchProfiles } = useProfiles();
-  const { opportunities, loading: opportunitiesLoading, error: opportunitiesError, fetchOpportunities, deleteOpportunity, refetchOpportunities } = useOpportunities();
+  const { profiles, loading: profilesLoading, error: profilesError, fetchProfiles, deleteProfile, refetch: refetchProfiles } = useProfiles();
+  const { opportunities, loading: opportunitiesLoading, error: opportunitiesError, fetchOpportunities, deleteOpportunity, updateOpportunityStatus, refetch: refetchOpportunities } = useOpportunities();
   const { stats, loading: statsLoading, error: statsError, refetchStats } = usePlatformStats();
   const { applications, loading: applicationsLoading, error: applicationsError, refetch: refetchApplications } = useApplications();
 
@@ -119,6 +119,9 @@ const AdminDashboard = () => {
   // Defensive loading state (must be after all hooks)
   if (loading) return <div className="min-h-screen flex items-center justify-center">Loading user...</div>;
   if (!user) return <div className="min-h-screen flex items-center justify-center text-red-600">User not found. Please log in again.</div>;
+  
+  // Debug logging to prevent infinite re-renders
+  console.log('AdminDashboard render - user:', user?._id, 'activeItem:', activeItem);
 
   const toggleSection = (section) => {
     setExpandedSections(prev => ({
@@ -221,13 +224,8 @@ const AdminDashboard = () => {
   // Handle opportunity status update
   const handleOpportunityStatusUpdate = async (opportunityId, newStatus) => {
     try {
-      // You may need to implement updateOpportunityStatus in your useOpportunities hook
-      if (typeof updateOpportunityStatus === 'function') {
-        await updateOpportunityStatus(opportunityId, newStatus);
-        refetchOpportunities();
-      } else {
-        alert('Status update not implemented.');
-      }
+      await updateOpportunityStatus(opportunityId, newStatus);
+      refetchOpportunities();
     } catch (error) {
       console.error('Error updating opportunity status:', error);
     }
@@ -267,7 +265,24 @@ const AdminDashboard = () => {
       return (
         <div className="space-y-6">
           {/* Stats Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+          {statsLoading ? (
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+              {[1, 2, 3, 4].map(i => (
+                <div key={i} className="bg-white p-6 rounded-lg border">
+                  <div className="animate-pulse">
+                    <div className="flex items-center">
+                      <div className="p-2 bg-gray-200 rounded-lg w-10 h-10"></div>
+                      <div className="ml-4 flex-1">
+                        <div className="h-4 bg-gray-200 rounded w-24 mb-2"></div>
+                        <div className="h-8 bg-gray-200 rounded w-16"></div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
             <div className="bg-white p-6 rounded-lg border">
               <div className="flex items-center">
                 <div className="p-2 bg-blue-100 rounded-lg">
@@ -308,11 +323,13 @@ const AdminDashboard = () => {
                 </div>
                 <div className="ml-4">
                   <p className="text-sm font-medium text-gray-600">Pending Approvals</p>
-                  <p className="text-2xl font-bold text-gray-900">{pendingApprovals}</p>
+                  <p className="text-2xl font-bold text-gray-900">{stats?.pendingApprovals || 0}</p>
                 </div>
               </div>
             </div>
           </div>
+        )}
+
           {/* User Distribution Chart */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <div className="bg-white rounded-lg border p-6">
@@ -561,40 +578,57 @@ const AdminDashboard = () => {
     }
 
     if (activeItem === 'profiles') {
-  return (
-    <div className="space-y-6">
-      <p className="text-gray-600">Review and manage user profiles</p>
-      {profilesError && <ErrorAlert message={profilesError} onRetry={refetchProfiles} />}
-      <div className="overflow-x-auto bg-white rounded-lg border">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
-              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Age</th>
-              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Gender</th>
-              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Location</th>
-              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Key Skills</th>
-              <th className="px-4 py-2"></th>
-            </tr>
-          </thead>
-          <tbody className="bg-white divide-y divide-gray-100">
-            {profiles.map((profile) => (
-              <tr key={profile._id} className="hover:bg-blue-50 transition-colors">
-                <td className="px-4 py-2 flex items-center space-x-2">
-                  <div className="w-8 h-8 bg-gray-200 rounded-full flex items-center justify-center overflow-hidden">
-                    {profile.photoUrl ? (
-                      <img src={profile.photoUrl.startsWith('http') ? profile.photoUrl : `http://localhost:5001/${profile.photoUrl}`} alt={profile.fullName} className="w-8 h-8 object-cover" />
-                    ) : (
-                      <span className="text-sm font-medium text-gray-700">{profile.fullName?.split(' ').map(n => n[0]).join('')}</span>
-                    )}
+    return (
+      <div className="space-y-6">
+          {/* Description */}
+          <p className="text-gray-600">Review and manage user profiles</p>
+
+          {/* Profiles Grid */}
+          {profilesLoading ? (
+            <div className="bg-white rounded-lg border p-6">
+              <div className="animate-pulse space-y-4">
+                {[1, 2, 3].map(i => (
+                  <div key={i} className="bg-gray-200 h-32 rounded-lg"></div>
+                ))}
+              </div>
+            </div>
+          ) : profilesError ? (
+            <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+              <div className="flex items-center">
+                <AlertCircle className="h-5 w-5 text-red-400 mr-2" />
+                <p className="text-red-800">{profilesError}</p>
+              </div>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {profiles.map((profile) => (
+                <div key={profile._id} className="bg-gray-50 rounded-lg p-6 border border-gray-200 hover:shadow-md transition-shadow">
+                  <div className="flex items-center space-x-3 mb-4">
+                    <div className="w-12 h-12 rounded-full bg-gray-300 flex items-center justify-center">
+                      {profile.photoUrl ? (
+                        <img 
+                          src={profile.photoUrl} 
+                          alt="Profile" 
+                          className="w-12 h-12 rounded-full object-cover"
+                          onError={(e) => {
+                            e.target.style.display = 'none';
+                            e.target.nextSibling.style.display = 'flex';
+                          }}
+                        />
+                      ) : null}
+                      <div className="w-12 h-12 rounded-full bg-gray-300 flex items-center justify-center text-gray-600 font-medium">
+                        {profile.fullName?.[0] || 'U'}
+                      </div>
+                    </div>
+                    <div className="flex-1">
+                      <h3 className="font-medium text-gray-900">{profile.fullName}</h3>
+                      <p className="text-sm text-gray-500">{profile.email}</p>
+                    </div>
                   </div>
-                  <span>{profile.fullName}</span>
-                </td>
-                <td className="px-4 py-2">{profile.age}</td>
-                <td className="px-4 py-2">{profile.gender}</td>
-                <td className="px-4 py-2">{profile.currentLocation}</td>
-                <td className="px-4 py-2">
-                  <div className="flex flex-wrap gap-1">
+                  <div className="text-gray-700 mb-2">Age: {profile.age}</div>
+                  <div className="text-gray-700 mb-2">Gender: {profile.gender}</div>
+                  <div className="text-gray-700 mb-2">Location: {profile.currentLocation}</div>
+                  <div className="flex flex-wrap gap-1 mb-2">
                     {profile.skills?.slice(0, 3).map((skill, i) => (
                       <span key={i} className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">{skill}</span>
                     ))}
@@ -602,78 +636,215 @@ const AdminDashboard = () => {
                       <span className="text-xs text-gray-500">+{profile.skills.length - 3} more</span>
                     )}
                   </div>
-                </td>
-                <td className="px-4 py-2">
                   <button onClick={() => navigate(`/profile/${profile._id}`)} className="bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700 text-sm">View</button>
-                </td>
-              </tr>
-            ))}
-            {profiles.length === 0 && (
-              <tr>
-                <td colSpan={6} className="text-center py-8 text-gray-500">No profiles found</td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+                </div>
+              ))}
+            </div>
+          )}
       </div>
-    </div>
-  );
-}
+    );
+  }
 
     if (activeItem === 'opportunities') {
   return (
-    <div className="space-y-6">
-      <p className="text-gray-600">Manage platform opportunities</p>
-      {opportunitiesError && <ErrorAlert message={opportunitiesError} onRetry={refetchOpportunities} />}
-      <div className="overflow-x-auto bg-white rounded-lg border">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Title</th>
-              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Provider</th>
-              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
-              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Location</th>
-              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Category</th>
-              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Deadline</th>
-              <th className="px-4 py-2"></th>
-            </tr>
-          </thead>
-          <tbody className="bg-white divide-y divide-gray-100">
-            {opportunities.map((opportunity) => (
-              <tr key={opportunity._id} className="hover:bg-blue-50 transition-colors">
-                <td className="px-4 py-2 font-semibold text-gray-900">{opportunity.title}</td>
-                <td className="px-4 py-2 text-gray-700">{opportunity.providerName || (opportunity.provider && (opportunity.provider.firstName + ' ' + opportunity.provider.lastName))}</td>
-                <td className="px-4 py-2">
-                  <span className={`text-xs px-2 py-1 rounded-full ${
-                    opportunity.type === 'scholarship' ? 'bg-green-100 text-green-800' :
-                    opportunity.type === 'job' ? 'bg-blue-100 text-blue-800' :
-                    opportunity.type === 'mentorship' ? 'bg-purple-100 text-purple-800' :
-                    opportunity.type === 'internship' ? 'bg-yellow-100 text-yellow-800' :
-                    opportunity.type === 'funding' ? 'bg-orange-100 text-orange-800' :
-                    'bg-gray-100 text-gray-800'
-                  }`}>
-                    {opportunity.type}
-                  </span>
-                </td>
-                <td className="px-4 py-2 text-gray-700">{opportunity.location}</td>
-                <td className="px-4 py-2 text-gray-700">{opportunity.category}</td>
-                <td className="px-4 py-2 text-gray-700">{opportunity.applicationDeadline ? new Date(opportunity.applicationDeadline).toLocaleDateString() : ''}</td>
-                <td className="px-4 py-2">
-                  <button onClick={() => navigate(`/opportunity/${opportunity._id}`)} className="bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700 text-sm">View</button>
-                </td>
-              </tr>
-            ))}
-            {opportunities.length === 0 && (
-              <tr>
-                <td colSpan={7} className="text-center py-8 text-gray-500">No opportunities found</td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
-}
+        <div className="space-y-6">
+          {/* Description */}
+          <p className="text-gray-600">Review and manage job opportunities posted by providers</p>
+
+          {/* Filters */}
+          <div className="bg-white p-6 rounded-lg border mb-4">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Search</label>
+                <input
+                  type="text"
+                  placeholder="Search opportunities..."
+                  value={opportunityFilters.search}
+                  onChange={(e) => setOpportunityFilters(prev => ({ ...prev, search: e.target.value }))}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Type</label>
+                <select
+                  value={opportunityFilters.type}
+                  onChange={(e) => setOpportunityFilters(prev => ({ ...prev, type: e.target.value }))}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                >
+                  <option value="">All Types</option>
+                  <option value="part-time job">Part-time Job</option>
+                  <option value="full-time job">Full-time Job</option>
+                  <option value="internship">Internship</option>
+                  <option value="scholarship">Scholarship</option>
+                  <option value="funding">Funds</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+                <select
+                  value={opportunityFilters.status}
+                  onChange={(e) => setOpportunityFilters(prev => ({ ...prev, status: e.target.value }))}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                >
+                  <option value="">All Status</option>
+                  <option value="active">Active</option>
+                  <option value="pending">Pending</option>
+                  <option value="suspended">Suspended</option>
+                </select>
+              </div>
+              <div className="flex items-end">
+                <button
+                  onClick={() => setOpportunityFilters({ type: '', status: '', search: '' })}
+                  className="w-full bg-gray-100 text-gray-700 px-4 py-2 rounded-lg text-sm hover:bg-gray-200"
+                >
+                  Clear Filters
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Opportunities Grid */}
+          {opportunitiesLoading ? (
+            <div className="bg-white rounded-lg border p-6">
+              <div className="animate-pulse space-y-4">
+                {[1, 2, 3].map(i => (
+                  <div key={i} className="bg-gray-200 h-32 rounded-lg"></div>
+                ))}
+              </div>
+            </div>
+          ) : opportunitiesError ? (
+            <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+            <div className="flex items-center">
+                <AlertCircle className="h-5 w-5 text-red-400 mr-2" />
+                <p className="text-red-800">{opportunitiesError}</p>
+        </div>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {opportunities
+                .filter(opp =>
+                  (!opportunityFilters.type || opp.type === opportunityFilters.type) &&
+                  (!opportunityFilters.status || opp.status === opportunityFilters.status) &&
+                  (!opportunityFilters.search ||
+                    opp.title?.toLowerCase().includes(opportunityFilters.search.toLowerCase()) ||
+                    opp.company?.toLowerCase().includes(opportunityFilters.search.toLowerCase())
+                  )
+                )
+                .map((opportunity) => (
+                <div key={opportunity._id} className="bg-gray-50 rounded-lg p-6 border border-gray-200 hover:shadow-md transition-shadow">
+                  <div className="flex items-center space-x-3 mb-4">
+                    <div className="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center">
+                      <Briefcase className="h-6 w-6 text-blue-600" />
+                    </div>
+                    <div className="flex-1">
+                      <h3 className="font-medium text-gray-900">{opportunity.title}</h3>
+                      <p className="text-sm text-gray-500">{opportunity.company}</p>
+                    </div>
+                  </div>
+                  <div className="space-y-2 mb-4">
+                    <div className="flex items-center text-sm">
+                      <span className="text-gray-500 w-20">Type:</span>
+                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                          opportunity.type === 'full-time job' ? 'bg-green-100 text-green-800' :
+                          opportunity.type === 'part-time job' ? 'bg-blue-100 text-blue-800' :
+                          opportunity.type === 'internship' ? 'bg-yellow-100 text-yellow-800' :
+                          opportunity.type === 'scholarship' ? 'bg-purple-100 text-purple-800' :
+                          opportunity.type === 'funds' ? 'bg-pink-100 text-pink-800' :
+                          'bg-gray-100 text-gray-800'
+                      }`}>
+                          {opportunity.type === 'full-time job' ? 'Full-time Job' :
+                            opportunity.type === 'part-time job' ? 'Part-time Job' :
+                            opportunity.type.charAt(0).toUpperCase() + opportunity.type.slice(1)}
+                      </span>
+                    </div>
+                    <div className="flex items-center text-sm">
+                      <span className="text-gray-500 w-20">Location:</span>
+                      <span className="text-gray-900">{opportunity.location}</span>
+                    </div>
+                    <div className="flex items-center text-sm">
+                      <span className="text-gray-500 w-20">Salary:</span>
+                        <span className="text-gray-900">
+                          {opportunity.salary && typeof opportunity.salary === 'object'
+                            ? `${opportunity.salary.min} - ${opportunity.salary.max} ${opportunity.salary.currency || ''}`
+                            : opportunity.salary || 'Not specified'}
+                        </span>
+                    </div>
+                    <div className="flex items-center text-sm">
+                      <span className="text-gray-500 w-20">Status:</span>
+                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                          opportunity.status === 'active' ? 'bg-green-100 text-green-800' :
+                          opportunity.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
+                          'bg-red-100 text-red-800'
+                      }`}>
+                        {opportunity.status}
+                      </span>
+                    </div>
+                  </div>
+                    <div className="flex space-x-2 flex-wrap">
+              <button
+                      onClick={() => navigate(`/opportunity/${opportunity._id}`)}
+                      className="flex-1 bg-blue-600 text-white px-3 py-2 rounded text-sm hover:bg-blue-700 transition-colors flex items-center justify-center"
+              >
+                      <Eye className="h-4 w-4 mr-1" />
+                      View
+              </button>
+                      {/* Status management actions */}
+                      {opportunity.status === 'pending' && (
+                        <button
+                          onClick={() => handleOpportunityStatusUpdate(opportunity._id, 'active')}
+                          className="bg-green-100 text-green-700 px-3 py-2 rounded text-sm hover:bg-green-200 flex items-center"
+                        >
+                          <CheckCircle className="h-4 w-4 mr-1" />
+                          Approve
+                        </button>
+                      )}
+                      {opportunity.status === 'active' && (
+                        <button
+                          onClick={() => handleOpportunityStatusUpdate(opportunity._id, 'suspended')}
+                          className="bg-yellow-100 text-yellow-700 px-3 py-2 rounded text-sm hover:bg-yellow-200 flex items-center"
+                        >
+                          <XCircle className="h-4 w-4 mr-1" />
+                          Suspend
+                        </button>
+                      )}
+                      {opportunity.status === 'suspended' && (
+                        <button
+                          onClick={() => handleOpportunityStatusUpdate(opportunity._id, 'active')}
+                          className="bg-green-100 text-green-700 px-3 py-2 rounded text-sm hover:bg-green-200 flex items-center"
+                        >
+                          <CheckCircle className="h-4 w-4 mr-1" />
+                          Activate
+                        </button>
+                      )}
+                      {/* Edit button (placeholder) */}
+                      <button
+                        onClick={() => setEditingOpportunity(opportunity)}
+                        className="bg-gray-100 text-gray-700 px-3 py-2 rounded text-sm hover:bg-gray-200 flex items-center"
+                      >
+                        <Edit className="h-4 w-4 mr-1" />
+                        Edit
+              </button>
+          <button
+                      onClick={() => handleOpportunityDelete(opportunity._id)}
+                      className="bg-red-50 text-red-700 px-3 py-2 rounded text-sm hover:bg-red-100 transition-colors flex items-center"
+          >
+                      <Trash2 className="h-4 w-4" />
+          </button>
+            </div>
+          </div>
+              ))}
+              {opportunities.length === 0 && (
+                <div className="col-span-full text-center py-12">
+                  <Briefcase className="h-16 w-16 mx-auto mb-4 text-gray-300" />
+                  <h3 className="text-lg font-medium text-gray-900 mb-2">No opportunities found</h3>
+                  <p className="text-gray-600">No opportunities match your current filters</p>
+        </div>
+              )}
+            </div>
+          )}
+        </div>
+      );
+    }
 
     if (activeItem === 'reports') {
       // Calculate average applications per opportunity

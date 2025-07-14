@@ -17,54 +17,17 @@ import {
   CheckCircle
 } from 'lucide-react';
 import { useOpportunity } from '../../hooks/useOpportunities';
-import { useSavedOpportunities } from '../../hooks/useSavedOpportunities';
 import { useAuth } from '../../contexts/AuthContext';
 
 const OpportunityDetails = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const { opportunity, loading, error } = useOpportunity(id);
-  const { saveOpportunity, unsaveOpportunity, checkIfSaved } = useSavedOpportunities();
   const { user } = useAuth();
   
-  const [isSaved, setIsSaved] = useState(false);
-  const [saveLoading, setSaveLoading] = useState(false);
-  const [saveError, setSaveError] = useState(null);
-  const [saveSuccess, setSaveSuccess] = useState(null);
   const [applyLoading, setApplyLoading] = useState(false);
   const [applyError, setApplyError] = useState(null);
   const [applySuccess, setApplySuccess] = useState(false);
-
-  // Check if opportunity is saved on component mount
-  useEffect(() => {
-    if (id) {
-      checkIfSaved(id).then(setIsSaved);
-    }
-  }, [id, checkIfSaved]);
-
-  const handleSaveToggle = async () => {
-    if (!id) return;
-    
-    setSaveLoading(true);
-    setSaveError(null);
-    setSaveSuccess(null);
-
-    try {
-      if (isSaved) {
-        await unsaveOpportunity(id);
-        setIsSaved(false);
-        setSaveSuccess('Opportunity removed from saved list');
-      } else {
-        await saveOpportunity(id);
-        setIsSaved(true);
-        setSaveSuccess('Opportunity saved successfully');
-      }
-    } catch (err) {
-      setSaveError(err.message || 'Failed to update saved status');
-    } finally {
-      setSaveLoading(false);
-    }
-  };
 
   const handleApply = async () => {
     if (!id) return;
@@ -245,47 +208,8 @@ const OpportunityDetails = () => {
                 {applyLoading ? 'Applying...' : (applySuccess ? 'Applied' : 'Apply')}
               </button>
             )}
-            
-            {/* Save Button */}
-          <button
-            onClick={handleSaveToggle}
-            disabled={saveLoading}
-            className={`flex items-center px-4 py-2 rounded-lg transition-colors ${
-              isSaved
-                ? 'bg-blue-600 text-white hover:bg-blue-700'
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-            } disabled:opacity-50`}
-          >
-            {saveLoading ? (
-              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current mr-2"></div>
-            ) : isSaved ? (
-              <Bookmark className="h-4 w-4 mr-2" />
-            ) : (
-              <BookOpen className="h-4 w-4 mr-2" />
-            )}
-            {saveLoading ? 'Saving...' : (isSaved ? 'Saved' : 'Save')}
-          </button>
           </div>
         </div>
-
-        {/* Success/Error Messages */}
-        {saveSuccess && (
-          <div className="mb-6 bg-green-50 border border-green-200 rounded-lg p-4">
-            <div className="flex items-center">
-              <CheckCircle className="h-5 w-5 text-green-400 mr-2" />
-              <p className="text-green-800">{saveSuccess}</p>
-            </div>
-          </div>
-        )}
-
-        {saveError && (
-          <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4">
-            <div className="flex items-center">
-              <AlertCircle className="h-5 w-5 text-red-400 mr-2" />
-              <p className="text-red-800">{saveError}</p>
-            </div>
-          </div>
-        )}
 
         {/* Apply Success/Error Messages */}
         {applySuccess && (

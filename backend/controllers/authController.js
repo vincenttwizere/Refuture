@@ -1,7 +1,7 @@
 import User from '../models/UserModel.js';
 import Profile from '../models/ProfileModel.js';
 import generateToken from '../utils/generateToken.js';
-import sendEmail from '../utils/sendEmail.js';
+import { sendWelcomeEmail } from '../utils/sendEmail.js';
 
 // @desc    Register user
 // @route   POST /api/auth/signup
@@ -28,11 +28,7 @@ const registerUser = async (req, res) => {
     if (user) {
       // Send welcome email
       try {
-        await sendEmail(
-          user.email,
-          'Welcome to Refuture!',
-          `Hi ${user.firstName || ''},\n\nThank you for registering at Refuture. We are excited to have you on board!\n\nBest regards,\nThe Refuture Team`
-        );
+        await sendWelcomeEmail(user.email, user.firstName);
       } catch (emailError) {
         console.error('Failed to send welcome email:', emailError);
       }

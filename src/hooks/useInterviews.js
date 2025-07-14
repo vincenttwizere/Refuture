@@ -116,6 +116,34 @@ export const useInterviews = (userRole = 'provider') => {
     }
   };
 
+  const selectAvailabilitySlot = async (interviewId, slotIndex) => {
+    try {
+      const response = await interviewsAPI.selectSlot(interviewId, slotIndex);
+      // Update the local state
+      setInterviews(prev => 
+        prev.map(interview => 
+          interview._id === interviewId 
+            ? { ...interview, ...response.data.interview }
+            : interview
+        )
+      );
+      return response.data;
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to select availability slot');
+      throw err;
+    }
+  };
+
+  const getAvailabilitySlots = async (interviewId) => {
+    try {
+      const response = await interviewsAPI.getAvailability(interviewId);
+      return response.data;
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to fetch availability slots');
+      throw err;
+    }
+  };
+
   useEffect(() => {
     if (user && user._id) {
       fetchInterviews();
@@ -139,6 +167,8 @@ export const useInterviews = (userRole = 'provider') => {
     respondToInterview,
     updateInterview,
     deleteInterview,
+    selectAvailabilitySlot,
+    getAvailabilitySlots,
     refetch: () => fetchInterviews()
   };
 };

@@ -175,20 +175,7 @@ const ProfileViewPage = () => {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Success/Error Messages */}
-      {success && (
-        <div className="fixed top-4 right-4 z-50 bg-green-50 border border-green-200 text-green-600 px-4 py-3 rounded-md flex items-center shadow-lg">
-          <CheckCircle className="h-5 w-5 mr-2" />
-          <span>{success}</span>
-        </div>
-      )}
-      
-      {error && (
-        <div className="fixed top-4 right-4 z-50 bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-md flex items-center shadow-lg">
-          <AlertCircle className="h-5 w-5 mr-2" />
-          <span>{error}</span>
-        </div>
-      )}
+
 
       {/* Header */}
       <div className="bg-white border-b border-gray-200">

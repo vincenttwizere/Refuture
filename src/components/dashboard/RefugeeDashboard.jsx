@@ -22,7 +22,8 @@ import {
   Eye,
   Filter,
   Globe,
-  X
+  X,
+  XCircle
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
@@ -32,7 +33,7 @@ import { useApplications } from '../../hooks/useApplications';
 import { useProfiles } from '../../hooks/useProfiles';
 import { useNotifications } from '../../hooks/useNotifications';
 import { useMessages } from '../../hooks/useMessages';
-import { messagesAPI, notificationsAPI } from '../../services/api';
+import { messagesAPI, notificationsAPI, interviewsAPI } from '../../services/api';
 import ProfileView from '../profiles/ProfileView';
 import CreateProfile from '../profiles/CreateProfile';
 import MessageCenter from '../messaging/MessageCenter';
@@ -61,7 +62,9 @@ const RefugeeDashboard = () => {
   const { 
     interviews, 
     loading: interviewsLoading, 
-    error: interviewsError 
+    error: interviewsError,
+    refetch: refetchInterviews,
+    respondToInterview
   } = useInterviews('refugee');
 
   const { 
@@ -85,10 +88,19 @@ const RefugeeDashboard = () => {
   const [conversations, setConversations] = useState([]);
   const [newMessage, setNewMessage] = useState('');
   const [sendingMessage, setSendingMessage] = useState(false);
-  const [showNewMessageToast, setShowNewMessageToast] = useState(false);
-  const [showNewNotificationToast, setShowNewNotificationToast] = useState(false);
-  const [showNewApplicationToast, setShowNewApplicationToast] = useState(false);
-  const [showNewInterviewToast, setShowNewInterviewToast] = useState(false);
+
+  // Interview details modal state
+  const [showInterviewDetailsModal, setShowInterviewDetailsModal] = useState(false);
+  const [selectedInterviewDetails, setSelectedInterviewDetails] = useState(null);
+  
+  // Local interviews state for managing updates
+  const [localInterviews, setLocalInterviews] = useState([]);
+
+  // Add a state for slot selection error message (moved up)
+  const [slotSelectionError, setSlotSelectionError] = useState('');
+
+  // Add a state for dismissed reminders (move up)
+  const [dismissedReminders, setDismissedReminders] = useState([]);
 
   // Settings state
   const [settings, setSettings] = useState({
@@ -193,6 +205,13 @@ const RefugeeDashboard = () => {
       }
     }
   }, []);
+
+  // Sync local interviews with fetched interviews
+  useEffect(() => {
+    if (interviews.length > 0) {
+      setLocalInterviews(interviews);
+    }
+  }, [interviews]);
 
   // Group messages into conversations
   useEffect(() => {
@@ -343,57 +362,17 @@ const RefugeeDashboard = () => {
     console.log('Refugee Dashboard - Conversations:', conversations);
   }, [messages, messagesLoading, messagesError, conversations]);
 
-  // Show toast when new message arrives
   useEffect(() => {
-    if (unreadMessagesCount > prevUnreadMessagesRef.current) {
-      setShowNewMessageToast(true);
-      setTimeout(() => setShowNewMessageToast(false), 3000);
+    if (!profileLoading && !profile) {
+      navigate('/create-profile', { replace: true });
     }
-    prevUnreadMessagesRef.current = unreadMessagesCount;
-  }, [unreadMessagesCount]);
-
-  // Show toast when new notification arrives
-  useEffect(() => {
-    if (unreadNotificationsCount > prevUnreadNotificationsRef.current) {
-      setShowNewNotificationToast(true);
-      setTimeout(() => setShowNewNotificationToast(false), 3000);
-    }
-    prevUnreadNotificationsRef.current = unreadNotificationsCount;
-  }, [unreadNotificationsCount]);
-
-  // Track previous application and interview counts for real-time updates
-  const prevApplicationsRef = useRef(applications.length);
-  const prevInterviewsRef = useRef(interviews.length);
-
-  // Show toast when new application is submitted
-  useEffect(() => {
-    if (applications.length > prevApplicationsRef.current) {
-      setShowNewApplicationToast(true);
-      setTimeout(() => setShowNewApplicationToast(false), 3000);
-    }
-    prevApplicationsRef.current = applications.length;
-  }, [applications.length]);
-
-  // Show toast when new interview is scheduled
-  useEffect(() => {
-    if (interviews.length > prevInterviewsRef.current) {
-      setShowNewInterviewToast(true);
-      setTimeout(() => setShowNewInterviewToast(false), 3000);
-    }
-    prevInterviewsRef.current = interviews.length;
-  }, [interviews.length]);
+  }, [profileLoading, profile, navigate]);
 
   // Defensive loading state (must be after all hooks)
   if (loading) return <div className="min-h-screen flex items-center justify-center">Loading user...</div>;
   if (!user) return <div className="min-h-screen flex items-center justify-center text-red-600">User not found. Please log in again.</div>;
   if (profileLoading) return <div className="min-h-screen flex items-center justify-center">Loading profile...</div>;
-  
-  // Check if user has profile after loading is complete
   if (!profileLoading && !profile) {
-    // Redirect to create profile if no profile exists
-    useEffect(() => {
-      navigate('/create-profile', { replace: true });
-    }, [navigate]);
     return <div className="min-h-screen flex items-center justify-center">No profile found. Redirecting to create profile...</div>;
   }
 
@@ -409,6 +388,9 @@ const RefugeeDashboard = () => {
     { id: 'overview', label: 'Dashboard Overview', icon: Home },
     { id: 'profile', label: 'My Profile', icon: User },
     { id: 'opportunities', label: 'Opportunities', icon: Search },
+    { id: 'interviews', label: 'Interviews', icon: Calendar, badge: interviews.filter(int => int.status === 'invited').length > 0 ? interviews.filter(int => int.status === 'invited').length : null },
+    { id: 'mentors', label: 'Mentors', icon: Users },
+    { id: 'investors', label: 'Investors', icon: DollarSign },
     { id: 'messages', label: 'Messages', icon: MessageCircle, badge: unreadMessagesCount > 0 ? unreadMessagesCount : null },
     { 
       id: 'notifications', 
@@ -571,7 +553,10 @@ const RefugeeDashboard = () => {
                                  item.status === 'accepted' ? 'Interview accepted with ' :
                                  item.status === 'declined' ? 'Interview declined with ' :
                          'Interview with '}
-                                {item.providerId?.firstName} {item.providerId?.lastName}
+                                {item.providerId?.firstName && item.providerId?.lastName
+                                  ? `${item.providerId.firstName} ${item.providerId.lastName}`
+                                  : 'Unknown Provider'
+                                }
                               </>
                             )}
                       </span>
@@ -722,6 +707,201 @@ const RefugeeDashboard = () => {
                 </div>
               )}
             </>
+          )}
+        </div>
+      );
+    }
+
+    if (activeItem === 'interviews') {
+      return (
+        <div className="space-y-6">
+          {/* Description */}
+          <div className="mb-6">
+            <h2 className="text-2xl font-bold text-gray-900">Interviews</h2>
+            <p className="text-gray-600">Manage your interview invitations and scheduled interviews</p>
+          </div>
+
+          {/* Interview Statistics */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="bg-white p-4 rounded-lg border border-gray-200">
+              <div className="flex items-center">
+                <div className="p-2 bg-yellow-100 rounded-lg">
+                  <Calendar className="h-6 w-6 text-yellow-600" />
+                </div>
+                <div className="ml-3">
+                  <p className="text-sm font-medium text-gray-600">Pending</p>
+                  <p className="text-2xl font-bold text-gray-900">{interviews.filter(int => int.status === 'invited').length}</p>
+                </div>
+              </div>
+            </div>
+            
+            <div className="bg-white p-4 rounded-lg border border-gray-200">
+              <div className="flex items-center">
+                <div className="p-2 bg-blue-100 rounded-lg">
+                  <Calendar className="h-6 w-6 text-blue-600" />
+                </div>
+                <div className="ml-3">
+                  <p className="text-sm font-medium text-gray-600">Confirmed</p>
+                  <p className="text-2xl font-bold text-gray-900">{interviews.filter(int => int.status === 'confirmed').length}</p>
+                </div>
+              </div>
+            </div>
+            
+            <div className="bg-white p-4 rounded-lg border border-gray-200">
+              <div className="flex items-center">
+                <div className="p-2 bg-green-100 rounded-lg">
+                  <Calendar className="h-6 w-6 text-green-600" />
+                </div>
+                <div className="ml-3">
+                  <p className="text-sm font-medium text-gray-600">Scheduled</p>
+                  <p className="text-2xl font-bold text-gray-900">{interviews.filter(int => int.status === 'scheduled').length}</p>
+                </div>
+              </div>
+            </div>
+            
+            <div className="bg-white p-4 rounded-lg border border-gray-200">
+              <div className="flex items-center">
+                <div className="p-2 bg-purple-100 rounded-lg">
+                  <Calendar className="h-6 w-6 text-purple-600" />
+                </div>
+                <div className="ml-3">
+                  <p className="text-sm font-medium text-gray-600">Completed</p>
+                  <p className="text-2xl font-bold text-gray-900">{interviews.filter(int => int.status === 'completed').length}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Interviews List */}
+          {interviewsLoading ? (
+            <div className="bg-white rounded-lg border border-gray-200 p-6">
+              <div className="animate-pulse space-y-4">
+                {[1, 2, 3].map(i => (
+                  <div key={i} className="flex items-center space-x-4">
+                    <div className="w-10 h-10 bg-gray-200 rounded-full"></div>
+                    <div className="flex-1 space-y-2">
+                      <div className="h-4 bg-gray-200 rounded w-1/4"></div>
+                      <div className="h-3 bg-gray-200 rounded w-1/3"></div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : interviewsError ? (
+            <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+              <div className="flex items-center">
+                <AlertCircle className="h-5 w-5 text-red-400 mr-2" />
+                <p className="text-red-800">{interviewsError}</p>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {interviews.length === 0 ? (
+                <div className="bg-white rounded-lg border border-gray-200 p-8 text-center">
+                  <Calendar className="h-16 w-16 mx-auto mb-4 text-gray-300" />
+                  <h3 className="text-lg font-medium text-gray-900 mb-2">No interviews yet</h3>
+                  <p className="text-gray-600">You haven't received any interview invitations yet. Keep applying to opportunities!</p>
+                </div>
+              ) : (
+                (localInterviews.length > 0 ? localInterviews : interviews).map((interview) => (
+                  <div key={interview._id} className="bg-white rounded-lg border border-gray-200 p-6">
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="flex items-center space-x-4">
+                        <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
+                          <Calendar className="h-6 w-6 text-blue-600" />
+                        </div>
+                        <div>
+                          <h3 className="font-semibold text-gray-900">{interview.title}</h3>
+                          <p className="text-sm text-gray-500">
+                            {interview.providerId?.firstName && interview.providerId?.lastName 
+                              ? `${interview.providerId.firstName} ${interview.providerId.lastName}`
+                              : interview.organization || 'Unknown Provider'
+                            }
+                          </p>
+                        </div>
+                      </div>
+                      <span className={`text-xs px-2 py-1 rounded-full ${
+                        interview.status === 'invited' ? 'bg-yellow-100 text-yellow-800' :
+                        interview.status === 'confirmed' ? 'bg-blue-100 text-blue-800' :
+                        interview.status === 'scheduled' ? 'bg-green-100 text-green-800' :
+                        interview.status === 'completed' ? 'bg-purple-100 text-purple-800' :
+                        interview.status === 'declined' ? 'bg-red-100 text-red-800' :
+                        'bg-gray-100 text-gray-800'
+                      }`}>
+                        {interview.status === 'invited' ? 'Invitation Sent' :
+                         interview.status === 'confirmed' ? 'Confirmed' :
+                         interview.status === 'scheduled' ? 'Scheduled' :
+                         interview.status === 'completed' ? 'Completed' :
+                         interview.status === 'declined' ? 'Declined' :
+                         interview.status}
+                      </span>
+                    </div>
+                    
+                    <div className="space-y-2 mb-4">
+                      <div className="flex items-center text-sm">
+                        <Calendar className="h-4 w-4 mr-2 text-gray-400" />
+                        <span className="text-gray-600">
+                          {interview.scheduledDate ? new Date(interview.scheduledDate).toLocaleDateString() : 'Date TBD'}
+                        </span>
+                      </div>
+                      <div className="flex items-center text-sm">
+                        <Clock className="h-4 w-4 mr-2 text-gray-400" />
+                        <span className="text-gray-600">
+                          {interview.scheduledDate ? new Date(interview.scheduledDate).toLocaleTimeString() : 'Time TBD'}
+                        </span>
+                      </div>
+                      <div className="flex items-center text-sm">
+                        <MapPin className="h-4 w-4 mr-2 text-gray-400" />
+                        <span className="text-gray-600">
+                          {interview.format === 'video' ? 'Video Call' : 
+                           interview.format === 'in-person' ? 'In-Person' : 
+                           interview.format === 'phone' ? 'Phone Call' : 
+                           interview.format || 'TBD'}
+                        </span>
+                      </div>
+                    </div>
+                    
+                    <div className="flex space-x-2">
+                      <button
+                        onClick={() => handleViewInterviewDetails(interview)}
+                        className="text-blue-600 hover:text-blue-700 text-sm font-medium"
+                      >
+                        View Details
+                      </button>
+                      {interview.status === 'invited' && interview.availabilitySlots && interview.availabilitySlots.length > 0 && (
+                        <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full">
+                          {interview.availabilitySlots.length} time slot{interview.availabilitySlots.length > 1 ? 's' : ''} available
+                        </span>
+                      )}
+                      {interview.status === 'invited' && (
+                        <>
+                          <button
+                            onClick={() => handleConfirmInterview(interview._id)}
+                            className="text-green-600 hover:text-green-700 text-sm font-medium"
+                          >
+                            Confirm
+                          </button>
+                          <button
+                            onClick={() => handleDeclineInterview(interview._id)}
+                            className="text-red-600 hover:text-red-700 text-sm font-medium"
+                          >
+                            Decline
+                          </button>
+                        </>
+                      )}
+                      {interview.status === 'scheduled' && (
+                        <button
+                          onClick={() => handleJoinInterview(interview)}
+                          className="text-blue-600 hover:text-blue-700 text-sm font-medium"
+                        >
+                          Join Interview
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
           )}
         </div>
       );
@@ -1441,68 +1621,208 @@ const RefugeeDashboard = () => {
     }
   };
 
+  // Interview handlers
+  const handleViewInterviewDetails = (interview) => {
+    console.log('Opening interview details:', interview);
+    console.log('Interview status:', interview.status);
+    console.log('Availability slots:', interview.availabilitySlots);
+    console.log('Number of slots:', interview.availabilitySlots?.length);
+    setSelectedInterviewDetails(interview);
+    setShowInterviewDetailsModal(true);
+  };
+
+  const handleConfirmInterview = async (interviewId) => {
+    try {
+      // Find the interview and its selected slot
+      const interview = (localInterviews.length > 0 ? localInterviews : interviews).find(i => i._id === interviewId);
+      const selectedSlot = interview?.talentResponse?.selectedSlot;
+      if (!selectedSlot) {
+        setSlotSelectionError('Please select a time slot before confirming.');
+        return;
+      }
+      setSlotSelectionError('');
+      await respondToInterview(interviewId, {
+        status: 'confirmed',
+        message: 'Interview confirmed by refugee',
+        selectedSlot
+      });
+      // The hook will automatically update the local state
+      // Optionally show a toast or non-intrusive message here
+    } catch (error) {
+      console.error('Error confirming interview:', error);
+      // Optionally show a toast or non-intrusive message here
+    }
+  };
+
+  const handleDeclineInterview = async (interviewId) => {
+    try {
+      await respondToInterview(interviewId, {
+        status: 'declined',
+        message: 'Interview declined by refugee'
+      });
+      // The hook will automatically update the local state
+      alert('Interview declined successfully!');
+    } catch (error) {
+      console.error('Error declining interview:', error);
+      alert('Failed to decline interview. Please try again.');
+    }
+  };
+
+  const handleJoinInterview = (interview) => {
+    // This would open the interview meeting link
+    if (interview.meetingLink) {
+      window.open(interview.meetingLink, '_blank');
+    } else {
+      console.log('No meeting link available for this interview');
+      alert('Meeting link not available yet. Please contact the provider.');
+    }
+  };
+
+  const handleSelectTimeSlot = async (interviewId, slotIndex) => {
+    try {
+      // First, update the local state immediately for better UX
+      const updatedInterviews = interviews.map(interview => 
+        interview._id === interviewId 
+          ? {
+              ...interview,
+              talentResponse: {
+                ...interview.talentResponse,
+                selectedSlot: interview.availabilitySlots[slotIndex]
+              }
+            }
+          : interview
+      );
+      
+      setLocalInterviews(updatedInterviews);
+      
+      // Update the modal state
+      setSelectedInterviewDetails(prev => 
+        prev ? {
+          ...prev,
+          talentResponse: {
+            ...prev.talentResponse,
+            selectedSlot: prev.availabilitySlots[slotIndex]
+          }
+        } : null
+      );
+      
+      // Call the API to update the backend
+      const interview = interviews.find(i => i._id === interviewId);
+      const slot = interview && interview.availabilitySlots ? interview.availabilitySlots[slotIndex] : null;
+      await respondToInterview(interviewId, {
+        status: 'confirmed',
+        message: 'Time slot selected from available options',
+        selectedSlot: slot
+      });
+      
+      alert('Time slot selected successfully! You can now confirm the interview.');
+    } catch (error) {
+      console.error('Error selecting time slot:', error);
+      alert('Failed to select time slot. Please try again.');
+      
+      // Revert the local state on error
+      setLocalInterviews(interviews);
+    }
+  };
+
+  // Helper: Get upcoming interviews within 24 hours
+  const now = new Date();
+  const in24h = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+  const upcomingInterviews = (localInterviews.length > 0 ? localInterviews : interviews)
+    .filter(int => int.status === 'scheduled' && int.scheduledDate &&
+      new Date(int.scheduledDate) > now && new Date(int.scheduledDate) <= in24h &&
+      !dismissedReminders.includes(int._id)
+    )
+    .sort((a, b) => new Date(a.scheduledDate) - new Date(b.scheduledDate));
+
+  // Handler to dismiss a reminder
+  const dismissReminder = (id) => setDismissedReminders(prev => [...prev, id]);
+
   return (
     <div>
-          {showNewMessageToast && (
-      <div className="fixed top-4 right-4 z-50 bg-blue-600 text-white px-4 py-2 rounded shadow-lg animate-fade-in">
-        New message received!
-      </div>
-    )}
-    {showNewNotificationToast && (
-      <div className="fixed top-4 right-4 z-50 bg-green-600 text-white px-4 py-2 rounded shadow-lg animate-fade-in">
-        New notification received!
-      </div>
-    )}
-    {showNewApplicationToast && (
-      <div className="fixed top-4 right-4 z-50 bg-orange-600 text-white px-4 py-2 rounded shadow-lg animate-fade-in">
-        New application submitted!
-      </div>
-    )}
-    {showNewInterviewToast && (
-      <div className="fixed top-4 right-4 z-50 bg-purple-600 text-white px-4 py-2 rounded shadow-lg animate-fade-in">
-        New interview scheduled!
-      </div>
-    )}
-    <div className="flex h-screen bg-gray-50">
-      {/* Sidebar - Fixed */}
-      <div className="w-80 bg-white shadow-lg fixed h-full overflow-y-auto">
-        {/* Header */}
-        <div className="p-6 border-b border-gray-200">
-          <h1 className="text-xl font-bold text-gray-900">Refugee Dashboard</h1>
-          <p className="text-sm text-gray-600 mt-1">Showcase your talents, find opportunities</p>
+      {/* Upcoming Interview Reminder Banner */}
+      {upcomingInterviews.length > 0 && (
+        <div className="max-w-4xl mx-auto mt-6 mb-4">
+          {upcomingInterviews.map(interview => (
+            <div key={interview._id} className="flex items-center justify-between bg-blue-50 border border-blue-200 rounded-lg p-4 mb-2 shadow">
+              <div className="flex items-center">
+                <Calendar className="h-6 w-6 text-blue-600 mr-3" />
+                <div>
+                  <div className="font-semibold text-blue-900">Upcoming Interview: {interview.title}</div>
+                  <div className="text-sm text-blue-800">
+                    {interview.scheduledDate ? new Date(interview.scheduledDate).toLocaleString() : 'Date/Time TBD'}
+                  </div>
+                  <div className="text-xs text-blue-700 mt-1">
+                    {interview.providerId?.firstName && interview.providerId?.lastName
+                      ? `${interview.providerId.firstName} ${interview.providerId.lastName}`
+                      : interview.organization || 'Unknown Provider'}
+                  </div>
+                </div>
+              </div>
+              <div className="flex items-center space-x-2">
+                {interview.meetingLink && (
+                  <a
+                    href={interview.meetingLink}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium"
+                  >
+                    Join
+                  </a>
+                )}
+                <button
+                  onClick={() => dismissReminder(interview._id)}
+                  className="ml-2 p-1 rounded-full hover:bg-blue-100"
+                  title="Dismiss reminder"
+                >
+                  <XCircle className="h-5 w-5 text-blue-400" />
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+      {/* Main dashboard content follows */}
+      <div className="flex h-screen bg-gray-50">
+        {/* Sidebar - Fixed */}
+        <div className="w-80 bg-white shadow-lg fixed h-full overflow-y-auto">
+          {/* Header */}
+          <div className="p-6 border-b border-gray-200">
+            <h1 className="text-xl font-bold text-gray-900">Refugee Dashboard</h1>
+            <p className="text-sm text-gray-600 mt-1">Showcase your talents, find opportunities</p>
+          </div>
+
+          {/* Navigation */}
+          <nav className="p-4">
+            {navigationItems.map(item => renderMenuItem(item))}
+            <button
+              onClick={() => { logout(); navigate('/'); }}
+              className="w-full flex items-center justify-between px-3 py-2 text-left text-sm rounded-lg transition-colors text-gray-700 hover:bg-gray-100 mt-4 border-t border-gray-200"
+            >
+              <span className="flex items-center">
+                <LogOut className="h-5 w-5 mr-3 text-gray-500" />
+                Logout
+              </span>
+            </button>
+          </nav>
         </div>
 
-        {/* Navigation */}
-        <nav className="p-4">
-          {navigationItems.map(item => renderMenuItem(item))}
-          <button
-            onClick={() => { logout(); navigate('/'); }}
-            className="w-full flex items-center justify-between px-3 py-2 text-left text-sm rounded-lg transition-colors text-gray-700 hover:bg-gray-100 mt-4 border-t border-gray-200"
-          >
-            <span className="flex items-center">
-              <LogOut className="h-5 w-5 mr-3 text-gray-500" />
-              Logout
-            </span>
-          </button>
-        </nav>
-      </div>
-
-      {/* Main Content Area - Scrollable */}
-      <div className="flex-1 ml-80 overflow-y-auto">
-        <div className="p-8">
-          <div className="max-w-4xl mx-auto">
-            <div className="bg-white rounded-lg shadow-sm p-6">
-              <h2 className="text-2xl font-bold text-gray-900 mb-4">
-                {navigationItems.find(item => item.id === activeItem)?.label || 
-                 navigationItems.find(item => item.children?.some(child => child.id === activeItem))?.children?.find(child => child.id === activeItem)?.label ||
-                 'Dashboard Overview'}
-              </h2>
-              <div className="text-gray-600">
-                {renderMainContent()}
+        {/* Main Content Area - Scrollable */}
+        <div className="flex-1 ml-80 overflow-y-auto">
+          <div className="p-8">
+            <div className="max-w-4xl mx-auto">
+              <div className="bg-white rounded-lg shadow-sm p-6">
+                <h2 className="text-2xl font-bold text-gray-900 mb-4">
+                  {navigationItems.find(item => item.id === activeItem)?.label || 
+                   navigationItems.find(item => item.children?.some(child => child.id === activeItem))?.children?.find(child => child.id === activeItem)?.label ||
+                   'Dashboard Overview'}
+                </h2>
+                <div className="text-gray-600">
+                  {renderMainContent()}
+                </div>
               </div>
             </div>
           </div>
-        </div>
         </div>
         
         {/* MessageCenter Modal */}
@@ -1510,6 +1830,296 @@ const RefugeeDashboard = () => {
           isOpen={showMessageCenter}
           onClose={() => setShowMessageCenter(false)}
         />
+
+        {/* Interview Details Modal */}
+        {showInterviewDetailsModal && selectedInterviewDetails && (
+          <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-lg shadow-xl max-w-3xl w-full max-h-[90vh] overflow-y-auto">
+              <div className="p-6 border-b border-gray-200">
+                <div className="flex justify-between items-center">
+                  <h2 className="text-2xl font-bold text-gray-900">Interview Details</h2>
+                  <button
+                    onClick={() => setShowInterviewDetailsModal(false)}
+                    className="text-gray-400 hover:text-gray-600"
+                  >
+                    <X className="h-6 w-6" />
+                  </button>
+                </div>
+              </div>
+              
+              <div className="p-6 space-y-6">
+                {/* Interview Status */}
+                <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                  <div>
+                    <h3 className="font-semibold text-gray-900">Status</h3>
+                    <p className="text-sm text-gray-600">Current interview status</p>
+                  </div>
+                  <span className={`px-3 py-1 rounded-full text-sm font-medium ${
+                    selectedInterviewDetails.status === 'invited' ? 'bg-yellow-100 text-yellow-800' :
+                    selectedInterviewDetails.status === 'confirmed' ? 'bg-blue-100 text-blue-800' :
+                    selectedInterviewDetails.status === 'scheduled' ? 'bg-green-100 text-green-800' :
+                    selectedInterviewDetails.status === 'completed' ? 'bg-purple-100 text-purple-800' :
+                    selectedInterviewDetails.status === 'declined' ? 'bg-red-100 text-red-800' :
+                    'bg-gray-100 text-gray-800'
+                  }`}>
+                    {selectedInterviewDetails.status === 'invited' ? 'Invitation Sent' :
+                     selectedInterviewDetails.status === 'confirmed' ? 'Confirmed' :
+                     selectedInterviewDetails.status === 'scheduled' ? 'Scheduled' :
+                     selectedInterviewDetails.status === 'completed' ? 'Completed' :
+                     selectedInterviewDetails.status === 'declined' ? 'Declined' :
+                     selectedInterviewDetails.status}
+                  </span>
+                </div>
+
+                {/* Interview Information */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div>
+                    <h3 className="font-semibold text-gray-900 mb-3">Interview Information</h3>
+                    <div className="space-y-3">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Type</label>
+                        <p className="text-sm text-gray-900">{selectedInterviewDetails.type || 'Not specified'}</p>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Title</label>
+                        <p className="text-sm text-gray-900">{selectedInterviewDetails.title || 'Interview'}</p>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Organization</label>
+                        <p className="text-sm text-gray-900">{selectedInterviewDetails.organization || 'Not specified'}</p>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Provider</label>
+                        <p className="text-sm text-gray-900">
+                          {selectedInterviewDetails.providerId?.firstName && selectedInterviewDetails.providerId?.lastName
+                            ? `${selectedInterviewDetails.providerId.firstName} ${selectedInterviewDetails.providerId.lastName}`
+                            : selectedInterviewDetails.organization || 'Unknown Provider'
+                          }
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <h3 className="font-semibold text-gray-900 mb-3">Schedule Details</h3>
+                    <div className="space-y-3">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Date & Time</label>
+                        <p className="text-sm text-gray-900">
+                          {selectedInterviewDetails.scheduledDate ? 
+                            new Date(selectedInterviewDetails.scheduledDate).toLocaleString() : 
+                            'Not scheduled'
+                          }
+                        </p>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Duration</label>
+                        <p className="text-sm text-gray-900">
+                          {selectedInterviewDetails.duration ? `${selectedInterviewDetails.duration} minutes` : 'Not specified'}
+                        </p>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Format</label>
+                        <p className="text-sm text-gray-900">
+                          {selectedInterviewDetails.format === 'video' ? 'Video Call' :
+                           selectedInterviewDetails.format === 'in-person' ? 'In-Person' :
+                           selectedInterviewDetails.format === 'phone' ? 'Phone Call' :
+                           selectedInterviewDetails.format === 'hybrid' ? 'Hybrid' :
+                           selectedInterviewDetails.format || 'Not specified'}
+                        </p>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Location</label>
+                        <p className="text-sm text-gray-900">{selectedInterviewDetails.location || 'Not specified'}</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Meeting Platform (for video calls) */}
+                {selectedInterviewDetails.format === 'video' && selectedInterviewDetails.meetingPlatform && (
+                  <div>
+                    <h3 className="font-semibold text-gray-900 mb-3">Meeting Platform</h3>
+                    <p className="text-sm text-gray-900">{selectedInterviewDetails.meetingPlatform}</p>
+                  </div>
+                )}
+
+                {/* Materials Required */}
+                {selectedInterviewDetails.materials && (
+                  <div>
+                    <h3 className="font-semibold text-gray-900 mb-3">Materials Required</h3>
+                    <p className="text-sm text-gray-900 bg-gray-50 p-3 rounded-lg">
+                      {selectedInterviewDetails.materials}
+                    </p>
+                  </div>
+                )}
+
+                {/* Special Instructions */}
+                {selectedInterviewDetails.instructions && (
+                  <div>
+                    <h3 className="font-semibold text-gray-900 mb-3">Special Instructions</h3>
+                    <p className="text-sm text-gray-900 bg-gray-50 p-3 rounded-lg">
+                      {selectedInterviewDetails.instructions}
+                    </p>
+                  </div>
+                )}
+
+                {/* Description */}
+                <div>
+                  <h3 className="font-semibold text-gray-900 mb-3">Description</h3>
+                  <p className="text-sm text-gray-900 bg-gray-50 p-3 rounded-lg">
+                    {selectedInterviewDetails.description || 'No description provided'}
+                  </p>
+                </div>
+
+                {/* Provider Notes */}
+                {selectedInterviewDetails.providerNotes && (
+                  <div>
+                    <h3 className="font-semibold text-gray-900 mb-3">Provider Notes</h3>
+                    <p className="text-sm text-gray-900 bg-gray-50 p-3 rounded-lg">
+                      {selectedInterviewDetails.providerNotes}
+                    </p>
+                  </div>
+                )}
+
+                {/* Meeting Link */}
+                {selectedInterviewDetails.meetingLink && (
+                  <div>
+                    <h3 className="font-semibold text-gray-900 mb-3">Meeting Link</h3>
+                    <a 
+                      href={selectedInterviewDetails.meetingLink} 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="text-blue-600 hover:text-blue-700 text-sm break-all"
+                    >
+                      {selectedInterviewDetails.meetingLink}
+                    </a>
+                  </div>
+                )}
+
+                {/* Created Date */}
+                <div>
+                  <h3 className="font-semibold text-gray-900 mb-3">Created</h3>
+                  <p className="text-sm text-gray-900">
+                    {new Date(selectedInterviewDetails.createdAt).toLocaleString()}
+                  </p>
+                </div>
+
+                {/* Availability Slots Section */}
+                {selectedInterviewDetails.status === 'invited' && selectedInterviewDetails.availabilitySlots && selectedInterviewDetails.availabilitySlots.length > 0 && (
+                  <div>
+                    <h3 className="font-semibold text-gray-900 mb-3">Available Time Slots</h3>
+                    <p className="text-sm text-gray-600 mb-4">
+                      Please select your preferred time slot from the options below:
+                    </p>
+                    <div className="space-y-3">
+                      {selectedInterviewDetails.availabilitySlots.map((slot, index) => (
+                        <div key={index} className={`p-4 rounded-lg border-2 cursor-pointer transition-colors ${
+                          selectedInterviewDetails.talentResponse?.selectedSlot?.date === slot.date && 
+                          selectedInterviewDetails.talentResponse?.selectedSlot?.startTime === slot.startTime
+                            ? 'border-blue-500 bg-blue-50'
+                            : 'border-gray-200 hover:border-blue-300 hover:bg-blue-50'
+                        }`}>
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center space-x-3">
+                              <Calendar className="h-5 w-5 text-blue-600" />
+                              <div>
+                                <p className="font-medium text-gray-900">
+                                  {new Date(slot.date).toLocaleDateString('en-US', {
+                                    weekday: 'long',
+                                    year: 'numeric',
+                                    month: 'long',
+                                    day: 'numeric'
+                                  })}
+                                </p>
+                                <p className="text-sm text-gray-600">
+                                  {slot.startTime} - {slot.endTime} ({slot.duration || 60} minutes)
+                                </p>
+                              </div>
+                            </div>
+                            <button
+                              onClick={() => handleSelectTimeSlot(selectedInterviewDetails._id, index)}
+                              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                                selectedInterviewDetails.talentResponse?.selectedSlot?.date === slot.date && 
+                                selectedInterviewDetails.talentResponse?.selectedSlot?.startTime === slot.startTime
+                                  ? 'bg-blue-600 text-white'
+                                  : 'bg-gray-100 text-gray-700 hover:bg-blue-600 hover:text-white'
+                              }`}
+                            >
+                              {selectedInterviewDetails.talentResponse?.selectedSlot?.date === slot.date && 
+                               selectedInterviewDetails.talentResponse?.selectedSlot?.startTime === slot.startTime
+                                ? 'Selected'
+                                : 'Select This Time'
+                              }
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Action Buttons */}
+                <div className="flex justify-end space-x-3 pt-6 border-t border-gray-200">
+                  {selectedInterviewDetails.status === 'invited' && (
+                    <>
+                      {selectedInterviewDetails.availabilitySlots && selectedInterviewDetails.availabilitySlots.length > 0 ? (
+                        <button
+                          onClick={() => {
+                            handleConfirmInterview(selectedInterviewDetails._id);
+                            setShowInterviewDetailsModal(false);
+                          }}
+                          disabled={!selectedInterviewDetails.talentResponse?.selectedSlot}
+                          className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                            selectedInterviewDetails.talentResponse?.selectedSlot
+                              ? 'bg-green-600 text-white hover:bg-green-700'
+                              : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                          }`}
+                        >
+                          Confirm Selected Time
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => {
+                            handleConfirmInterview(selectedInterviewDetails._id);
+                            setShowInterviewDetailsModal(false);
+                          }}
+                          className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm font-medium"
+                        >
+                          Confirm Interview
+                        </button>
+                      )}
+                      {/* Show slot selection error message below the button if needed */}
+                      {slotSelectionError && (
+                        <div className="text-red-600 text-sm mt-2">{slotSelectionError}</div>
+                      )}
+                      <button
+                        onClick={() => {
+                          handleDeclineInterview(selectedInterviewDetails._id);
+                          setShowInterviewDetailsModal(false);
+                        }}
+                        className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm font-medium"
+                      >
+                        Decline Interview
+                      </button>
+                    </>
+                  )}
+                  {selectedInterviewDetails.status === 'scheduled' && selectedInterviewDetails.meetingLink && (
+                    <button
+                      onClick={() => {
+                        handleJoinInterview(selectedInterviewDetails);
+                        setShowInterviewDetailsModal(false);
+                      }}
+                      className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium"
+                    >
+                      Join Interview
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

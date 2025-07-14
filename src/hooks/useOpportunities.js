@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { opportunitiesAPI } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -15,7 +15,7 @@ export const useOpportunities = (filters = {}) => {
   });
   const abortControllerRef = useRef(null);
 
-  const fetchOpportunities = async (params = {}) => {
+  const fetchOpportunities = useCallback(async (params = {}) => {
     // Cancel previous request if it exists
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
@@ -39,12 +39,12 @@ export const useOpportunities = (filters = {}) => {
       if (err.name === 'AbortError') {
         return; // Request was cancelled
       }
-      setError(err.response?.data?.message || 'Failed to fetch opportunities');
+      setError(err.response?.data?.message || err.message || 'Failed to fetch opportunities');
       console.error('Error fetching opportunities:', err);
     } finally {
       setLoading(false);
     }
-  };
+  }, [filters]);
 
   const createOpportunity = async (opportunityData) => {
     try {
@@ -74,6 +74,22 @@ export const useOpportunities = (filters = {}) => {
     }
   };
 
+  const updateOpportunityStatus = async (id, status) => {
+    try {
+      const response = await opportunitiesAPI.updateStatus(id, { status });
+      // Update the local state
+      setOpportunities(prev =>
+        prev.map(opp =>
+          opp._id === id ? { ...opp, status } : opp
+        )
+      );
+      return response.data;
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to update opportunity status');
+      throw err;
+    }
+  };
+
   const deleteOpportunity = async (id) => {
     try {
       await opportunitiesAPI.delete(id);
@@ -96,7 +112,7 @@ export const useOpportunities = (filters = {}) => {
         abortControllerRef.current.abort();
       }
     };
-  }, [user?._id]);
+  }, [user?._id, fetchOpportunities]);
 
   return {
     opportunities,
@@ -107,6 +123,7 @@ export const useOpportunities = (filters = {}) => {
     createOpportunity,
     updateOpportunity,
     deleteOpportunity,
+    updateOpportunityStatus, // <-- add this
     refetch: () => fetchOpportunities()
   };
 };

@@ -9,7 +9,8 @@ import {
   saveOpportunity,
   unsaveOpportunity,
   getSavedOpportunities,
-  checkIfSaved
+  checkIfSaved,
+  updateOpportunityStatus
 } from '../controllers/opportunityController.js';
 import { protect, provider, admin } from '../middleware/authMiddleware.js';
 import upload from '../middleware/uploadMiddleware.js';
@@ -33,5 +34,6 @@ router.delete('/:id', protect, deleteOpportunity);
 router.get('/:id/saved', protect, checkIfSaved);
 router.post('/:id/save', protect, saveOpportunity);
 router.delete('/:id/save', protect, unsaveOpportunity);
+router.put('/:id/status', protect, admin, updateOpportunityStatus);
 
 export default router; 
