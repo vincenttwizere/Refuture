@@ -4,6 +4,22 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Custom animations */
+@keyframes fadeInOut {
+  0%, 100% {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  20%, 80% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in-out {
+  animation: fadeInOut 3s ease-in-out infinite;
+}
+
 @layer base {
   html {
     font-family: "Mona Sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
