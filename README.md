@@ -2,6 +2,12 @@
 
 A comprehensive platform connecting refugees with opportunities for employment, education, and community integration.
 
+## Recent Changes
+
+- **Test files removed:** All test files have been removed from the repository for production readiness and a cleaner codebase.
+- **Dashboard logic unified:** The Refugee and Provider dashboards now use the same data fetching and rendering logic for a consistent user experience.
+- **Backend documentation:** See `backend/README.md` for backend-specific API endpoints, setup, and environment variable details.
+
 ## Features
 
 ### For Refugees
@@ -92,26 +98,7 @@ npm run dev
 
 ## API Endpoints
 
-### Authentication
-- `POST /api/auth/signup` - User registration
-- `POST /api/auth/login` - User login
-- `GET /api/auth/me` - Get current user
-
-### Opportunities
-- `GET /api/opportunities` - Get all opportunities
-- `POST /api/opportunities` - Create opportunity (Provider/Admin)
-- `PUT /api/opportunities/:id` - Update opportunity
-- `DELETE /api/opportunities/:id` - Delete opportunity
-
-### Profiles
-- `GET /api/profiles` - Get all profiles
-- `POST /api/profiles` - Create profile
-- `PUT /api/profiles/:id` - Update profile
-
-### Users (Admin only)
-- `GET /api/users` - Get all users
-- `GET /api/users/stats` - Get platform statistics
-- `PUT /api/users/:id/status` - Update user status
+See `backend/README.md` for a full list of backend API endpoints and setup instructions.
 
 ## User Roles
 
@@ -169,7 +156,7 @@ Error: Not authorized, token failed
 
 ```
 Refuture/
-├── backend/                 # Backend API
+├── backend/                 # Backend API (see backend/README.md for details)
 │   ├── config/             # Database configuration
 │   ├── controllers/        # API controllers
 │   ├── middleware/         # Authentication & validation
@@ -186,6 +173,11 @@ Refuture/
 │   └── services/         # API services
 └── uploads/              # File uploads
 ```
+
+## Project Maintenance
+
+- The codebase is actively maintained. For backend-specific details, see `backend/README.md`.
+- For questions, issues, or contributions, please open an issue or pull request.
 
 ## Contributing
 

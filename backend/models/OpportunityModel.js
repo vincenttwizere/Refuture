@@ -80,5 +80,8 @@ const OpportunitySchema = new mongoose.Schema({
 OpportunitySchema.index({ title: 'text', description: 'text', category: 'text' });
 OpportunitySchema.index({ type: 1, isActive: 1 });
 OpportunitySchema.index({ applicationDeadline: 1 });
+OpportunitySchema.index({ createdAt: -1 });
+OpportunitySchema.index({ isActive: 1 });
+OpportunitySchema.index({ provider: 1 });
 
 export default mongoose.model('Opportunity', OpportunitySchema); 

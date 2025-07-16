@@ -3,6 +3,7 @@ import { profilesAPI } from '../services/api';
 
 export const useProfiles = (filters = {}) => {
   const [profiles, setProfiles] = useState([]);
+  const [lastGoodProfiles, setLastGoodProfiles] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -17,8 +18,10 @@ export const useProfiles = (filters = {}) => {
       });
       
       setProfiles(response.data.profiles || []);
+      setLastGoodProfiles(response.data.profiles || []); // Only update on success
     } catch (err) {
       setError(err.response?.data?.message || err.message || 'Failed to fetch profiles');
+      // Do NOT clear lastGoodProfiles
       console.error('Error fetching profiles:', err);
     } finally {
       setLoading(false);
@@ -69,14 +72,16 @@ export const useProfiles = (filters = {}) => {
   }, [fetchProfiles]);
 
   return {
-    profiles,
+    profiles: lastGoodProfiles,
     loading,
     error,
     fetchProfiles,
     createProfile,
     updateProfile,
     deleteProfile,
-    refetch: () => fetchProfiles()
+    refetch: () => fetchProfiles(),
+    // Add a helper for timeout
+    isTimeout: error && error.toLowerCase().includes('timeout')
   };
 };
 

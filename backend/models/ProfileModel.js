@@ -128,4 +128,12 @@ const ProfileSchema = new mongoose.Schema({
   }
 }, { timestamps: true });
 
+// Add index for performance
+ProfileSchema.index({ email: 1 });
+ProfileSchema.index({ option: 1 });
+ProfileSchema.index({ isPublic: 1 });
+ProfileSchema.index({ createdAt: -1 });
+ProfileSchema.index({ skills: 1 }); // For skill-based searches
+ProfileSchema.index({ currentLocation: 1 }); // For location-based searches
+
 export default mongoose.model('ProfileModel', ProfileSchema); 

@@ -39,6 +39,10 @@ const ApplicationSchema = new mongoose.Schema({
 
 // Compound index to prevent duplicate applications
 ApplicationSchema.index({ opportunityId: 1, applicantId: 1 }, { unique: true });
+// Add indexes for performance
+ApplicationSchema.index({ applicantId: 1 });
+ApplicationSchema.index({ opportunityId: 1 });
+ApplicationSchema.index({ appliedAt: -1 });
 
 const Application = mongoose.model('Application', ApplicationSchema);
 export default Application; 

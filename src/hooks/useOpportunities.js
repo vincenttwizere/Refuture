@@ -5,6 +5,7 @@ import { useAuth } from '../contexts/AuthContext';
 export const useOpportunities = (filters = {}) => {
   const { user } = useAuth();
   const [opportunities, setOpportunities] = useState([]);
+  const [lastGoodOpportunities, setLastGoodOpportunities] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [pagination, setPagination] = useState({
@@ -16,30 +17,26 @@ export const useOpportunities = (filters = {}) => {
   const abortControllerRef = useRef(null);
 
   const fetchOpportunities = useCallback(async (params = {}) => {
-    // Cancel previous request if it exists
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
     }
-    
-    // Create new abort controller
     abortControllerRef.current = new AbortController();
-    
     try {
       setLoading(true);
       setError(null);
-      
       const response = await opportunitiesAPI.getAll({
         ...filters,
         ...params
       });
-      
       setOpportunities(response.data.opportunities);
+      setLastGoodOpportunities(response.data.opportunities); // Only update on success
       setPagination(response.data.pagination);
     } catch (err) {
       if (err.name === 'AbortError') {
-        return; // Request was cancelled
+        return;
       }
       setError(err.response?.data?.message || err.message || 'Failed to fetch opportunities');
+      // Do NOT clear lastGoodOpportunities
       console.error('Error fetching opportunities:', err);
     } finally {
       setLoading(false);
@@ -105,8 +102,6 @@ export const useOpportunities = (filters = {}) => {
     if (user && user._id) {
       fetchOpportunities();
     }
-    
-    // Cleanup function to abort request on unmount
     return () => {
       if (abortControllerRef.current) {
         abortControllerRef.current.abort();
@@ -115,7 +110,7 @@ export const useOpportunities = (filters = {}) => {
   }, [user?._id, fetchOpportunities]);
 
   return {
-    opportunities,
+    opportunities: lastGoodOpportunities,
     loading,
     error,
     pagination,
@@ -123,8 +118,9 @@ export const useOpportunities = (filters = {}) => {
     createOpportunity,
     updateOpportunity,
     deleteOpportunity,
-    updateOpportunityStatus, // <-- add this
-    refetch: () => fetchOpportunities()
+    updateOpportunityStatus,
+    refetch: () => fetchOpportunities(),
+    isTimeout: error && error.toLowerCase().includes('timeout')
   };
 };
 

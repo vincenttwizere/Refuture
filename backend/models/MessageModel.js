@@ -10,5 +10,12 @@ const MessageSchema = new mongoose.Schema({
   createdAt: { type: Date, default: Date.now }
 });
 
+// Add indexes for better query performance
+MessageSchema.index({ sender: 1, createdAt: -1 });
+MessageSchema.index({ recipient: 1, createdAt: -1 });
+MessageSchema.index({ recipient: 1, isRead: 1 });
+MessageSchema.index({ createdAt: -1 });
+MessageSchema.index({ sender: 1, recipient: 1 }); // For conversation queries
+
 const Message = mongoose.model('Message', MessageSchema);
 export default Message; 

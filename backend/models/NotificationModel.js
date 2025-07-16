@@ -9,5 +9,11 @@ const NotificationSchema = new mongoose.Schema({
   createdAt: { type: Date, default: Date.now }
 });
 
+// Add indexes for better query performance
+NotificationSchema.index({ user: 1, createdAt: -1 });
+NotificationSchema.index({ user: 1, isRead: 1 });
+NotificationSchema.index({ user: 1, type: 1 });
+NotificationSchema.index({ createdAt: -1 });
+
 const Notification = mongoose.model('Notification', NotificationSchema);
 export default Notification; 

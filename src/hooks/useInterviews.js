@@ -5,6 +5,7 @@ import { useAuth } from '../contexts/AuthContext';
 export const useInterviews = (userRole = 'provider') => {
   const { user } = useAuth();
   const [interviews, setInterviews] = useState([]);
+  const [lastGoodInterviews, setLastGoodInterviews] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [pagination, setPagination] = useState({
@@ -16,26 +17,21 @@ export const useInterviews = (userRole = 'provider') => {
   const abortControllerRef = useRef(null);
 
   const fetchInterviews = async (params = {}) => {
-    // Cancel previous request if it exists
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
     }
-    
-    // Create new abort controller
     abortControllerRef.current = new AbortController();
-    
     try {
       setLoading(true);
       setError(null);
-      
       let response;
       if (userRole === 'provider') {
         response = await interviewsAPI.getProviderInterviews(params);
       } else {
         response = await interviewsAPI.getTalentInterviews(params);
       }
-      
       setInterviews(response.data.interviews || []);
+      setLastGoodInterviews(response.data.interviews || []); // Only update on success
       setPagination(response.data.pagination || {
         current: 1,
         total: 1,
@@ -44,16 +40,16 @@ export const useInterviews = (userRole = 'provider') => {
       });
     } catch (err) {
       if (err.name === 'AbortError') {
-        return; // Request was cancelled
+        return;
       }
       console.error('Error fetching interviews:', err);
-      // Don't set error for 404 or empty results, just set empty array
       if (err.response?.status === 404 || err.response?.status === 401) {
         setInterviews([]);
         setError(null);
       } else {
         setError(err.response?.data?.message || 'Failed to fetch interviews');
       }
+      // Do NOT clear lastGoodInterviews
     } finally {
       setLoading(false);
     }
@@ -148,8 +144,6 @@ export const useInterviews = (userRole = 'provider') => {
     if (user && user._id) {
       fetchInterviews();
     }
-    
-    // Cleanup function to abort request on unmount
     return () => {
       if (abortControllerRef.current) {
         abortControllerRef.current.abort();
@@ -158,7 +152,7 @@ export const useInterviews = (userRole = 'provider') => {
   }, [user?._id, userRole]);
 
   return {
-    interviews,
+    interviews: lastGoodInterviews,
     loading,
     error,
     pagination,

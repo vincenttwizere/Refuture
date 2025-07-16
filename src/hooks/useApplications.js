@@ -5,6 +5,7 @@ import { useAuth } from '../contexts/AuthContext';
 export const useApplications = (opportunityId = null, userRole = null) => {
   const { user } = useAuth();
   const [applications, setApplications] = useState([]);
+  const [lastGoodApplications, setLastGoodApplications] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -27,9 +28,11 @@ export const useApplications = (opportunityId = null, userRole = null) => {
       
       console.log('Applications API response:', response.data);
       setApplications(response.data.applications || []);
+      setLastGoodApplications(response.data.applications || []); // Only update on success
     } catch (err) {
       console.error('Error fetching applications:', err);
       setError(err.response?.data?.message || 'Failed to fetch applications');
+      // Do NOT clear lastGoodApplications
     } finally {
       setLoading(false);
     }
@@ -67,7 +70,7 @@ export const useApplications = (opportunityId = null, userRole = null) => {
   }, [opportunityId]);
 
   return {
-    applications,
+    applications: lastGoodApplications,
     loading,
     error,
     refetch: fetchApplications,

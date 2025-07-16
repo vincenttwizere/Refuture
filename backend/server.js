@@ -14,6 +14,7 @@ import messageRoutes from './routes/messageRoutes.js';
 import userRoutes from './routes/userRoutes.js';
 import applicationRoutes from './routes/applicationRoutes.js';
 import contactRoutes from './routes/contact.js';
+import timeout from 'connect-timeout';
 
 dotenv.config();
 
@@ -27,6 +28,7 @@ connectDB();
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.use(timeout('30s'));
 
 // Serve uploaded files
 app.use('/uploads', express.static('uploads'));
