@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Home, 
   User, 
@@ -38,6 +38,66 @@ function shallowArrayEqual(arr1, arr2) {
   return true;
 }
 
+// Helper functions for avatar and initials (from ProviderDashboard)
+function getAvatarColor(name) {
+  const colors = [
+    'bg-blue-500', 'bg-green-500', 'bg-purple-500', 'bg-pink-500',
+    'bg-indigo-500', 'bg-yellow-500', 'bg-red-500', 'bg-teal-500'
+  ];
+  if (!name) return colors[0];
+  const hash = name.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+  return colors[hash % colors.length];
+}
+
+function getInitials(name) {
+  if (!name) return '';
+  const names = name.split(' ');
+  if (names.length === 1) return names[0].charAt(0).toUpperCase();
+  return names[0].charAt(0).toUpperCase() + names[names.length - 1].charAt(0).toUpperCase();
+}
+
+// Group messages into conversations (from ProviderDashboard)
+function groupMessagesByConversation(messages, user) {
+  const conversationMap = new Map();
+  messages.forEach(message => {
+    const senderId = typeof message.sender === 'object' ? message.sender._id : message.sender;
+    const recipientId = typeof message.recipient === 'object' ? message.recipient._id : message.recipient;
+    const currentUserId = typeof user._id === 'object' ? user._id.toString() : user._id;
+    const isReceived = recipientId === currentUserId;
+    const otherUserId = isReceived ? senderId : recipientId;
+    const otherUserName = isReceived ? message.senderName : message.recipientName;
+    if (!conversationMap.has(otherUserId)) {
+      conversationMap.set(otherUserId, {
+        userId: otherUserId,
+        userName: otherUserName,
+        messages: [],
+        messageCount: 0,
+        unreadCount: 0,
+        lastMessage: null,
+        date: '',
+        status: 'Open Conversation'
+      });
+    }
+    const conversation = conversationMap.get(otherUserId);
+    conversation.messages.push(message);
+    conversation.messageCount = conversation.messages.length;
+    if (!conversation.lastMessage || new Date(message.createdAt) > new Date(conversation.lastMessage.createdAt)) {
+      conversation.lastMessage = message;
+      conversation.date = new Date(message.createdAt).toLocaleDateString();
+    }
+    if (isReceived && !message.isRead) {
+      conversation.unreadCount++;
+    }
+  });
+  // Convert map to array and sort messages within each conversation
+  const conversations = Array.from(conversationMap.values()).map(conversation => {
+    conversation.messages.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+    return conversation;
+  });
+  // Sort conversations by most recent message
+  return conversations.sort((a, b) => new Date(b.lastMessage.createdAt) - new Date(a.lastMessage.createdAt));
+}
+
 const RefugeeDashboard = () => {
   // Core state
   const [activeItem, setActiveItem] = useState('overview');
@@ -73,6 +133,7 @@ const RefugeeDashboard = () => {
     error: applicationsError 
   } = useApplications(null, 'refugee');
 
+  const profileFilters = useMemo(() => ({ email: user?.email }), [user?.email]);
   const { 
     profiles, 
     loading: profileLoading, 
@@ -128,8 +189,7 @@ const RefugeeDashboard = () => {
   // Loading and error states
   if (loading) return <div className="min-h-screen flex items-center justify-center">Loading user...</div>;
   if (!user) return <div className="min-h-screen flex items-center justify-center text-red-600">User not found. Please log in again.</div>;
-  if (profileLoading) return <div className="min-h-screen flex items-center justify-center">Loading profile...</div>;
-  if (!profileLoading && !profile) {
+  if (!profile) {
     return <div className="min-h-screen flex items-center justify-center">No profile found. Redirecting to create profile...</div>;
   }
 
@@ -839,81 +899,229 @@ const InterviewsSection = ({ interviews, loading, error, respondToInterview }) =
   );
 };
 
-// Messages Section Component
+// Messages Section Component (copied/adapted from ProviderDashboard)
 const MessagesSection = ({ messages, loading, error, user, markMessageAsRead, setShowMessageCenter }) => {
-  // Only show loading if we have no data
-  const showLoading = loading && messages.length === 0;
+  const [selectedConversation, setSelectedConversation] = React.useState(null);
+  const [newMessage, setNewMessage] = React.useState('');
+  const [sendingMessage, setSendingMessage] = React.useState(false);
+
+  // Group messages into conversations
+  const conversations = React.useMemo(() => groupMessagesByConversation(messages, user), [messages, user]);
+
+  // Send message function (stub, replace with actual API call)
+  const sendMessage = async () => {
+    if (!newMessage.trim() || !selectedConversation || sendingMessage) return;
+    setSendingMessage(true);
+    // TODO: Implement send message API call
+    setTimeout(() => {
+      setNewMessage('');
+      setSendingMessage(false);
+    }, 500);
+  };
+
+  const handleKeyPress = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage();
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="space-y-4 p-4">
+        {[1, 2, 3].map(i => (
+          <div key={i} className="animate-pulse">
+            <div className="flex items-start space-x-3">
+              <div className="w-10 h-10 bg-gray-200 rounded-full"></div>
+              <div className="flex-1">
+                <div className="h-4 bg-gray-200 rounded w-3/4 mb-2"></div>
+                <div className="h-3 bg-gray-200 rounded w-1/2"></div>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  }
+  if (error) {
+    return (
+      <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+        <div className="flex items-center">
+          <AlertCircle className="h-5 w-5 text-red-400 mr-2" />
+          <p className="text-red-800">{error}</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <h3 className="text-lg font-semibold text-gray-900">Messages</h3>
-        <button 
-          onClick={() => setShowMessageCenter(true)}
-          className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
-        >
-          Open Message Center
-        </button>
+    <div className="flex h-[70vh] bg-gray-100 rounded-lg overflow-hidden border border-gray-200">
+      {/* Sidebar - Conversations List */}
+      <div className="w-1/3 bg-white border-r border-gray-200 flex flex-col">
+        <div className="p-4 border-b border-gray-200">
+          <div className="flex items-center justify-between mb-4">
+            <h1 className="text-xl font-semibold text-gray-900">Messages</h1>
+            <button 
+              onClick={() => setShowMessageCenter(true)}
+              className="p-2 hover:bg-gray-100 rounded-full"
+            >
+              <MessageCircle className="w-5 h-5 text-gray-500" />
+            </button>
+          </div>
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Search conversations..."
+              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            />
+          </div>
+        </div>
+        <div className="flex-1 overflow-y-auto">
+          {conversations.length > 0 ? (
+            conversations.map((conversation) => (
+              <div
+                key={conversation.userId}
+                onClick={async () => {
+                  setSelectedConversation(conversation);
+                  // Mark all unread messages in this conversation as read
+                  for (const message of conversation.messages) {
+                    if (!message.isRead && message.recipient === user?._id) {
+                      await markMessageAsRead(message._id);
+                    }
+                  }
+                }}
+                className={`p-4 border-b border-gray-100 cursor-pointer hover:bg-gray-50 transition-colors ${
+                  selectedConversation?.userId === conversation.userId ? 'bg-blue-50 border-l-4 border-l-blue-500' : ''
+                }`}
+              >
+                <div className="flex items-start space-x-3">
+                  <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-medium text-sm ${getAvatarColor(conversation.userName)}`}>
+                    {getInitials(conversation.userName)}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between mb-1">
+                      <h3 className="font-semibold text-gray-900 truncate">{conversation.userName}</h3>
+                      <span className="text-xs text-gray-500">
+                        {new Date(conversation.lastMessage.createdAt).toLocaleDateString()}
+                      </span>
+                    </div>
+                    <div className="flex items-center text-sm text-gray-600 mb-1">
+                      <span>{conversation.messages.length} message{conversation.messages.length > 1 ? 's' : ''}</span>
+                      <span className="mx-2">•</span>
+                      <span className="truncate">
+                        {conversation.lastMessage.content.length > 30 
+                          ? conversation.lastMessage.content.substring(0, 30) + '...'
+                          : conversation.lastMessage.content
+                        }
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-green-600">Open Conversation</span>
+                      {conversation.unreadCount > 0 && (
+                        <span className="bg-blue-100 text-blue-800 text-xs font-medium px-2 py-1 rounded-full">
+                          {conversation.unreadCount}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))
+          ) : (
+            <div className="text-center py-12">
+              <MessageCircle className="h-16 w-16 mx-auto mb-4 text-gray-300" />
+              <h3 className="text-lg font-medium text-gray-900 mb-2">No conversations yet</h3>
+              <p className="text-gray-600 mb-6">When providers reach out to you, their messages will appear here</p>
+              <button
+                onClick={() => setShowMessageCenter(true)}
+                className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
+              >
+                Start a Conversation
+              </button>
+            </div>
+          )}
+        </div>
       </div>
-
-      {showLoading ? (
-        <div className="space-y-4">
-          {[1, 2, 3].map(i => (
-            <div key={i} className="animate-pulse">
-              <div className="flex items-start space-x-3">
-                <div className="w-10 h-10 bg-gray-200 rounded-full"></div>
-                <div className="flex-1">
-                  <div className="h-4 bg-gray-200 rounded w-3/4 mb-2"></div>
-                  <div className="h-3 bg-gray-200 rounded w-1/2"></div>
+      {/* Main Chat Area */}
+      <div className="flex-1 flex flex-col">
+        {selectedConversation ? (
+          <>
+            {/* Chat Header */}
+            <div className="bg-white border-b border-gray-200 px-6 py-4">
+              <div className="flex items-center space-x-3">
+                <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-medium ${getAvatarColor(selectedConversation.userName)}`}>
+                  {getInitials(selectedConversation.userName)}
+                </div>
+                <div>
+                  <h2 className="text-lg font-semibold text-gray-900">{selectedConversation.userName}</h2>
+                  <p className="text-sm text-green-500">Open Conversation</p>
                 </div>
               </div>
             </div>
-          ))}
-        </div>
-      ) : error ? (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-          <div className="flex items-center">
-            <AlertCircle className="h-5 w-5 text-red-400 mr-2" />
-            <p className="text-red-800">{error}</p>
-          </div>
-        </div>
-      ) : messages.length > 0 ? (
-        <div className="space-y-4">
-          {messages.slice(0, 10).map((message) => (
-            <div key={message._id} className="bg-white rounded-lg border border-gray-200 p-4">
-              <div className="flex items-center justify-between mb-2">
-                <span className="font-medium text-gray-900">
-                  {message.senderName || 'Unknown Sender'}
-                </span>
-                <span className="text-sm text-gray-500">
-                  {new Date(message.createdAt).toLocaleDateString()}
-                </span>
+            {/* Messages Area */}
+            <div className="flex-1 overflow-y-auto p-6 bg-gray-50">
+              <div className="max-w-4xl mx-auto space-y-4">
+                {selectedConversation.messages.map((message) => {
+                  const senderId = typeof message.sender === 'object' ? message.sender._id : message.sender;
+                  const recipientId = typeof message.recipient === 'object' ? message.recipient._id : message.recipient;
+                  const currentUserId = typeof user._id === 'object' ? user._id.toString() : user._id;
+                  const isOwnMessage = senderId === currentUserId;
+                  return (
+                    <div key={message._id} className={`flex ${isOwnMessage ? 'justify-end' : 'justify-start'}`}>
+                      <div className={`max-w-md px-4 py-2 rounded-lg ${
+                        isOwnMessage 
+                          ? 'bg-blue-500 text-white ml-auto' 
+                          : 'bg-gray-100 text-gray-900'
+                      }`}>
+                        <div className="flex-1">
+                          <div className="flex items-center justify-end mb-1">
+                            <span className="text-xs text-gray-500">
+                              {new Date(message.createdAt).toLocaleString()}
+                            </span>
+                          </div>
+                          <p className={`${isOwnMessage ? 'text-white' : 'text-gray-800'}`}>
+                            {message.content}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
-              <p className="text-gray-600 mb-2">{message.content}</p>
-              {!message.isRead && (
-                <button
-                  onClick={() => markMessageAsRead(message._id)}
-                  className="text-blue-600 hover:text-blue-700 text-sm"
-                >
-                  Mark as read
-                </button>
-              )}
             </div>
-          ))}
-        </div>
-      ) : (
-        <div className="text-center py-12">
-          <MessageCircle className="h-16 w-16 mx-auto mb-4 text-gray-300" />
-          <h3 className="text-lg font-medium text-gray-900 mb-2">No messages yet</h3>
-          <p className="text-gray-600 mb-6">When providers reach out to you, their messages will appear here</p>
-          <button
-            onClick={() => setShowMessageCenter(true)}
-            className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
-          >
-            Start a Conversation
-          </button>
-        </div>
-      )}
+            {/* Input Area */}
+            <div className="bg-white border-t border-gray-200 px-6 py-4">
+              <div className="max-w-4xl mx-auto flex items-center space-x-4">
+                <input
+                  type="text"
+                  value={newMessage}
+                  onChange={(e) => setNewMessage(e.target.value)}
+                  onKeyPress={handleKeyPress}
+                  placeholder={`Reply to ${selectedConversation.userName}...`}
+                  className="flex-1 px-4 py-2 border border-gray-300 rounded-full focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  disabled={sendingMessage}
+                />
+                <button 
+                  onClick={sendMessage}
+                  disabled={!newMessage.trim() || sendingMessage}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-full hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {sendingMessage ? 'Sending...' : 'Send'}
+                </button>
+              </div>
+            </div>
+          </>
+        ) : (
+          <div className="flex-1 flex items-center justify-center bg-gray-50">
+            <div className="text-center">
+              <MessageCircle className="h-16 w-16 mx-auto mb-4 text-gray-300" />
+              <h3 className="text-lg font-medium text-gray-900 mb-2">Select a conversation</h3>
+              <p className="text-gray-600">Choose a conversation from the list to start messaging</p>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 };
@@ -1055,3 +1263,5 @@ const SupportSection = () => {
 };
 
 export default RefugeeDashboard;
+
+

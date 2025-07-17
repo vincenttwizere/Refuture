@@ -208,7 +208,7 @@ function LandingPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center space-x-3">
-              <div className="h-10 w-10 bg-gradient-to-br from-blue-600 to-indigo-700 rounded-xl flex items-center justify-center">
+              <div className="h-10 w-10 bg-blue-600 rounded-xl flex items-center justify-center">
                 <GraduationCap className="h-6 w-6 text-white" />
               </div>
               <h1 className="text-lg font-bold text-gray-900">Refuture</h1>
@@ -222,12 +222,6 @@ function LandingPage() {
             </div>
             
             <div className="flex items-center space-x-4">
-              <button 
-                onClick={() => window.location.href = '/login'}
-                className="text-gray-600 hover:text-gray-900 font-medium transition-colors text-sm"
-              >
-                Sign In
-              </button>
               <button 
                 onClick={() => window.location.href = '/signup'}
                 className="bg-blue-600 text-white px-3 py-2 rounded-xl font-medium hover:bg-blue-700 transition-colors text-sm"
@@ -598,7 +592,15 @@ function LandingPage() {
             >
               Create Your Profile
             </button>
-            <button className="bg-transparent text-white px-8 py-4 rounded-xl font-medium hover:bg-white/10 transition-all duration-200 border border-white/30">
+            <button 
+              className="bg-transparent text-white px-8 py-4 rounded-xl font-medium hover:bg-white/10 transition-all duration-200 border border-white/30"
+              onClick={() => {
+                const aboutSection = document.getElementById('about');
+                if (aboutSection) {
+                  aboutSection.scrollIntoView({ behavior: 'smooth' });
+                }
+              }}
+            >
               Learn More
             </button>
           </div>
@@ -611,7 +613,7 @@ function LandingPage() {
           <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
             <div>
               <div className="flex items-center space-x-3 mb-4">
-                <div className="h-10 w-10 bg-gradient-to-br from-blue-600 to-emerald-600 rounded-xl flex items-center justify-center">
+                <div className="h-10 w-10 bg-blue-600 rounded-xl flex items-center justify-center">
                   <GraduationCap className="h-6 w-6 text-white" />
                 </div>
                 <h3 className="text-lg font-bold">Refuture</h3>
