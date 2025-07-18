@@ -129,7 +129,7 @@ const RefugeeDashboard = () => {
 
   const { 
     applications, 
-    loading: applicationsLoading, 
+     loading: applicationsLoading, 
     error: applicationsError 
   } = useApplications(null, 'refugee');
 

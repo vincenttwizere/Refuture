@@ -16,7 +16,9 @@ import {
   ChevronRight,
   ChevronLeft,
   UserPlus,
-  Search
+  Search,
+  Menu,
+  X
 } from 'lucide-react'
 
 function LandingPage() {
@@ -27,6 +29,9 @@ function LandingPage() {
   const [contactEmail, setContactEmail] = useState("");
   const [contactMessage, setContactMessage] = useState("");
   const [contactStatus, setContactStatus] = useState("idle"); // idle | success | error
+
+  // Add state for mobile nav
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   const features = [
     {
@@ -213,15 +218,28 @@ function LandingPage() {
               </div>
               <h1 className="text-lg font-bold text-gray-900">Refuture</h1>
             </div>
-            
+            {/* Desktop Nav */}
             <div className="hidden md:flex items-center space-x-8">
               <a href="#features" className="text-gray-600 hover:text-gray-900 font-medium transition-colors">Features</a>
               <a href="#about" className="text-gray-600 hover:text-gray-900 font-medium transition-colors">About</a>
               <a href="#testimonials" className="text-gray-600 hover:text-gray-900 font-medium transition-colors">Success Stories</a>
               <a href="#contact" className="text-gray-600 hover:text-gray-900 font-medium transition-colors">Contact</a>
             </div>
-            
-            <div className="flex items-center space-x-4">
+            {/* Mobile Nav Toggle */}
+            <div className="md:hidden flex items-center">
+              <button
+                onClick={() => setMobileNavOpen(!mobileNavOpen)}
+                className="p-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                aria-label={mobileNavOpen ? "Close navigation menu" : "Open navigation menu"}
+              >
+                {mobileNavOpen ? (
+                  <X className="h-7 w-7 text-gray-700" />
+                ) : (
+                  <Menu className="h-7 w-7 text-gray-700" />
+                )}
+              </button>
+            </div>
+            <div className="hidden md:flex items-center space-x-4">
               <button 
                 onClick={() => window.location.href = '/signup'}
                 className="bg-blue-600 text-white px-3 py-2 rounded-xl font-medium hover:bg-blue-700 transition-colors text-sm"
@@ -232,14 +250,48 @@ function LandingPage() {
           </div>
         </div>
       </nav>
+      {/* Mobile Nav Overlay (as sibling, not child) */}
+      {mobileNavOpen && (
+        <div
+          className="md:hidden fixed inset-0 bg-black bg-opacity-60 z-50 flex items-center justify-center"
+          onClick={() => setMobileNavOpen(false)}
+        >
+          <div
+            className="bg-white bg-gradient-to-br from-white to-blue-50 border border-blue-100 shadow-2xl rounded-2xl w-11/12 max-w-xs p-6 flex flex-col space-y-4 animate-slide-down relative"
+            style={{ minHeight: 340 }}
+            onClick={e => e.stopPropagation()}
+            tabIndex={-1}
+            aria-modal="true"
+            role="dialog"
+          >
+            <button
+              onClick={() => setMobileNavOpen(false)}
+              aria-label="Close menu"
+              className="absolute top-3 right-3 p-2 rounded-full hover:bg-gray-100 focus:outline-none"
+            >
+              <X className="h-7 w-7 text-gray-700" />
+            </button>
+            <span className="text-lg font-bold text-gray-900 mb-2 mt-2 text-center">Menu</span>
+            <a href="#features" className="text-gray-700 px-2 py-2 rounded hover:bg-blue-50 font-medium text-center" onClick={() => setMobileNavOpen(false)}>Features</a>
+            <a href="#about" className="text-gray-700 px-2 py-2 rounded hover:bg-blue-50 font-medium text-center" onClick={() => setMobileNavOpen(false)}>About</a>
+            <a href="#testimonials" className="text-gray-700 px-2 py-2 rounded hover:bg-blue-50 font-medium text-center" onClick={() => setMobileNavOpen(false)}>Success Stories</a>
+            <a href="#contact" className="text-gray-700 px-2 py-2 rounded hover:bg-blue-50 font-medium text-center" onClick={() => setMobileNavOpen(false)}>Contact</a>
+            <button 
+              onClick={() => { setMobileNavOpen(false); window.location.href = '/signup'; }}
+              className="bg-blue-600 text-white px-4 py-2 rounded-xl font-medium hover:bg-blue-700 transition-colors text-sm mt-2"
+            >
+              Get Started
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Hero Section */}
-      <section className="relative h-[90vh] flex items-center justify-center bg-gradient-to-br from-blue-50 to-blue-100 overflow-hidden">
-        {/* Removed SVG illustration and extra visuals from background */}
+      <section className="relative flex flex-col md:flex-row items-center justify-center bg-gradient-to-br from-blue-50 to-blue-100 overflow-hidden py-8 md:py-12 lg:py-16">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10 w-full">
-          <div className="flex flex-col md:flex-row items-center justify-between h-full gap-12 md:gap-0">
+          <div className="flex flex-col md:flex-row items-center justify-between w-full gap-8 md:gap-0">
             {/* Left: Text Content */}
-            <div className="flex-1 text-center md:text-left flex flex-col justify-center items-center md:items-start">
+            <div className="w-full md:w-1/2 text-center md:text-left flex flex-col justify-center items-center md:items-start mb-8 md:mb-0 px-2">
               <h1 className="text-2xl md:text-3xl font-extrabold text-gray-900 mb-6 drop-shadow-lg">
                 <span className="block">Empowering Refugee Talents</span>
                 <span className="block">to Build Their Future</span>
@@ -277,17 +329,17 @@ function LandingPage() {
               </div>
             </div>
             {/* Right: Phone Frame Section */}
-            <div className="flex-1 flex justify-center items-center w-full md:w-auto mt-12 md:mt-0">
-              <div className="relative flex flex-col items-center justify-center" style={{ height: '500px' }}>
+            <div className="w-full md:w-1/2 flex justify-center items-center mt-8 md:mt-0">
+              <div className="relative flex flex-col items-center justify-center w-full max-w-xs" style={{ minHeight: 320 }}>
                 {/* Phone Frame */}
-                <div className="bg-white rounded-[2.5rem] shadow-2xl border border-gray-200 p-2 w-[280px] h-[500px] flex items-center justify-center">
+                <div className="bg-white rounded-[2.5rem] shadow-2xl border border-gray-200 p-2 w-full max-w-[280px] h-[400px] sm:h-[460px] md:h-[500px] flex items-center justify-center">
                   {/* App UI Mockup - Carousel */}
-                  <div className="w-[240px] h-[460px] rounded-[2rem] bg-gray-50 flex flex-col overflow-hidden border border-gray-100 shadow-md relative">
+                  <div className="w-[180px] sm:w-[220px] md:w-[240px] h-[360px] sm:h-[420px] md:h-[460px] rounded-[2rem] bg-gray-50 flex flex-col overflow-hidden border border-gray-100 shadow-md relative">
                     {phoneMockups[currentMockup]}
                   </div>
                 </div>
                 {/* Speaker/Camera Notch */}
-                <div className="absolute top-4 left-1/2 -translate-x-1/2 w-16 h-2 bg-gray-200 rounded-full opacity-70" />
+                <div className="absolute top-4 left-1/2 -translate-x-1/2 w-12 sm:w-16 h-2 bg-gray-200 rounded-full opacity-70" />
               </div>
             </div>
           </div>
@@ -440,50 +492,48 @@ function LandingPage() {
               Hear from refugee students who have transformed their lives through Refuture
             </p>
           </div>
-          
-          <div className="relative">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-start">
-              {/* Left: Testimonial Card and Buttons */}
-              <div className="w-full flex flex-col items-start lg:ml-16">
-                <div className="bg-white rounded-2xl p-8 shadow-lg w-full max-w-sm h-[400px] flex flex-col justify-between">
-                  <div className="flex mb-6">
-                    {[...Array(testimonials[currentTestimonial].rating)].map((_, i) => (
-                      <Star key={i} className="h-6 w-6 text-amber-500 fill-current" />
-                    ))}
-                  </div>
-                  <p className="text-base text-gray-700 mb-8 italic">
-                    "{testimonials[currentTestimonial].text}"
-                  </p>
-                  <div className="flex items-center space-x-4">
-                    <div className="h-16 w-16 bg-gradient-to-br from-blue-600 to-emerald-600 rounded-full flex items-center justify-center text-white font-bold text-base">
-                      {testimonials[currentTestimonial].avatar}
-                    </div>
-                    <div className="text-left">
-                      <h4 className="font-bold text-gray-900">{testimonials[currentTestimonial].name}</h4>
-                      <p className="text-gray-600">{testimonials[currentTestimonial].program} • {testimonials[currentTestimonial].country}</p>
-                    </div>
-                  </div>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start px-2">
+            {/* Left: Testimonial Card and Buttons */}
+            <div className="w-full max-w-sm mx-auto flex flex-col items-start">
+              <div className="bg-white rounded-2xl p-8 shadow-lg w-full h-[400px] flex flex-col justify-between">
+                <div className="flex mb-6">
+                  {[...Array(testimonials[currentTestimonial].rating)].map((_, i) => (
+                    <Star key={i} className="h-6 w-6 text-amber-500 fill-current" />
+                  ))}
                 </div>
-                {/* Next/Previous Buttons Below Card, centered */}
-                <div className="flex space-x-4 mt-4 justify-center w-full max-w-sm">
-                  <button 
-                    onClick={() => setCurrentTestimonial((prev) => (prev === 0 ? testimonials.length - 1 : prev - 1))}
-                    className="p-2 bg-white rounded-full shadow-md hover:shadow-lg transition-shadow"
-                  >
-                    <ChevronLeft className="h-5 w-5 text-gray-600" />
-                  </button>
-                  <button 
-                    onClick={() => setCurrentTestimonial((prev) => (prev === testimonials.length - 1 ? 0 : prev + 1))}
-                    className="p-2 bg-white rounded-full shadow-md hover:shadow-lg transition-shadow"
-                  >
-                    <ChevronRight className="h-5 w-5 text-gray-600" />
-                  </button>
+                <p className="text-base text-gray-700 mb-8 italic">
+                  "{testimonials[currentTestimonial].text}"
+                </p>
+                <div className="flex items-center space-x-4">
+                  <div className="h-16 w-16 bg-gradient-to-br from-blue-600 to-emerald-600 rounded-full flex items-center justify-center text-white font-bold text-base">
+                    {testimonials[currentTestimonial].avatar}
+                  </div>
+                  <div className="text-left">
+                    <h4 className="font-bold text-gray-900">{testimonials[currentTestimonial].name}</h4>
+                    <p className="text-gray-600">{testimonials[currentTestimonial].program} • {testimonials[currentTestimonial].country}</p>
+                  </div>
                 </div>
               </div>
+              {/* Next/Previous Buttons Below Card, centered */}
+              <div className="flex space-x-4 mt-4 justify-center w-full max-w-sm">
+                <button 
+                  onClick={() => setCurrentTestimonial((prev) => (prev === 0 ? testimonials.length - 1 : prev - 1))}
+                  className="p-2 bg-white rounded-full shadow-md hover:shadow-lg transition-shadow"
+                >
+                  <ChevronLeft className="h-5 w-5 text-gray-600" />
+                </button>
+                <button 
+                  onClick={() => setCurrentTestimonial((prev) => (prev === testimonials.length - 1 ? 0 : prev + 1))}
+                  className="p-2 bg-white rounded-full shadow-md hover:shadow-lg transition-shadow"
+                >
+                  <ChevronRight className="h-5 w-5 text-gray-600" />
+                </button>
+              </div>
+            </div>
             {/* Right: Contact Form */}
-            <div className="w-full flex flex-col items-center justify-start">
+            <div className="w-full max-w-sm mx-auto flex flex-col items-center justify-start">
               <form
-                className="bg-white rounded-2xl p-8 shadow-lg w-full max-w-sm h-[400px] flex flex-col justify-between overflow-auto"
+                className="bg-white rounded-2xl p-8 shadow-lg w-full h-[400px] flex flex-col justify-between overflow-auto"
                 style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
                 onSubmit={async e => {
                   e.preventDefault();
@@ -574,7 +624,6 @@ function LandingPage() {
             </div>
           </div>
         </div>
-      </div> {/* Close the missing 'relative' div */}
       </section>
 
       {/* CTA Section */}
@@ -610,8 +659,8 @@ function LandingPage() {
       {/* Footer */}
       <footer className="bg-gray-900 text-white py-12">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
-            <div>
+          <div className="flex flex-col sm:flex-row md:flex-wrap gap-8">
+            <div className="flex-1 min-w-[180px] mb-8 sm:mb-0">
               <div className="flex items-center space-x-3 mb-4">
                 <div className="h-10 w-10 bg-blue-600 rounded-xl flex items-center justify-center">
                   <GraduationCap className="h-6 w-6 text-white" />
@@ -623,8 +672,7 @@ function LandingPage() {
                 mentorship, and opportunity.
               </p>
             </div>
-            
-            <div>
+            <div className="flex-1 min-w-[180px] mb-8 sm:mb-0">
               <h4 className="font-bold mb-4">Platform</h4>
               <ul className="space-y-2 text-gray-400">
                 <li><a href="#" className="hover:text-white transition-colors">Features</a></li>
@@ -633,8 +681,7 @@ function LandingPage() {
                 <li><a href="#" className="hover:text-white transition-colors">Opportunities</a></li>
               </ul>
             </div>
-            
-            <div>
+            <div className="flex-1 min-w-[180px] mb-8 sm:mb-0">
               <h4 className="font-bold mb-4">Support</h4>
               <ul className="space-y-2 text-gray-400">
                 <li><a href="#" className="hover:text-white transition-colors">Help Center</a></li>
@@ -643,8 +690,7 @@ function LandingPage() {
                 <li><a href="#" className="hover:text-white transition-colors">Resources</a></li>
               </ul>
             </div>
-            
-            <div>
+            <div className="flex-1 min-w-[180px]">
               <h4 className="font-bold mb-4">Connect</h4>
               <ul className="space-y-2 text-gray-400">
                 <li><a href="#" className="hover:text-white transition-colors">About Us</a></li>
@@ -654,8 +700,7 @@ function LandingPage() {
               </ul>
             </div>
           </div>
-          
-          <div className="border-t border-gray-800 mt-8 pt-8 text-center text-gray-400">
+          <div className="border-t border-gray-800 mt-8 pt-8 text-center text-gray-400 text-xs sm:text-sm">
             <p>&copy; 2025 Refuture. All rights reserved. Building bridges to brighter futures.</p>
           </div>
         </div>
