@@ -24,15 +24,26 @@ export const useOpportunities = (filters = {}) => {
     try {
       setLoading(true);
       setError(null);
-      const response = await opportunitiesAPI.getAll({
+      // Add timeout logic
+      const timeoutMs = 10000; // 10 seconds
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => {
+          abortControllerRef.current.abort();
+          reject(new Error('Request timed out after 10 seconds'));
+        }, timeoutMs)
+      );
+      const fetchPromise = opportunitiesAPI.getAll({
         ...filters,
-        ...params
+        ...params,
+        signal: abortControllerRef.current.signal
       });
+      const response = await Promise.race([fetchPromise, timeoutPromise]);
       setOpportunities(response.data.opportunities);
       setLastGoodOpportunities(response.data.opportunities); // Only update on success
       setPagination(response.data.pagination);
     } catch (err) {
       if (err.name === 'AbortError') {
+        setError('Request was aborted or timed out');
         return;
       }
       setError(err.response?.data?.message || err.message || 'Failed to fetch opportunities');

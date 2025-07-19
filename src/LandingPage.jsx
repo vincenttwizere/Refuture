@@ -16,7 +16,7 @@ import {
   ChevronRight,
   ChevronLeft,
   UserPlus,
-  Search,
+  Search, 
   Menu,
   X
 } from 'lucide-react'
@@ -25,10 +25,10 @@ function LandingPage() {
   const [currentTestimonial, setCurrentTestimonial] = useState(0)
 
   // Contact form state
-  const [contactName, setContactName] = useState("");
   const [contactEmail, setContactEmail] = useState("");
   const [contactMessage, setContactMessage] = useState("");
   const [contactStatus, setContactStatus] = useState("idle"); // idle | success | error
+  const [contactName, setContactName] = useState("");
 
   // Add state for mobile nav
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
@@ -329,7 +329,7 @@ function LandingPage() {
               </div>
             </div>
             {/* Right: Phone Frame Section */}
-            <div className="w-full md:w-1/2 flex justify-center items-center mt-8 md:mt-0">
+            <div className="w-full md:w-1/2 flex justify-center items-center mt-8 md:mt-0 pl-0 md:pl-24">
               <div className="relative flex flex-col items-center justify-center w-full max-w-xs" style={{ minHeight: 320 }}>
                 {/* Phone Frame */}
                 <div className="bg-white rounded-[2.5rem] shadow-2xl border border-gray-200 p-2 w-full max-w-[280px] h-[400px] sm:h-[460px] md:h-[500px] flex items-center justify-center">

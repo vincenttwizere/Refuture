@@ -13,24 +13,31 @@ export const useApplications = (opportunityId = null, userRole = null) => {
     try {
       setLoading(true);
       setError(null);
-      
-      let response;
+      // Add timeout logic
+      const timeoutMs = 10000; // 10 seconds
+      const controller = new AbortController();
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => {
+          controller.abort();
+          reject(new Error('Request timed out after 10 seconds'));
+        }, timeoutMs)
+      );
+      let fetchPromise;
       if (opportunityId) {
-        // Fetch applications for a specific opportunity
-        response = await applicationsAPI.getOpportunityApplications(opportunityId);
+        fetchPromise = applicationsAPI.getOpportunityApplications(opportunityId, { signal: controller.signal });
       } else if (userRole === 'refugee' || user?.role === 'refugee') {
-        // Fetch applications for the current refugee user
-        response = await applicationsAPI.getUserApplications();
+        fetchPromise = applicationsAPI.getUserApplications({ signal: controller.signal });
       } else {
-        // Fetch all applications for the current provider
-        response = await applicationsAPI.getProviderApplications();
+        fetchPromise = applicationsAPI.getProviderApplications({ signal: controller.signal });
       }
-      
-      console.log('Applications API response:', response.data);
+      const response = await Promise.race([fetchPromise, timeoutPromise]);
       setApplications(response.data.applications || []);
       setLastGoodApplications(response.data.applications || []); // Only update on success
     } catch (err) {
-      console.error('Error fetching applications:', err);
+      if (err.name === 'AbortError') {
+        setError('Request was aborted or timed out');
+        return;
+      }
       setError(err.response?.data?.message || 'Failed to fetch applications');
       // Do NOT clear lastGoodApplications
     } finally {

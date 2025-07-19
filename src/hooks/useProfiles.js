@@ -11,15 +11,28 @@ export const useProfiles = (filters = {}) => {
     try {
       setLoading(true);
       setError(null);
-      
-      const response = await profilesAPI.getAll({
+      // Add timeout logic
+      const timeoutMs = 10000; // 10 seconds
+      const controller = new AbortController();
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => {
+          controller.abort();
+          reject(new Error('Request timed out after 10 seconds'));
+        }, timeoutMs)
+      );
+      const fetchPromise = profilesAPI.getAll({
         ...filters,
-        ...params
+        ...params,
+        signal: controller.signal
       });
-      
+      const response = await Promise.race([fetchPromise, timeoutPromise]);
       setProfiles(response.data.profiles || []);
       setLastGoodProfiles(response.data.profiles || []); // Only update on success
     } catch (err) {
+      if (err.name === 'AbortError') {
+        setError('Request was aborted or timed out');
+        return;
+      }
       setError(err.response?.data?.message || err.message || 'Failed to fetch profiles');
       // Do NOT clear lastGoodProfiles
       console.error('Error fetching profiles:', err);
