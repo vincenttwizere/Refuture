@@ -97,7 +97,7 @@ const CreateProfile = ({ onProfileUpdated }) => {
     const checkExistingProfile = async () => {
       if (user?.email) {
         try {
-          const response = await axios.get(`http://localhost:5001/api/profiles?email=${user.email}`);
+          const response = await axios.get(`https://refuture-backend-1.onrender.com/api/profiles?email=${user.email}`);
           if (response.data.profiles && response.data.profiles.length > 0) {
             const p = response.data.profiles[0];
             setExistingProfile(p);
@@ -143,7 +143,7 @@ const CreateProfile = ({ onProfileUpdated }) => {
               if (photoUrl.startsWith('http')) {
                 setImagePreview(photoUrl);
               } else {
-                setImagePreview(`http://localhost:5001/${photoUrl}`);
+                setImagePreview(`https://refuture-backend-1.onrender.com/${photoUrl}`);
               }
             }
           }
@@ -401,7 +401,7 @@ const CreateProfile = ({ onProfileUpdated }) => {
         console.log(`${key}:`, value);
       }
       
-      const response = await axios.post('http://localhost:5001/api/profiles', data, {
+      const response = await axios.post('https://refuture-backend-1.onrender.com/api/profiles', data, {
         headers: { 
           'Content-Type': 'multipart/form-data',
           'Authorization': `Bearer ${localStorage.getItem('token')}`
@@ -416,25 +416,46 @@ const CreateProfile = ({ onProfileUpdated }) => {
       if (response.data && response.data.profile && response.data.profile.supportingDocuments) {
         setSupportingDocuments((response.data.profile.supportingDocuments || []).map(doc => ({ path: doc.path, originalname: doc.originalname })));
       }
+      
+      // Debug logs for redirect
+      console.log('User object:', user);
+      console.log('User role:', user?.role);
+      console.log('About to redirect...');
+      
       // Call the onProfileUpdated callback if provided
       if (onProfileUpdated) {
+        console.log('Calling onProfileUpdated callback...');
         await onProfileUpdated();
-      } else {
-        // Show success message and redirect based on user role
-        const successMessage = existingProfile ? 'Profile updated successfully!' : 'Profile created successfully!';
-        console.log(successMessage);
+      }
         
-        // Redirect to appropriate dashboard after successful save
+      // Always redirect after success
+      console.log('Performing redirect...');
+      
+      // Small delay to ensure success state is set
         setTimeout(() => {
+        try {
           if (user?.role === 'refugee') {
+            console.log('Redirecting to refugee dashboard...');
             navigate('/refugee-dashboard');
           } else if (user?.role === 'provider') {
+            console.log('Redirecting to provider dashboard...');
             navigate('/provider-dashboard');
           } else {
+            console.log('Redirecting to home...');
             navigate('/');
           }
-        }, 2000);
-      }
+        } catch (redirectError) {
+          console.error('Redirect error:', redirectError);
+          // Fallback: try to redirect to refugee dashboard if user role is unknown
+          try {
+            navigate('/refugee-dashboard');
+          } catch (fallbackError) {
+            console.error('Fallback redirect failed:', fallbackError);
+            // Last resort: redirect to home
+            navigate('/');
+          }
+        }
+      }, 1000); // 1 second delay
       
     } catch (error) {
       console.error('=== FRONTEND PROFILE ERROR ===');

@@ -52,7 +52,7 @@ const ProfileView = ({ profile, onEdit }) => {
   const getProfileImageUrl = (photoUrl) => {
     if (!photoUrl) return '/default-avatar.png';
     if (photoUrl.startsWith('http')) return photoUrl;
-    return `http://localhost:5001/${photoUrl}`;
+    return `https://refuture-backend-1.onrender.com/${photoUrl}`;
   };
 
   // Handle image loading errors

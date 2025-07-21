@@ -145,15 +145,15 @@ const RefugeeDashboard = () => {
   const { notifications, refetch: refetchNotifications } = useNotifications();
   const { messages, loading: messagesLoading, error: messagesError, refetch: refetchMessages } = useMessages();
 
-  // Use hook data directly for display
-  const displayOpportunities = opportunities;
-  const displayInterviews = interviews;
-  const displayApplications = applications;
-  const displayProfiles = profiles;
-  const displayMessages = messages;
-  const displayNotifications = notifications;
+  // Use hook data directly for display with safety checks
+  const displayOpportunities = Array.isArray(opportunities) ? opportunities : [];
+  const displayInterviews = Array.isArray(interviews) ? interviews : [];
+  const displayApplications = Array.isArray(applications) ? applications : [];
+  const displayProfiles = Array.isArray(profiles) ? profiles : [];
+  const displayMessages = Array.isArray(messages) ? messages : [];
+  const displayNotifications = Array.isArray(notifications) ? notifications : [];
 
-  // Derived data
+  // Derived data with safety checks
   const profile = displayProfiles && displayProfiles.length > 0 ? displayProfiles[0] : null;
   const unreadNotificationsCount = displayNotifications.filter(notification => !notification.isRead).length;
   const unreadMessagesCount = displayMessages.filter(message => !message.isRead && message.recipient === user?._id).length;
@@ -329,11 +329,11 @@ const RefugeeDashboard = () => {
     }
   };
 
-  // Get upcoming interviews for reminders
+  // Get upcoming interviews for reminders with safety checks
   const now = new Date();
   const in24h = new Date(now.getTime() + 24 * 60 * 60 * 1000);
   const upcomingInterviews = displayInterviews
-    .filter(int => int.status === 'scheduled' && int.scheduledDate &&
+    .filter(int => int && int.status === 'scheduled' && int.scheduledDate &&
       new Date(int.scheduledDate) > now && new Date(int.scheduledDate) <= in24h &&
       !dismissedReminders.includes(int._id)
     )
@@ -431,7 +431,7 @@ const RefugeeDashboard = () => {
 };
 
 // Overview Section Component
-const OverviewSection = ({ opportunities, interviews, applications, opportunitiesLoading, interviewsLoading, applicationsLoading, opportunitiesError, interviewsError, applicationsError }) => {
+const OverviewSection = ({ opportunities = [], interviews = [], applications = [], opportunitiesLoading, interviewsLoading, applicationsLoading, opportunitiesError, interviewsError, applicationsError }) => {
   const activeApplications = applications.filter(app => 
     app.status === 'pending' || app.status === 'accepted' || app.status === 'under_review'
   ).length;

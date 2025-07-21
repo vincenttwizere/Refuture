@@ -22,7 +22,7 @@ export const AuthProvider = ({ children }) => {
     const checkAuth = async () => {
       if (token) {
         try {
-          const response = await axios.get('http://localhost:5001/api/auth/me');
+          const response = await axios.get('https://refuture-backend-1.onrender.com/api/auth/me');
           console.log('Auth check response:', response.data); // Debug log
           if (response.data.success && response.data.user) {
             setUser(response.data.user);
@@ -44,7 +44,7 @@ export const AuthProvider = ({ children }) => {
 
   const login = async (email, password) => {
     try {
-      const response = await axios.post('http://localhost:5001/api/auth/login', {
+      const response = await axios.post('https://refuture-backend-1.onrender.com/api/auth/login', {
         email,
         password
       });
@@ -71,7 +71,7 @@ export const AuthProvider = ({ children }) => {
 
   const signup = async (userData) => {
     try {
-      const response = await axios.post('http://localhost:5001/api/auth/signup', userData);
+      const response = await axios.post('https://refuture-backend-1.onrender.com/api/auth/signup', userData);
       
       const { token: newToken, user: newUser, redirectTo } = response.data;
       
@@ -102,7 +102,7 @@ export const AuthProvider = ({ children }) => {
   const refreshUser = async () => {
     if (token) {
       try {
-        const response = await axios.get('http://localhost:5001/api/auth/me');
+        const response = await axios.get('https://refuture-backend-1.onrender.com/api/auth/me');
         if (response.data.success && response.data.user) {
           setUser(response.data.user);
           return { success: true, user: response.data.user };

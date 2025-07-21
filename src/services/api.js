@@ -2,7 +2,7 @@ import axios from 'axios';
 
 // Create axios instance with base configuration
 const api = axios.create({
-  baseURL: 'http://localhost:5001/api',
+  baseURL: 'https://refuture-backend-1.onrender.com/api',
   headers: {
     'Content-Type': 'application/json',
   },

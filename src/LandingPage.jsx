@@ -329,7 +329,7 @@ function LandingPage() {
               </div>
             </div>
             {/* Right: Phone Frame Section */}
-            <div className="w-full md:w-1/2 flex justify-center items-center mt-8 md:mt-0 pl-0 md:pl-24">
+            <div className="w-full md:w-1/2 flex justify-center items-center mt-8 md:mt-0 pl-0 md:pl-72 md:ml-36">
               <div className="relative flex flex-col items-center justify-center w-full max-w-xs" style={{ minHeight: 320 }}>
                 {/* Phone Frame */}
                 <div className="bg-white rounded-[2.5rem] shadow-2xl border border-gray-200 p-2 w-full max-w-[280px] h-[400px] sm:h-[460px] md:h-[500px] flex items-center justify-center">
