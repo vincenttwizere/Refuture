@@ -349,11 +349,11 @@ function LandingPage() {
       {/* About Section */}
       <section id="about" className="py-20 bg-white">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
             {/* Our Mission Card on the left */}
-            <div className="relative order-1 lg:order-1 flex justify-center items-center" style={{ height: '500px' }}>
+            <div className="relative order-1 lg:order-1 flex justify-start items-center" style={{ height: '500px' }}>
               {/* Phone Frame */}
-              <div className="bg-white rounded-[2.5rem] shadow-2xl border border-gray-200 p-2 w-[280px] h-[500px] flex items-center justify-center">
+              <div className="bg-white relative rounded-[2.5rem] shadow-2xl border border-gray-200 p-2 w-[280px] h-[500px] flex items-center justify-center">
                 {/* Inner Card Content */}
                 <div className="w-[240px] h-[460px] rounded-[2rem] bg-gray-50 flex flex-col overflow-hidden border border-gray-100 shadow-md p-8">
                   <div className="flex flex-col items-center mb-6">
@@ -369,14 +369,14 @@ function LandingPage() {
               </div>
             </div>
             {/* About Content on the right */}
-            <div className="order-2 lg:order-2">
+            <div className="order-2 lg:order-2 lg:pl-8">
               <h2 className="text-2xl font-bold text-gray-900 mb-6">Building Bridges to Brighter Futures</h2>
               <p className="text-base text-gray-600 mb-8 leading-relaxed">
                 Refuture is dedicated to empowering refugee students by providing access to quality education, 
                 career opportunities, and mentorship. We believe that every student deserves the chance to 
                 build a successful future, regardless of their background or circumstances.
               </p>
-              <div className="space-y-4 md:ml-12">
+              <div className="space-y-4 md:ml-16">
                 <div className="flex items-center space-x-3">
                   <CheckCircle className="h-6 w-6 text-emerald-600" />
                   <span className="text-gray-700">Personalized learning paths</span>
