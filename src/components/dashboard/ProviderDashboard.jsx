@@ -63,6 +63,7 @@ import {
   Tooltip,
   Legend
 } from 'chart.js';
+import ProfileView from '../profiles/ProfileView';
 
 ChartJS.register(
   CategoryScale,
@@ -141,7 +142,8 @@ const ProviderDashboard = () => {
     loading: profilesLoading, 
     error: profilesError,
     fetchProfiles,
-    fetchProfileById
+    fetchProfileById,
+    lastGoodProfiles // <-- add this if not already destructured
   } = useProfiles();
 
   const { notifications, refetch: refetchNotifications } = useNotifications();
@@ -653,7 +655,9 @@ const ProviderDashboard = () => {
         },
         benefits: Array.isArray(formData.benefits) 
           ? formData.benefits 
-          : (formData.benefits ? formData.benefits.split(',').map(benefit => benefit.trim()).filter(Boolean) : [])
+          : (formData.benefits ? formData.benefits.split(',').map(benefit => benefit.trim()).filter(Boolean) : []),
+        provider: user?._id,
+        providerName: user?.fullName || user?.name || ''
       };
 
       if (showEditModal && editingOpportunity) {
@@ -695,10 +699,10 @@ const ProviderDashboard = () => {
 
   // Calculate real statistics for overview
   const overviewStats = useMemo(() => {
-    const activeOpportunities = opportunities.filter(opp => opp.isActive).length;
-    const totalApplications = applications.length;
-    const pendingInterviews = interviews.filter(int => int.status === 'pending').length;
-    const successfulPlacements = interviews.filter(int => int.status === 'completed').length;
+    const activeOpportunities = (opportunities || []).filter(opp => opp.isActive).length;
+    const totalApplications = (applications || []).length;
+    const pendingInterviews = (interviews || []).filter(int => int.status === 'pending').length;
+    const successfulPlacements = (interviews || []).filter(int => int.status === 'completed').length;
     
     return {
       activeOpportunities,
@@ -711,17 +715,17 @@ const ProviderDashboard = () => {
   // Memoize profile statistics to prevent recalculation
   const profileStats = useMemo(() => {
     return {
-      students: profiles.filter(p => p.option === 'student').length,
-      jobSeekers: profiles.filter(p => p.option === 'job seeker').length,
-      undocumented: profiles.filter(p => p.option === 'undocumented_talent').length,
-      total: profiles.length
+      students: (profiles || []).filter(p => p.option === 'student').length,
+      jobSeekers: (profiles || []).filter(p => p.option === 'job seeker').length,
+      undocumented: (profiles || []).filter(p => p.option === 'undocumented_talent').length,
+      total: (profiles || []).length
     };
   }, [profiles]);
 
   // Filter opportunities to only those created by the current provider
   const myOpportunities = useMemo(() => {
     if (!user || !user._id) return [];
-    return opportunities.filter(opp => opp.provider === user._id || (opp.provider && opp.provider._id === user._id));
+    return (opportunities || []).filter(opp => opp.provider === user._id || (opp.provider && opp.provider._id === user._id));
   }, [opportunities, user]);
 
   // Main content area
@@ -802,6 +806,25 @@ const ProviderDashboard = () => {
     }
 
     if (activeItem === 'available-talents') {
+      // Only show profiles with a valid refugee category
+      const validCategories = ['student', 'job seeker', 'undocumented_talent'];
+      const allRefugeeProfiles = (lastGoodProfiles || []).filter(p => validCategories.includes(p.option));
+      // Category labels
+      const categoryLabels = {
+        all: 'All',
+        student: 'Students',
+        'job seeker': 'Job Seekers',
+        undocumented_talent: 'Undocumented Talents'
+      };
+      const filterCategories = ['all', ...validCategories];
+      // Filter by selected category
+      let displayProfiles = selectedCategory === 'all'
+        ? allRefugeeProfiles
+        : allRefugeeProfiles.filter(p => p.option === selectedCategory);
+      // Sort students by score descending if 'Students' is selected
+      if (selectedCategory === 'student') {
+        displayProfiles = displayProfiles.slice().sort((a, b) => (b.score || 0) - (a.score || 0));
+      }
       return (
         <div className="space-y-6">
           {/* Header */}
@@ -811,8 +834,31 @@ const ProviderDashboard = () => {
               <p className="text-gray-600">Browse refugee talent profiles</p>
             </div>
           </div>
-          {/* Table or Loader/Error */}
-          {profilesLoading ? (
+          {/* Category Filter Buttons */}
+          <div className="flex flex-wrap gap-2 mb-4">
+            {filterCategories.map(category => (
+              <button
+                key={category}
+                className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${selectedCategory === category ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-blue-50'}`}
+                onClick={() => setSelectedCategory(category)}
+              >
+                {categoryLabels[category]}
+              </button>
+            ))}
+          </div>
+          {/* Warning if error */}
+          {profilesError && (
+            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-2">
+              <div className="flex items-center">
+                <AlertCircle className="h-5 w-5 text-yellow-400 mr-2" />
+                <p className="text-yellow-800 text-sm">
+                  Could not refresh talents. Showing last available data. <button onClick={fetchProfiles} className="ml-2 underline text-blue-600">Retry</button>
+                </p>
+              </div>
+            </div>
+          )}
+          {/* Table or Loader */}
+          {profilesLoading && displayProfiles.length === 0 ? (
             <div className="space-y-4">
               {[1, 2, 3].map(i => (
                 <div key={i} className="bg-white p-6 rounded-lg border animate-pulse">
@@ -821,14 +867,7 @@ const ProviderDashboard = () => {
                 </div>
               ))}
             </div>
-          ) : profilesError ? (
-            <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-              <div className="flex items-center">
-                <AlertCircle className="h-5 w-5 text-red-400 mr-2" />
-                <p className="text-red-800">{profilesError}</p>
-              </div>
-            </div>
-          ) : profiles.length > 0 ? (
+          ) : displayProfiles.length > 0 ? (
             <div className="overflow-x-auto bg-white rounded-lg border">
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
@@ -838,31 +877,20 @@ const ProviderDashboard = () => {
                     <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Gender</th>
                     <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Location</th>
                     <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Key Skills</th>
+                    {/* Add Score column for students */}
+                    {selectedCategory === 'student' && (
+                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Score</th>
+                    )}
                     <th className="px-4 py-2"></th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-100">
-                  {profiles.map((profile) => (
+                  {displayProfiles.map((profile) => (
                     <tr key={profile._id} className="hover:bg-blue-50 transition-colors">
-                      <td className="px-4 py-2 flex items-center space-x-2">
-                        <div className="w-8 h-8 bg-gray-200 rounded-full flex items-center justify-center overflow-hidden">
-                          {profile.photoUrl ? (
-                            <img 
-                              src={profile.photoUrl.startsWith('http') ? profile.photoUrl : `http://localhost:5001/${profile.photoUrl}`} 
-                              alt={profile.fullName} 
-                              className="w-8 h-8 object-cover"
-                            />
-                          ) : (
-                            <span className="text-sm font-medium text-gray-700">
-                              {profile.fullName?.split(' ').map(n => n[0]).join('')}
-                            </span>
-                          )}
-                        </div>
-                        <span>{profile.fullName}</span>
-                      </td>
-                      <td className="px-4 py-2">{profile.age}</td>
-                      <td className="px-4 py-2">{profile.gender}</td>
-                      <td className="px-4 py-2">{profile.currentLocation}</td>
+                      <td className="px-4 py-2 font-semibold text-gray-900">{profile.fullName || profile.firstName + ' ' + profile.lastName}</td>
+                      <td className="px-4 py-2">{profile.age || '-'}</td>
+                      <td className="px-4 py-2">{profile.gender || '-'}</td>
+                      <td className="px-4 py-2">{profile.currentLocation || '-'}</td>
                       <td className="px-4 py-2">
                         <div className="flex flex-wrap gap-1">
                           {profile.skills?.slice(0, 3).map((skill, i) => (
@@ -875,9 +903,13 @@ const ProviderDashboard = () => {
                           )}
                         </div>
                       </td>
+                      {/* Show score for students */}
+                      {selectedCategory === 'student' && (
+                        <td className="px-4 py-2 font-bold text-blue-700">{profile.score ?? '-'}</td>
+                      )}
                       <td className="px-4 py-2">
                         <button 
-                          onClick={() => openProfileModal(profile)}
+                          onClick={() => { setSelectedProfile(profile); setShowProfileModal(true); }}
                           className="bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700 text-sm"
                         >
                           View
@@ -887,6 +919,20 @@ const ProviderDashboard = () => {
                   ))}
                 </tbody>
               </table>
+              {/* Profile Modal */}
+              {showProfileModal && selectedProfile && (
+                <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50 p-4">
+                  <div className="bg-white rounded-lg shadow-xl p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto relative">
+                    <button
+                      onClick={() => setShowProfileModal(false)}
+                      className="absolute top-2 right-2 text-gray-400 hover:text-gray-600 p-2"
+                    >
+                      <X className="h-6 w-6" />
+                    </button>
+                    <ProfileView profile={selectedProfile} />
+                  </div>
+                </div>
+              )}
             </div>
           ) : (
             <div className="text-center py-12">
@@ -3041,7 +3087,7 @@ const ProviderDashboard = () => {
     console.log('Provider Dashboard - Conversations:', conversations);
   }, [messages, messagesLoading, messagesError, conversations]);
 
-
+  const [selectedCategory, setSelectedCategory] = useState('all');
 
   return (
     <div className="h-screen bg-gray-50 flex flex-col">
@@ -3393,283 +3439,17 @@ const ProviderDashboard = () => {
 
       {/* Profile View Modal */}
       {showProfileModal && selectedProfile && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg border border-gray-200 max-w-4xl w-full max-h-[80vh] overflow-y-auto">
-            <div className="p-4 border-b border-gray-200">
-              <div className="flex justify-between items-center">
-                <h2 className="text-xl font-bold text-gray-900">Profile Details</h2>
+        <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto relative">
                 <button
-                  onClick={closeProfileModal}
-                  className="text-gray-400 hover:text-gray-600"
+              onClick={() => setShowProfileModal(false)}
+              className="absolute top-2 right-2 text-gray-400 hover:text-gray-600 p-2"
                 >
                   <X className="h-6 w-6" />
                 </button>
+            <ProfileView profile={selectedProfile} />
               </div>
             </div>
-            {profileLoading ? (
-              <div className="p-8 text-center">
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-                <p className="mt-4 text-gray-600">Loading profile...</p>
-              </div>
-            ) : (
-              <div className="p-4 space-y-6">
-                {/* Profile Picture & Basic Info */}
-                <div className="flex items-start space-x-4">
-                  <div className="w-20 h-20 bg-gray-300 rounded-full flex items-center justify-center overflow-hidden">
-                          {selectedProfile.photoUrl ? (
-                            <img 
-                              src={selectedProfile.photoUrl.startsWith('http') ? selectedProfile.photoUrl : `http://localhost:5001/${selectedProfile.photoUrl}`} 
-                              alt={selectedProfile.fullName} 
-                              className="w-20 h-20 rounded-full object-cover"
-                            />
-                    ) : (
-                      <span className="text-xl font-medium text-gray-700">
-                            {selectedProfile.fullName?.split(' ').map(n => n[0]).join('')}
-                          </span>
-                    )}
-                        </div>
-                        <div className="flex-1">
-                          <h1 className="text-2xl font-bold text-gray-900 mb-1">{selectedProfile.fullName}</h1>
-                    <p className="text-base text-gray-600 mb-1">{selectedProfile.age} years old • {selectedProfile.gender}</p>
-                    <div className="flex items-center space-x-4 mb-2">
-                            <span className={`px-3 py-1 rounded-full text-sm font-medium ${
-                              selectedProfile.option === 'student' ? 'bg-blue-100 text-blue-800' :
-                              selectedProfile.option === 'job seeker' ? 'bg-green-100 text-green-800' :
-                              selectedProfile.option === 'undocumented_talent' ? 'bg-purple-100 text-purple-800' :
-                              'bg-gray-100 text-gray-800'
-                            }`}>
-                              {selectedProfile.option}
-                            </span>
-                      <span className="flex items-center text-gray-600">
-                              <MapPin className="h-4 w-4 mr-1" />
-                              {selectedProfile.currentLocation}
-                      </span>
-                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${selectedProfile.isPublic ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>{selectedProfile.isPublic ? 'Public' : 'Private'}</span>
-                            </div>
-                    <div className="flex flex-wrap gap-4 text-gray-600 text-sm">
-                      <span><Mail className="inline h-4 w-4 mr-1" />{selectedProfile.email}</span>
-                      {selectedProfile.phone && <span><Phone className="inline h-4 w-4 mr-1" />{selectedProfile.phone}</span>}
-                      {selectedProfile.website && <span><Globe className="inline h-4 w-4 mr-1" /><a href={selectedProfile.website} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">{selectedProfile.website}</a></span>}
-                          </div>
-                        </div>
-                      </div>
-
-                {/* Resume/CV and Get in Touch (now in main form) */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {/* Resume/CV */}
-                  {selectedProfile.document && (
-                                      <div className="bg-gray-50 rounded-lg p-4 border border-gray-200 flex flex-col items-center justify-center">
-                    <h3 className="text-base font-semibold text-gray-900 mb-2">Resume/CV</h3>
-                    <button className="w-full bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center justify-center">
-                      <Download className="h-4 w-4 mr-2" />
-                      Download Resume
-                    </button>
-                        </div>
-                      )}
-                  {/* Get in Touch */}
-                  <div className="bg-gray-50 rounded-lg p-4 border border-gray-200 flex flex-col items-center justify-center">
-                    <h3 className="text-base font-semibold text-gray-900 mb-2">Get in Touch</h3>
-                    <button
-                      onClick={() => {
-                        setShowMessageCenter(true);
-                      }}
-                      className="w-full bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center justify-center mb-3"
-                    >
-                      <MessageCircle className="h-4 w-4 mr-2" />
-                      Send Message
-                    </button>
-                    <button className="w-full bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 flex items-center justify-center">
-                      <Video className="h-4 w-4 mr-2" />
-                      Schedule Video Call
-                    </button>
-                  </div>
-                </div>
-
-                {/* Skills & Languages */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
-                    <h3 className="text-base font-semibold text-gray-900 mb-2 flex items-center"><Award className="h-4 w-4 mr-2 text-blue-500" />Skills</h3>
-                    {selectedProfile.skills && selectedProfile.skills.length > 0 ? (
-                          <div className="flex flex-wrap gap-2">
-                        {selectedProfile.skills.map((skill, i) => (
-                          <span key={i} className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm">{skill}</span>
-                            ))}
-                          </div>
-                    ) : <p className="text-gray-500 text-sm">No skills listed</p>}
-                        </div>
-                  <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
-                    <h3 className="text-base font-semibold text-gray-900 mb-2 flex items-center"><Languages className="h-4 w-4 mr-2 text-blue-500" />Languages</h3>
-                    {selectedProfile.language && selectedProfile.language.length > 0 ? (
-                          <div className="flex flex-wrap gap-2">
-                        {selectedProfile.language.map((lang, i) => (
-                          <span key={i} className="bg-green-100 text-green-800 px-3 py-1 rounded-full text-sm">{lang}</span>
-                            ))}
-                          </div>
-                    ) : <p className="text-gray-500 text-sm">No languages listed</p>}
-                        </div>
-                          </div>
-
-                {/* Student Template */}
-                {selectedProfile.option === 'student' && (
-                  <>
-                    <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
-                      <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center"><BookOpen className="h-4 w-4 mr-2 text-blue-500" />Academic Information</h3>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                        <div>
-                          <span className="block text-sm font-medium text-gray-700 mb-2">High School Subjects</span>
-                          <p className="text-gray-900">{selectedProfile.highSchoolSubjects || <span className="text-gray-400 italic">No data provided</span>}</p>
-                          </div>
-                        <div>
-                          <span className="block text-sm font-medium text-gray-700 mb-2">Desired Field of Study</span>
-                          <p className="text-gray-900">{selectedProfile.desiredField || <span className="text-gray-400 italic">No data provided</span>}</p>
-                        </div>
-                    </div>
-                  </div>
-                    <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
-                      <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center"><Award className="h-4 w-4 mr-2 text-blue-500" />Annual Academic Records</h3>
-                      {selectedProfile.academicRecords && selectedProfile.academicRecords.length > 0 ? (
-                      <div className="space-y-3">
-                          {selectedProfile.academicRecords.map((record, i) => (
-                            <div key={i} className="bg-white rounded-lg p-3 border border-gray-200">
-                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div>
-                                  <span className="text-sm font-medium text-gray-500">Academic Level</span>
-                                  <p className="text-gray-900">{expandDegreeAbbreviation(record.level || '')}</p>
-                          </div>
-                                <div>
-                                  <span className="text-sm font-medium text-gray-500">Year</span>
-                                  <p className="text-gray-900">{String(record.year || '')}</p>
-                          </div>
-                                {record.school && (
-                                  <div>
-                                    <span className="text-sm font-medium text-gray-500">School</span>
-                                    <p className="text-gray-900">{String(record.school)}</p>
-                          </div>
-                        )}
-                                <div>
-                                  <span className="text-sm font-medium text-gray-500">Percentage Score</span>
-                                  <p className="text-gray-900">{String(record.percentage || 0)}%</p>
-                      </div>
-                    </div>
-                              {record.subjectGrades && (
-                                <div className="mt-4">
-                                  <span className="text-sm font-medium text-gray-500">Subject Grades</span>
-                                  <p className="text-gray-900">
-                                    {typeof record.subjectGrades === 'string' ? record.subjectGrades : 
-                                     typeof record.subjectGrades === 'object' ? JSON.stringify(record.subjectGrades) : 
-                                     String(record.subjectGrades)}
-                                  </p>
-                          </div>
-                        )}
-                          </div>
-                          ))}
-                          </div>
-                      ) : <p className="text-gray-400 italic">No academic records added yet</p>}
-                      </div>
-                    <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
-                      <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center"><FileText className="h-4 w-4 mr-2 text-blue-500" />Transcripts and Certificates</h3>
-                      {selectedProfile.supportingDocuments && selectedProfile.supportingDocuments.length > 0 ? (
-                        <div className="space-y-2">
-                          {selectedProfile.supportingDocuments.map((doc, i) => (
-                            <div key={i} className="flex items-center justify-between p-2 bg-white rounded border">
-                              <div className="flex items-center">
-                                <FileText className="h-4 w-4 text-blue-500 mr-2" />
-                                <span className="text-gray-700">
-                                  {typeof doc === 'object' && doc.originalname ? doc.originalname : 
-                                   typeof doc === 'string' ? doc : 'Document'}
-                                </span>
-                    </div>
-                              {typeof doc === 'string' ? (
-                                <a href={`http://localhost:5001/${doc}`} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline text-xs">View</a>
-                              ) : typeof doc === 'object' && doc.path ? (
-                                <a href={`http://localhost:5001/${doc.path}`} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline text-xs">View</a>
-                              ) : null}
-                      </div>
-                          ))}
-                        </div>
-                      ) : <p className="text-gray-400 italic">No supporting documents uploaded yet</p>}
-                    </div>
-                  </>
-                )}
-
-                {/* Job Seeker Template */}
-                {selectedProfile.option === 'job seeker' && (
-                  <>
-                    <div className="bg-gray-50 rounded-lg p-6 border border-gray-200 mb-6">
-                      <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center"><GraduationCap className="h-5 w-5 mr-2 text-blue-500" />Education</h3>
-                      {selectedProfile.education && selectedProfile.education.length > 0 ? (
-                        <div className="space-y-4">
-                          {selectedProfile.education.map((edu, i) => (
-                            <div key={i} className="bg-white rounded-lg p-4 border border-gray-200">
-                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div><span className="text-sm font-medium text-gray-500">School/Institution</span><p className="text-gray-900">{String(edu.school || '')}</p></div>
-                                <div><span className="text-sm font-medium text-gray-500">Degree</span><p className="text-gray-900">{expandDegreeAbbreviation(edu.degree || '')}</p></div>
-                                <div><span className="text-sm font-medium text-gray-500">Field of Study</span><p className="text-gray-900">{String(edu.field || '')}</p></div>
-                                <div><span className="text-sm font-medium text-gray-500">Duration</span><p className="text-gray-900">{String(edu.duration || '')}</p></div>
-                                <div><span className="text-sm font-medium text-gray-500">Start Date</span><p className="text-gray-900">{String(edu.start || '')}</p></div>
-                                <div><span className="text-sm font-medium text-gray-500">End Date</span><p className="text-gray-900">{String(edu.end || '')}</p></div>
-                      </div>
-                            </div>
-                          ))}
-                        </div>
-                      ) : <p className="text-gray-400 italic">No education history added yet</p>}
-                    </div>
-                    <div className="bg-gray-50 rounded-lg p-6 border border-gray-200">
-                      <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center"><Briefcase className="h-5 w-5 mr-2 text-blue-500" />Work Experience</h3>
-                      {selectedProfile.experience && selectedProfile.experience.length > 0 ? (
-                        <div className="space-y-4">
-                          {selectedProfile.experience.map((exp, i) => (
-                            <div key={i} className="bg-white rounded-lg p-4 border border-gray-200">
-                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div><span className="text-sm font-medium text-gray-500">Company</span><p className="text-gray-900">{String(exp.company || '')}</p></div>
-                                <div><span className="text-sm font-medium text-gray-500">Job Title</span><p className="text-gray-900">{String(exp.title || '')}</p></div>
-                                <div><span className="text-sm font-medium text-gray-500">Start Date</span><p className="text-gray-900">{String(exp.start || '')}</p></div>
-                                <div><span className="text-sm font-medium text-gray-500">End Date</span><p className="text-gray-900">{String(exp.end || '')}</p></div>
-                                <div className="md:col-span-2"><span className="text-sm font-medium text-gray-500">Description</span><p className="text-gray-900">{String(exp.description || '')}</p></div>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      ) : <p className="text-gray-400 italic">No work experience added yet</p>}
-                    </div>
-                  </>
-                )}
-
-                {/* Undocumented Talent Template */}
-                {selectedProfile.option === 'undocumented_talent' && (
-                  <>
-                    <div className="bg-gray-50 rounded-lg p-6 border border-gray-200">
-                      <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center"><Star className="h-5 w-5 mr-2 text-blue-500" />Talent Information</h3>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                        <div><span className="block text-sm font-medium text-gray-700 mb-2">Talent Category</span><p className="text-gray-900">{String(selectedProfile.talentCategory || '')}</p></div>
-                        <div><span className="block text-sm font-medium text-gray-700 mb-2">Years of Experience</span><p className="text-gray-900">{String(selectedProfile.talentExperience || '')}</p></div>
-                        <div className="md:col-span-2"><span className="block text-sm font-medium text-gray-700 mb-2">Talent Description</span><p className="text-gray-900">{String(selectedProfile.talentDescription || '')}</p></div>
-                      </div>
-                    </div>
-                    <div className="bg-gray-50 rounded-lg p-6 border border-gray-200">
-                      <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center"><Palette className="h-5 w-5 mr-2 text-blue-500" />Portfolio & Work Samples</h3>
-                      {selectedProfile.portfolio && selectedProfile.portfolio.length > 0 ? (
-                        <div className="space-y-4">
-                          {selectedProfile.portfolio.map((item, i) => (
-                            <div key={i} className="bg-white rounded-lg p-4 border border-gray-200">
-                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div><span className="text-sm font-medium text-gray-500">Title</span><p className="text-gray-900">{String(item.title || '')}</p></div>
-                                <div><span className="text-sm font-medium text-gray-500">Category</span><p className="text-gray-900">{String(item.category || '')}</p></div>
-                                <div><span className="text-sm font-medium text-gray-500">Year Created</span><p className="text-gray-900">{String(item.year || '')}</p></div>
-                                <div><span className="text-sm font-medium text-gray-500">Link</span>{item.link && (<a href={item.link} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">{String(item.link)}</a>)}</div>
-                                <div className="md:col-span-2"><span className="text-sm font-medium text-gray-500">Description</span><p className="text-gray-900">{String(item.description || '')}</p></div>
-                  </div>
-                </div>
-                          ))}
-              </div>
-                      ) : <p className="text-gray-400 italic">No portfolio items added yet</p>}
-                    </div>
-                  </>
-                )}
-              </div>
-            )}
-          </div>
-        </div>
       )}
 
       {/* Contact Modal */}

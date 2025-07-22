@@ -12,7 +12,7 @@ export const useProfiles = (filters = {}) => {
       setLoading(true);
       setError(null);
       // Add timeout logic
-      const timeoutMs = 10000; // 10 seconds
+      const timeoutMs = 30000; // 30 seconds
       const controller = new AbortController();
       const timeoutPromise = new Promise((_, reject) =>
         setTimeout(() => {
@@ -85,7 +85,8 @@ export const useProfiles = (filters = {}) => {
   }, [fetchProfiles]);
 
   return {
-    profiles: lastGoodProfiles,
+    profiles: lastGoodProfiles, // <--- keep this for backward compatibility
+    lastGoodProfiles,          // <--- and also export this
     loading,
     error,
     fetchProfiles,

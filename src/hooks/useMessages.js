@@ -25,15 +25,6 @@ export const useMessages = () => {
     fetchMessages();
   }, []);
 
-  // Add real-time polling for messages (every 10 seconds)
-  useEffect(() => {
-    const interval = setInterval(() => {
-      fetchMessages();
-    }, 10000); // Poll every 10 seconds
-
-    return () => clearInterval(interval);
-  }, []);
-
   return {
     messages,
     loading,

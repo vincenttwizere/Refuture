@@ -25,7 +25,7 @@ export const useOpportunities = (filters = {}) => {
       setLoading(true);
       setError(null);
       // Add timeout logic
-      const timeoutMs = 10000; // 10 seconds
+      const timeoutMs = 30000; // 30 seconds
       const timeoutPromise = new Promise((_, reject) =>
         setTimeout(() => {
           abortControllerRef.current.abort();
