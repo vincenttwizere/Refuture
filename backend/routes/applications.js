@@ -104,7 +104,7 @@ router.get('/user', protect, authorize('refugee'), async (req, res) => {
 // @route   POST /api/applications
 // @access  Private (Refugees only)
 router.post('/', protect, authorize('refugee'), [
-  body('opportunityId').isMongoId().withMessage('Valid opportunity ID is required'),
+  body('opportunity').isMongoId().withMessage('Valid opportunity ID is required'),
   body('coverLetter').optional().isLength({ max: 2000 }).withMessage('Cover letter cannot exceed 2000 characters')
 ], async (req, res) => {
   try {
@@ -118,7 +118,7 @@ router.post('/', protect, authorize('refugee'), [
       });
     }
 
-    const { opportunityId, coverLetter } = req.body;
+    const { opportunity: opportunityId, coverLetter } = req.body;
 
     // Check if opportunity exists and is active
     const opportunity = await Opportunity.findById(opportunityId);
@@ -175,9 +175,24 @@ router.post('/', protect, authorize('refugee'), [
     });
   } catch (error) {
     console.error('Create application error:', error);
+    
+    // Provide more specific error messages
+    let errorMessage = 'Server error while creating application';
+    
+    if (error.name === 'MongoNetworkError' || error.message.includes('ECONNREFUSED')) {
+      errorMessage = 'Database connection failed. Please check if MongoDB is running.';
+    } else if (error.name === 'ValidationError') {
+      errorMessage = 'Validation error: ' + Object.values(error.errors).map(e => e.message).join(', ');
+    } else if (error.name === 'CastError') {
+      errorMessage = 'Invalid ID format provided.';
+    } else if (error.code === 11000) {
+      errorMessage = 'You have already applied for this opportunity.';
+    }
+    
     res.status(500).json({
       success: false,
-      message: 'Server error while creating application'
+      message: errorMessage,
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 });

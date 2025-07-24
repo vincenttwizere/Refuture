@@ -150,11 +150,15 @@ export const useOpportunity = (id) => {
   const fetchOpportunity = async () => {
     if (!id) return;
     
+    console.log('useOpportunity - Fetching opportunity with ID:', id);
+    console.log('useOpportunity - ID type:', typeof id);
+    
     try {
       setLoading(true);
       setError(null);
       
       const response = await opportunitiesAPI.getById(id);
+      console.log('useOpportunity - Response:', response.data);
       setOpportunity(response.data.opportunity);
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to fetch opportunity');

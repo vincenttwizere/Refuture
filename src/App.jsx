@@ -109,7 +109,14 @@ function ProtectedRoute({ children, role }) {
   const navigate = useNavigate()
   
   // Debug logging
-  console.log('ProtectedRoute:', { role, userRole: user?.role, isAuthenticated, loading, hasProfile: user?.hasProfile });
+  console.log('ProtectedRoute:', { 
+    role, 
+    userRole: user?.role, 
+    isAuthenticated, 
+    loading, 
+    hasProfile: user?.hasProfile,
+    pathname: window.location.pathname 
+  });
   
   if (loading) return <div className="min-h-screen flex items-center justify-center">Loading...</div>
   if (!isAuthenticated) return <Navigate to="/login" replace />
@@ -120,11 +127,26 @@ function ProtectedRoute({ children, role }) {
     return <Navigate to="/" replace />
   }
   
-  // For refugee dashboard, check if user has a profile
-  if (role === 'refugee' && window.location.pathname === '/refugee-dashboard' && !user?.hasProfile) {
-    console.log('Refugee without profile, redirecting to create-profile');
-    return <Navigate to="/create-profile" replace />
+  // For refugee routes, check profile status
+  if (role === 'refugee') {
+    const currentPath = window.location.pathname;
+    
+    // If user doesn't have a profile and is trying to access refugee dashboard
+    if (currentPath === '/refugee-dashboard' && !user?.hasProfile) {
+      console.log('Refugee without profile trying to access dashboard, redirecting to create-profile');
+      navigate('/create-profile', { replace: true });
+      return <div className="min-h-screen flex items-center justify-center">Redirecting to create profile...</div>;
+    }
+    
+    // If user has a profile and is trying to access create-profile
+    if (currentPath === '/create-profile' && user?.hasProfile) {
+      console.log('Refugee with profile trying to access create-profile, redirecting to dashboard');
+      navigate('/refugee-dashboard', { replace: true });
+      return <div className="min-h-screen flex items-center justify-center">Redirecting to dashboard...</div>;
+    }
   }
+  
+
   
   return <>{children}</>
 }

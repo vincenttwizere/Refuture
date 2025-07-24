@@ -11,7 +11,6 @@ import {
   LogOut,
   AlertCircle,
   MapPin,
-  Filter,
   XCircle
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
@@ -105,6 +104,7 @@ const RefugeeDashboard = () => {
   const [profileMode, setProfileMode] = useState('view');
   const [showMessageCenter, setShowMessageCenter] = useState(false);
   const [dismissedReminders, setDismissedReminders] = useState([]);
+  const [initialProfileLoadComplete, setInitialProfileLoadComplete] = useState(false);
 
   // Auth and navigation
   const { logout, user, loading } = useAuth();
@@ -153,6 +153,9 @@ const RefugeeDashboard = () => {
   const displayMessages = Array.isArray(messages) ? messages : [];
   const displayNotifications = Array.isArray(notifications) ? notifications : [];
 
+  // Derived data with safety checks
+  const profile = displayProfiles && displayProfiles.length > 0 ? displayProfiles[0] : null;
+
   // Debug logging for main component
   console.log('RefugeeDashboard Debug:', {
     user: user ? { id: user._id, email: user.email, role: user.role } : null,
@@ -160,6 +163,8 @@ const RefugeeDashboard = () => {
     interviews: displayInterviews.length,
     applications: displayApplications.length,
     profiles: displayProfiles.length,
+    profile: profile ? { id: profile._id, fullName: profile.fullName } : null,
+    profileLoading,
     opportunitiesLoading,
     interviewsLoading,
     applicationsLoading,
@@ -167,9 +172,6 @@ const RefugeeDashboard = () => {
     interviewsError,
     applicationsError
   });
-
-  // Derived data with safety checks
-  const profile = displayProfiles && displayProfiles.length > 0 ? displayProfiles[0] : null;
   const unreadNotificationsCount = displayNotifications.filter(notification => !notification.isRead).length;
   const unreadMessagesCount = displayMessages.filter(message => !message.isRead && message.recipient === user?._id).length;
 
@@ -210,18 +212,50 @@ const RefugeeDashboard = () => {
     testBackend();
   }, []);
 
-  // Profile redirect
+  // Track initial profile load completion
   useEffect(() => {
-    if (!profileLoading && !profile) {
+    if (!profileLoading && !initialProfileLoadComplete) {
+      setInitialProfileLoadComplete(true);
+    }
+  }, [profileLoading, initialProfileLoadComplete]);
+
+  // Profile redirect - only redirect if we're not loading and there's no profile
+  useEffect(() => {
+    if (initialProfileLoadComplete && displayProfiles.length === 0 && user) {
+      console.log('No profile found, redirecting to create profile');
       navigate('/create-profile', { replace: true });
     }
-  }, [profileLoading, profile, navigate]);
+  }, [initialProfileLoadComplete, displayProfiles.length, navigate, user]);
 
   // Loading and error states
   if (loading) return <div className="min-h-screen flex items-center justify-center">Loading user...</div>;
   if (!user) return <div className="min-h-screen flex items-center justify-center text-red-600">User not found. Please log in again.</div>;
-  if (!profile) {
-    return <div className="min-h-screen flex items-center justify-center">No profile found. Redirecting to create profile...</div>;
+  
+  // Show loading state only on initial load, not during refetches
+  if (profileLoading && !initialProfileLoadComplete) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mb-4"></div>
+        <div>Loading your profile...</div>
+      </div>
+    );
+  }
+  
+  // Only show "no profile" message if initial load is complete and there's no profile
+  if (initialProfileLoadComplete && displayProfiles.length === 0) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center">
+        <div className="text-center">
+          <div className="mb-4">No profile found. Redirecting to create profile...</div>
+          <button
+            onClick={() => refetchProfile()}
+            className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+          >
+            Retry Loading Profile
+          </button>
+        </div>
+      </div>
+    );
   }
 
   if (opportunitiesTimeout || profileTimeout) {
@@ -258,6 +292,15 @@ const RefugeeDashboard = () => {
       refetchNotifications();
     } catch (error) {
       console.error('Error marking notification as read:', error);
+    }
+  };
+
+  const markAllNotificationsAsRead = async () => {
+    try {
+      await notificationsAPI.markAllAsRead();
+      refetchNotifications();
+    } catch (error) {
+      console.error('Error marking all notifications as read:', error);
     }
   };
 
@@ -337,6 +380,7 @@ const RefugeeDashboard = () => {
         return <NotificationsSection 
           notifications={displayNotifications}
           markNotificationAsRead={markNotificationAsRead}
+          markAllNotificationsAsRead={markAllNotificationsAsRead}
           navigate={navigate}
           setActiveItem={setActiveItem}
         />;
@@ -695,16 +739,6 @@ const OpportunitiesSection = ({ opportunities, opportunityType, setOpportunityTy
         <>
           <div className="flex justify-between items-center">
             <h3 className="text-lg font-semibold text-gray-900">Available Opportunities</h3>
-            <div className="flex space-x-2">
-              <button className="bg-gray-100 text-gray-700 px-3 py-2 rounded-lg text-sm hover:bg-gray-200 transition-colors">
-                <Filter className="h-4 w-4 inline mr-1" />
-                Filter
-              </button>
-              <button className="bg-blue-600 text-white px-3 py-2 rounded-lg text-sm hover:bg-blue-700 transition-colors">
-                <Search className="h-4 w-4 inline mr-1" />
-                Search
-              </button>
-            </div>
           </div>
           {filteredOpportunities.length > 0 ? (
             <div className="overflow-x-auto bg-white rounded-lg border">
@@ -1192,27 +1226,31 @@ const MessagesSection = ({ messages, loading, error, user, markMessageAsRead, se
 };
 
 // Notifications Section Component
-const NotificationsSection = ({ notifications, markNotificationAsRead, navigate, setActiveItem }) => {
+const NotificationsSection = ({ notifications, markNotificationAsRead, markAllNotificationsAsRead, navigate, setActiveItem }) => {
+  const unreadCount = notifications.filter(notification => !notification.isRead).length;
+  
   return (
     <div className="space-y-6">
+      <div className="mb-6">
+        <h2 className="text-2xl font-bold text-gray-900">Notifications</h2>
+        <p className="text-gray-600">
+          {unreadCount > 0 
+            ? `You have ${unreadCount} unread notification${unreadCount > 1 ? 's' : ''}`
+            : 'You\'re all caught up with your notifications'
+          }
+        </p>
+      </div>
+      
       <div className="flex justify-between items-center">
         <div className="flex space-x-2">
-          <button 
-            onClick={async () => {
-              for (const notification of notifications) {
-                if (!notification.isRead) {
-                  await markNotificationAsRead(notification._id);
-                }
-              }
-            }}
-            className="bg-gray-100 text-gray-700 px-3 py-2 rounded-lg text-sm hover:bg-gray-200 transition-colors"
-          >
-            Mark all read
-          </button>
-          <button className="bg-gray-100 text-gray-700 px-3 py-2 rounded-lg text-sm hover:bg-gray-200 transition-colors">
-            <Filter className="h-4 w-4 inline mr-1" />
-            Filter
-          </button>
+          {unreadCount > 0 && (
+            <button 
+              onClick={markAllNotificationsAsRead}
+              className="bg-gray-100 text-gray-700 px-3 py-2 rounded-lg text-sm hover:bg-gray-200 transition-colors"
+            >
+              Mark all read
+            </button>
+          )}
         </div>
       </div>
 
@@ -1229,21 +1267,21 @@ const NotificationsSection = ({ notifications, markNotificationAsRead, navigate,
                   await markNotificationAsRead(notification._id);
                 }
                 
-                if (notification.type === 'new_opportunity' && notification.metadata?.opportunityId) {
+                if (notification.type === 'opportunity_posted' && notification.metadata?.opportunityId) {
                   navigate(`/opportunity/${notification.metadata.opportunityId}`);
-                } else if (notification.type === 'new_opportunity') {
+                } else if (notification.type === 'opportunity_posted') {
                   setActiveItem('opportunities');
                 }
               }}
             >
               <div className="flex items-start space-x-3">
                 <div className={`p-2 rounded-full ${
-                  notification.type === 'new_opportunity' ? 'bg-blue-100' :
+                  notification.type === 'opportunity_posted' ? 'bg-blue-100' :
                   notification.type === 'interview' ? 'bg-green-100' :
                   notification.type === 'message' ? 'bg-purple-100' :
                   'bg-gray-100'
                 }`}>
-                  {notification.type === 'new_opportunity' && <Search className="h-4 w-4 text-blue-600" />}
+                  {notification.type === 'opportunity_posted' && <Search className="h-4 w-4 text-blue-600" />}
                   {notification.type === 'interview' && <Calendar className="h-4 w-4 text-green-600" />}
                   {notification.type === 'message' && <MessageCircle className="h-4 w-4 text-purple-600" />}
                   {notification.type === 'general' && <Bell className="h-4 w-4 text-gray-600" />}
@@ -1251,7 +1289,7 @@ const NotificationsSection = ({ notifications, markNotificationAsRead, navigate,
                 <div className="flex-1">
                   <div className="flex items-center justify-between mb-1">
                     <h4 className="font-medium text-gray-900">
-                      {notification.type === 'new_opportunity' ? 'New Opportunity' : notification.type}
+                      {notification.type === 'opportunity_posted' ? 'New Opportunity' : notification.type}
                     </h4>
                     {!notification.isRead && (
                       <span className="w-2 h-2 bg-blue-500 rounded-full"></span>
@@ -1262,7 +1300,7 @@ const NotificationsSection = ({ notifications, markNotificationAsRead, navigate,
                     <span className="text-xs text-gray-500">
                       {new Date(notification.createdAt).toLocaleDateString()} at {new Date(notification.createdAt).toLocaleTimeString()}
                     </span>
-                    {notification.type === 'new_opportunity' && (
+                    {notification.type === 'opportunity_posted' && (
                       <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
                         View Opportunity
                       </span>

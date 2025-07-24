@@ -11,6 +11,7 @@ export const useProfiles = (filters = {}) => {
       setLoading(true);
       setError(null);
       console.log('Fetching profiles with filters:', filters, 'params:', params);
+      console.log('Full request params:', { ...filters, ...params });
       
       // Add timeout logic
       const timeoutMs = 30000; // 30 seconds
@@ -28,6 +29,7 @@ export const useProfiles = (filters = {}) => {
       });
       const response = await Promise.race([fetchPromise, timeoutPromise]);
       console.log('Profiles response:', response.data);
+      console.log('Profiles count:', response.data.profiles?.length || 0);
       setProfiles(response.data.profiles || []);
     } catch (err) {
       if (err.name === 'AbortError') {
@@ -82,12 +84,15 @@ export const useProfiles = (filters = {}) => {
   };
 
   useEffect(() => {
-    // Add a small delay to prevent rapid re-fetching
-    const timer = setTimeout(() => {
-    fetchProfiles();
-    }, 100);
-    return () => clearTimeout(timer);
-  }, [fetchProfiles]);
+    // Only fetch if we don't have profiles yet or if filters changed
+    if (profiles.length === 0 || Object.keys(filters).length > 0) {
+      // Add a small delay to prevent rapid re-fetching
+      const timer = setTimeout(() => {
+        fetchProfiles();
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [fetchProfiles, profiles.length, filters]);
 
   return {
     profiles: profiles, // Use current state instead of lastGoodProfiles

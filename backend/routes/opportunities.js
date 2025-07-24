@@ -1,6 +1,9 @@
 const express = require('express');
 const { body, validationResult, query } = require('express-validator');
+const mongoose = require('mongoose');
 const Opportunity = require('../models/Opportunity');
+const Notification = require('../models/Notification');
+const User = require('../models/User');
 const { protect, authorize } = require('../middleware/auth');
 
 const router = express.Router();
@@ -101,6 +104,14 @@ router.get('/', [
 // @access  Public
 router.get('/:id', async (req, res) => {
   try {
+    // Check if the ID is a valid MongoDB ObjectId
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid opportunity ID format'
+      });
+    }
+
     const opportunity = await Opportunity.findById(req.params.id)
       .populate('provider', 'firstName lastName email company');
 
@@ -112,7 +123,12 @@ router.get('/:id', async (req, res) => {
     }
 
     // Increment views
-    await opportunity.incrementViews();
+    try {
+      await opportunity.incrementViews();
+    } catch (incrementError) {
+      console.error('Error incrementing views:', incrementError);
+      // Continue without incrementing views if it fails
+    }
 
     res.json({
       success: true,
@@ -120,6 +136,11 @@ router.get('/:id', async (req, res) => {
     });
   } catch (error) {
     console.error('Get opportunity error:', error);
+    console.error('Error details:', {
+      message: error.message,
+      stack: error.stack,
+      params: req.params
+    });
     res.status(500).json({
       success: false,
       message: 'Server error while fetching opportunity'
@@ -163,6 +184,33 @@ router.post('/', protect, authorize('provider', 'admin'), [
     };
 
     const opportunity = await Opportunity.create(opportunityData);
+
+    // Create notifications for all refugee users
+    try {
+      const refugeeUsers = await User.find({ role: 'refugee' });
+      
+      const notificationPromises = refugeeUsers.map(user => {
+        return Notification.create({
+          recipient: user._id,
+          title: 'New Opportunity Available',
+          message: `A new ${opportunityData.jobType} opportunity "${opportunityData.title}" has been posted by ${opportunityData.company}`,
+          type: 'opportunity_posted',
+          relatedOpportunity: opportunity._id,
+          metadata: {
+            opportunityId: opportunity._id,
+            opportunityTitle: opportunityData.title,
+            company: opportunityData.company,
+            jobType: opportunityData.jobType
+          }
+        });
+      });
+
+      await Promise.all(notificationPromises);
+      console.log(`Created notifications for ${refugeeUsers.length} refugee users`);
+    } catch (notificationError) {
+      console.error('Error creating notifications:', notificationError);
+      // Don't fail the opportunity creation if notification creation fails
+    }
 
     res.status(201).json({
       success: true,

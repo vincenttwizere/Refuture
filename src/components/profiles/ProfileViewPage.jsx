@@ -119,7 +119,7 @@ const ProfileViewPage = () => {
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `resume_${profile.fullName?.replace(/\s+/g, '_') || 'user'}.pdf`;
+      a.download = `resume_${getDisplayName(profile)?.replace(/\s+/g, '_') || 'user'}.pdf`;
       document.body.appendChild(a);
       a.click();
       window.URL.revokeObjectURL(url);
@@ -130,6 +130,23 @@ const ProfileViewPage = () => {
       console.error('Download error:', err);
       setError('Failed to download resume. Please try again.');
     }
+  };
+
+  // Get display name from profile data
+  const getDisplayName = (profile) => {
+    if (profile.fullName) {
+      return profile.fullName;
+    }
+    if (profile.firstName && profile.lastName) {
+      return `${profile.firstName} ${profile.lastName}`;
+    }
+    if (profile.firstName) {
+      return profile.firstName;
+    }
+    if (profile.lastName) {
+      return profile.lastName;
+    }
+    return 'Unknown User';
   };
 
   // Show loading state
@@ -237,7 +254,7 @@ const ProfileViewPage = () => {
                   {profile.photoUrl ? (
                     <img 
                       src={profile.photoUrl.startsWith('http') ? profile.photoUrl : `http://localhost:5001/api/images/${profile.photoUrl}`} 
-                      alt={profile.fullName} 
+                      alt={getDisplayName(profile)} 
                       className="w-24 h-24 rounded-full object-cover"
                       onError={(e) => {
                         e.target.style.display = 'none';
@@ -246,11 +263,11 @@ const ProfileViewPage = () => {
                     />
                   ) : null}
                   <span className="text-2xl font-medium text-gray-700" style={{ display: profile.photoUrl ? 'none' : 'flex' }}>
-                    {profile.fullName?.split(' ').map(n => n[0]).join('')}
+                    {getDisplayName(profile)?.split(' ').map(n => n[0]).join('')}
                   </span>
                 </div>
                 <div className="flex-1">
-                  <h1 className="text-3xl font-bold text-gray-900 mb-2">{profile.fullName}</h1>
+                  <h1 className="text-3xl font-bold text-gray-900 mb-2">{getDisplayName(profile)}</h1>
                   <p className="text-lg text-gray-600 mb-3">{profile.age} years old • {profile.gender}</p>
                   <div className="flex items-center space-x-4">
                     <span className={`px-3 py-1 rounded-full text-sm font-medium ${

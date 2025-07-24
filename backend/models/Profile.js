@@ -212,7 +212,7 @@ const profileSchema = new mongoose.Schema({
     }
   }],
   skills: [{
-    type: String,
+      type: String,
     trim: true,
     index: false // Explicitly prevent indexing
   }],

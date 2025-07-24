@@ -19,10 +19,30 @@ import { useNavigate } from 'react-router-dom';
 
 const ProfileView = ({ profile, onEdit }) => {
   const navigate = useNavigate();
+
+  // Get display name from profile data
+  const getDisplayName = (profile) => {
+    if (profile.fullName) {
+      return profile.fullName;
+    }
+    if (profile.firstName && profile.lastName) {
+      return `${profile.firstName} ${profile.lastName}`;
+    }
+    if (profile.firstName) {
+      return profile.firstName;
+    }
+    if (profile.lastName) {
+      return profile.lastName;
+    }
+    return 'Unknown User';
+  };
   
   // Debug logging for profile data
   console.log('ProfileView - Received profile data:', {
     fullName: profile?.fullName,
+    firstName: profile?.firstName,
+    lastName: profile?.lastName,
+    displayName: getDisplayName(profile),
     photoUrl: profile?.photoUrl,
     _id: profile?._id
   });
@@ -92,7 +112,7 @@ const ProfileView = ({ profile, onEdit }) => {
         />
         <div className="ml-0 md:ml-6 mt-4 md:mt-0 text-center md:text-left flex-1">
           <div className="flex items-center justify-center md:justify-start">
-            <h1 className="text-2xl font-bold mr-2">{profile.fullName}</h1>
+            <h1 className="text-2xl font-bold mr-2">{getDisplayName(profile)}</h1>
           </div>
           <div className="text-gray-600 text-sm mt-1">
             {profile.age} years old • {profile.gender} • {profile.option}

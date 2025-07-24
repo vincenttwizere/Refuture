@@ -14,10 +14,12 @@ import {
   BookOpen,
   Bookmark,
   AlertCircle,
-  CheckCircle
+  CheckCircle,
+  X
 } from 'lucide-react';
 import { useOpportunity } from '../../hooks/useOpportunities';
 import { useAuth } from '../../contexts/AuthContext';
+import { applicationsAPI } from '../../services/api';
 
 const OpportunityDetails = () => {
   const { id } = useParams();
@@ -28,6 +30,31 @@ const OpportunityDetails = () => {
   const [applyLoading, setApplyLoading] = useState(false);
   const [applyError, setApplyError] = useState(null);
   const [applySuccess, setApplySuccess] = useState(false);
+  const [hasApplied, setHasApplied] = useState(false);
+  const [showApplyForm, setShowApplyForm] = useState(false);
+  const [coverLetter, setCoverLetter] = useState('');
+  const [showSuccessToast, setShowSuccessToast] = useState(false);
+
+  // Check if user has already applied for this opportunity
+  const checkIfApplied = async () => {
+    if (!id || !user) return;
+    
+    try {
+      const response = await applicationsAPI.getUserApplications();
+      const userApplications = response.data.applications || [];
+      const hasAppliedForThis = userApplications.some(app => app.opportunityId === id);
+      setHasApplied(hasAppliedForThis);
+    } catch (error) {
+      console.error('Error checking if user has applied:', error);
+    }
+  };
+
+  // Check if user has applied when component loads
+  useEffect(() => {
+    if (opportunity && user) {
+      checkIfApplied();
+    }
+  }, [opportunity, user]);
 
   const handleApply = async () => {
     if (!id) return;
@@ -42,38 +69,129 @@ const OpportunityDetails = () => {
         throw new Error('User not logged in');
       }
 
+      // Check if user has authentication token
+      const token = localStorage.getItem('token');
+      if (!token) {
+        throw new Error('Authentication token not found. Please log in again.');
+      }
+
+      // Validate opportunity ID format (basic MongoDB ObjectId check)
+      if (!id || typeof id !== 'string' || id.length !== 24) {
+        throw new Error('Invalid opportunity ID format');
+      }
+
+      // Check if opportunity exists
+      if (!opportunity) {
+        throw new Error('Opportunity not found. Please refresh the page and try again.');
+      }
+
+      // Check if opportunity is active
+      if (opportunity.isActive === false) {
+        throw new Error('This opportunity is no longer active and cannot accept applications.');
+      }
+
+      // Check if user has a profile (this is required by the backend)
+      // We'll let the backend handle this validation, but we can show a better error message
+      console.log('Checking if user has profile...');
+
+
       // Create application data
       const applicationData = {
-        opportunityId: id,
-        applicantId: user._id,
-        status: 'pending',
-        appliedAt: new Date().toISOString()
+        opportunity: id,
+        coverLetter: coverLetter.trim() || undefined
       };
 
       console.log('Applying for opportunity:', applicationData);
+      console.log('Opportunity ID:', id);
+      console.log('Opportunity ID type:', typeof id);
+      console.log('User data:', { id: user._id, role: user.role });
+      console.log('Opportunity data:', opportunity);
 
-      // Send application to backend
-      const response = await fetch('http://localhost:5001/api/applications', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        },
-        body: JSON.stringify(applicationData)
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Failed to apply for opportunity');
+      // Check if backend is accessible
+      try {
+        const response = await fetch('http://localhost:5001/api/health');
+        if (!response.ok) {
+          throw new Error('Backend server is not responding properly');
+        }
+        console.log('Backend is accessible');
+      } catch (healthError) {
+        console.error('Backend health check failed:', healthError);
+        throw new Error('Backend server is not accessible. Please try again later.');
       }
 
-      const result = await response.json();
+      // Check if user has a profile (this is likely the cause of the 500 error)
+      try {
+        const profileResponse = await fetch('http://localhost:5001/api/profiles/user', {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('token')}`
+          }
+        });
+        
+        if (profileResponse.status === 404) {
+          throw new Error('You must create a profile before applying for opportunities. Please complete your profile first.');
+        } else if (!profileResponse.ok) {
+          console.warn('Profile check failed:', profileResponse.status);
+        } else {
+          console.log('User has a profile');
+        }
+      } catch (profileError) {
+        if (profileError.message.includes('create a profile')) {
+          throw profileError;
+        }
+        console.warn('Profile check error:', profileError);
+      }
+
+      // Send application to backend using API service
+      const response = await applicationsAPI.create(applicationData);
+      console.log('API Response:', response);
+      const result = response.data;
       console.log('Application submitted successfully:', result);
       setApplySuccess(true);
+      setHasApplied(true);
+      setShowApplyForm(false);
+      setCoverLetter('');
+      setShowSuccessToast(true);
+      
+      // Hide the toast after 5 seconds
+      setTimeout(() => {
+        setShowSuccessToast(false);
+      }, 5000);
       
     } catch (err) {
       console.error('Error applying for opportunity:', err);
-      setApplyError(err.message || 'Failed to apply for opportunity');
+      console.error('Error details:', {
+        message: err.message,
+        status: err.response?.status,
+        statusText: err.response?.statusText,
+        data: err.response?.data,
+        config: err.config
+      });
+      
+      // Log the full error response for debugging
+      if (err.response?.data) {
+        console.error('Full backend error response:', JSON.stringify(err.response.data, null, 2));
+      }
+      
+      // Try to get detailed error message from backend response
+      let errorMessage = 'Failed to apply for opportunity';
+      if (err.response?.data?.message) {
+        errorMessage = err.response.data.message;
+        
+        // Check for specific error messages and provide helpful guidance
+        if (errorMessage.includes('profile') || errorMessage.includes('Profile')) {
+          errorMessage = 'You must create a profile before applying for opportunities. Please complete your profile first.';
+        } else if (errorMessage.includes('already applied')) {
+          errorMessage = 'You have already applied for this opportunity.';
+        } else if (errorMessage.includes('not active') || errorMessage.includes('no longer active')) {
+          errorMessage = 'This opportunity is no longer accepting applications.';
+        }
+      } else if (err.response?.data?.errors && err.response.data.errors.length > 0) {
+        errorMessage = err.response.data.errors.map(e => e.msg).join(', ');
+      } else if (err.message) {
+        errorMessage = err.message;
+      }
+      
+      setApplyError(errorMessage);
     } finally {
       setApplyLoading(false);
     }
@@ -99,6 +217,13 @@ const OpportunityDetails = () => {
       month: 'long',
       day: 'numeric'
     });
+  };
+
+  // Helper function to get the display type
+  const getDisplayType = (opportunity) => {
+    const type = opportunity.jobType || opportunity.type;
+    if (!type) return 'Unknown';
+    return type.replace('_', ' ');
   };
 
   if (loading) {
@@ -161,9 +286,24 @@ const OpportunityDetails = () => {
     );
   }
 
+
+
   return (
     <div className="min-h-screen bg-gray-50 py-8">
       <div className="max-w-4xl mx-auto px-4">
+        {/* Success Banner - Show at the very top */}
+        {applySuccess && (
+          <div className="mb-6 bg-green-500 text-white p-4 rounded-lg shadow-lg">
+            <div className="flex items-center justify-center">
+              <CheckCircle className="h-6 w-6 mr-3" />
+              <div className="text-center">
+                <h2 className="text-xl font-bold">Application Submitted Successfully!</h2>
+                <p className="text-green-100">Thank you for your application. The provider will review it and get back to you soon.</p>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
           <button
@@ -188,35 +328,48 @@ const OpportunityDetails = () => {
           
           <div className="flex items-center space-x-3">
             {/* Apply Button - Only show for refugees */}
-            {user?.role === 'refugee' && (
+            {user?.role === 'refugee' && !hasApplied && !applySuccess && opportunity && (
               <button
-                onClick={handleApply}
-                disabled={applyLoading || applySuccess}
-                className={`flex items-center px-6 py-2 rounded-lg transition-colors ${
-                  applySuccess
-                    ? 'bg-green-600 text-white cursor-not-allowed'
-                    : 'bg-blue-600 text-white hover:bg-blue-700'
-                } disabled:opacity-50`}
+                onClick={() => setShowApplyForm(true)}
+                className="flex items-center px-6 py-2 rounded-lg transition-colors bg-blue-600 text-white hover:bg-blue-700"
               >
-                {applyLoading ? (
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current mr-2"></div>
-                ) : applySuccess ? (
-                  <CheckCircle className="h-4 w-4 mr-2" />
-                ) : (
-                  <Briefcase className="h-4 w-4 mr-2" />
-                )}
-                {applyLoading ? 'Applying...' : (applySuccess ? 'Applied' : 'Apply')}
+                <Briefcase className="h-4 w-4 mr-2" />
+                Apply
+              </button>
+            )}
+            
+            {/* Applied Button - Show if already applied */}
+            {user?.role === 'refugee' && (hasApplied || applySuccess) && (
+              <button
+                disabled
+                className="flex items-center px-6 py-2 rounded-lg transition-colors bg-green-600 text-white cursor-not-allowed"
+              >
+                <CheckCircle className="h-4 w-4 mr-2" />
+                Applied
               </button>
             )}
           </div>
         </div>
 
         {/* Apply Success/Error Messages */}
-        {applySuccess && (
-          <div className="mb-6 bg-green-50 border border-green-200 rounded-lg p-4">
+        {(applySuccess || hasApplied) && (
+          <div className="mb-6 bg-green-50 border border-green-200 rounded-lg p-6">
             <div className="flex items-center">
-              <CheckCircle className="h-5 w-5 text-green-400 mr-2" />
-              <p className="text-green-800">Application submitted successfully! The provider will review your application.</p>
+              <CheckCircle className="h-8 w-8 text-green-400 mr-3" />
+              <div>
+                <h3 className="text-lg font-semibold text-green-800 mb-1">
+                  {applySuccess 
+                    ? 'Application Submitted Successfully!'
+                    : 'Application Already Submitted'
+                  }
+                </h3>
+                <p className="text-green-700">
+                  {applySuccess 
+                    ? 'Your application has been submitted successfully! The provider will review your application and get back to you soon.'
+                    : 'You have already applied for this opportunity. The provider will review your application.'
+                  }
+                </p>
+              </div>
             </div>
           </div>
         )}
@@ -236,16 +389,16 @@ const OpportunityDetails = () => {
           <div className="bg-white p-6 border-b border-gray-200">
             <div className="flex justify-between items-start">
               <div className="flex-1">
-                <h1 className="text-3xl font-bold mb-2 text-gray-900">{opportunity.title}</h1>
-                <p className="text-gray-600 text-lg mb-4">{opportunity.providerName}</p>
+                <h1 className="text-3xl font-bold mb-2 text-gray-900">{opportunity.title || 'Untitled Opportunity'}</h1>
+                <p className="text-gray-600 text-lg mb-4">{opportunity.company || opportunity.providerName || 'Company not specified'}</p>
                 <div className="flex items-center space-x-4 text-gray-600">
                   <div className="flex items-center">
                     <MapPin className="h-4 w-4 mr-2" />
-                    {opportunity.location}
+                    {opportunity.location || 'Location not specified'}
                   </div>
-                  <div className="flex items-center">
+                                                    <div className="flex items-center">
                     <Briefcase className="h-4 w-4 mr-2" />
-                    {opportunity.type}
+                    {getDisplayType(opportunity)}
                   </div>
                   {opportunity.isRemote && (
                     <div className="flex items-center">
@@ -256,14 +409,18 @@ const OpportunityDetails = () => {
                 </div>
               </div>
               <span className={`text-sm px-3 py-1 rounded-full ${
-                opportunity.type === 'scholarship' ? 'bg-green-500 text-white' :
-                opportunity.type === 'job' ? 'bg-blue-500 text-white' :
-                opportunity.type === 'mentorship' ? 'bg-purple-500 text-white' :
-                opportunity.type === 'internship' ? 'bg-yellow-500 text-white' :
-                opportunity.type === 'funding' ? 'bg-orange-500 text-white' :
+                (opportunity.jobType || opportunity.type) === 'internship' ? 'bg-yellow-500 text-white' :
+                (opportunity.jobType || opportunity.type) === 'full_time' ? 'bg-blue-500 text-white' :
+                (opportunity.jobType || opportunity.type) === 'part_time' ? 'bg-green-500 text-white' :
+                (opportunity.jobType || opportunity.type) === 'contract' ? 'bg-purple-500 text-white' :
+                (opportunity.jobType || opportunity.type) === 'volunteer' ? 'bg-orange-500 text-white' :
+                (opportunity.jobType || opportunity.type) === 'scholarship' ? 'bg-green-500 text-white' :
+                (opportunity.jobType || opportunity.type) === 'job' ? 'bg-blue-500 text-white' :
+                (opportunity.jobType || opportunity.type) === 'mentorship' ? 'bg-purple-500 text-white' :
+                (opportunity.jobType || opportunity.type) === 'funding' ? 'bg-orange-500 text-white' :
                 'bg-gray-500 text-white'
               }`}>
-                {opportunity.type}
+                {getDisplayType(opportunity)}
               </span>
             </div>
           </div>
@@ -274,7 +431,7 @@ const OpportunityDetails = () => {
             <div className="mb-8">
               <h2 className="text-xl font-semibold text-gray-900 mb-4">Description</h2>
               <p className="text-gray-700 leading-relaxed whitespace-pre-wrap">
-                {opportunity.description}
+                {opportunity.description || 'No description available'}
               </p>
             </div>
 
@@ -286,7 +443,7 @@ const OpportunityDetails = () => {
                   <DollarSign className="h-5 w-5 mr-3 text-gray-500" />
                   <div>
                     <span className="font-medium">Salary:</span>
-                    <span className="ml-2">{formatSalary(opportunity.salary)}</span>
+                    <span className="ml-2">{opportunity.salary ? formatSalary(opportunity.salary) : 'Not specified'}</span>
                   </div>
                 </div>
 
@@ -294,7 +451,7 @@ const OpportunityDetails = () => {
                   <Briefcase className="h-5 w-5 mr-3 text-gray-500" />
                   <div>
                     <span className="font-medium">Category:</span>
-                    <span className="ml-2">{opportunity.category}</span>
+                    <span className="ml-2">{opportunity.category || 'Not specified'}</span>
                   </div>
                 </div>
 
@@ -307,16 +464,6 @@ const OpportunityDetails = () => {
                     </span>
                   </div>
                 </div>
-
-                {opportunity.duration && (
-                  <div className="flex items-center text-gray-700">
-                    <Clock className="h-5 w-5 mr-3 text-gray-500" />
-                    <div>
-                      <span className="font-medium">Duration:</span>
-                      <span className="ml-2">{opportunity.duration}</span>
-                    </div>
-                  </div>
-                )}
               </div>
 
               {/* Right Column */}
@@ -325,19 +472,9 @@ const OpportunityDetails = () => {
                   <Clock className="h-5 w-5 mr-3 text-gray-500" />
                   <div>
                     <span className="font-medium">Application Deadline:</span>
-                    <span className="ml-2">{formatDate(opportunity.applicationDeadline)}</span>
+                    <span className="ml-2">{opportunity.applicationDeadline ? formatDate(opportunity.applicationDeadline) : 'Not specified'}</span>
                   </div>
                 </div>
-
-                {opportunity.maxApplicants && (
-                  <div className="flex items-center text-gray-700">
-                    <Briefcase className="h-5 w-5 mr-3 text-gray-500" />
-                    <div>
-                      <span className="font-medium">Max Applicants:</span>
-                      <span className="ml-2">{opportunity.maxApplicants}</span>
-                    </div>
-                  </div>
-                )}
 
                 {opportunity.tags && opportunity.tags.length > 0 && (
                   <div>
@@ -358,15 +495,33 @@ const OpportunityDetails = () => {
             </div>
 
             {/* Requirements */}
-            {opportunity.requirements && (
+            {(opportunity.requirements && opportunity.requirements.length > 0) || 
+             (opportunity.skills && opportunity.skills.length > 0) || 
+             (opportunity.languages && opportunity.languages.length > 0) ? (
               <div className="mb-8">
                 <h2 className="text-xl font-semibold text-gray-900 mb-4">Requirements</h2>
                 <div className="bg-gray-50 rounded-lg p-4 space-y-3">
-                  {opportunity.requirements.skills && opportunity.requirements.skills.length > 0 && (
+                  {opportunity.requirements && opportunity.requirements.length > 0 && (
+                    <div>
+                      <span className="font-medium text-gray-700">Requirements:</span>
+                      <div className="flex flex-wrap gap-2 mt-1">
+                        {opportunity.requirements.map((requirement, index) => (
+                          <span
+                            key={index}
+                            className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full"
+                          >
+                            {requirement}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  
+                  {opportunity.skills && opportunity.skills.length > 0 && (
                     <div>
                       <span className="font-medium text-gray-700">Skills:</span>
                       <div className="flex flex-wrap gap-2 mt-1">
-                        {opportunity.requirements.skills.map((skill, index) => (
+                        {opportunity.skills.map((skill, index) => (
                           <span
                             key={index}
                             className="bg-green-100 text-green-800 text-xs px-2 py-1 rounded-full"
@@ -378,30 +533,16 @@ const OpportunityDetails = () => {
                     </div>
                   )}
                   
-                  {opportunity.requirements.experience && (
-                    <div>
-                      <span className="font-medium text-gray-700">Experience:</span>
-                      <span className="ml-2 text-gray-600">{opportunity.requirements.experience}</span>
-                    </div>
-                  )}
-                  
-                  {opportunity.requirements.education && (
-                    <div>
-                      <span className="font-medium text-gray-700">Education:</span>
-                      <span className="ml-2 text-gray-600">{opportunity.requirements.education}</span>
-                    </div>
-                  )}
-                  
-                  {opportunity.requirements.languages && opportunity.requirements.languages.length > 0 && (
+                  {opportunity.languages && opportunity.languages.length > 0 && (
                     <div>
                       <span className="font-medium text-gray-700">Languages:</span>
                       <div className="flex flex-wrap gap-2 mt-1">
-                        {opportunity.requirements.languages.map((language, index) => (
+                        {opportunity.languages.map((lang, index) => (
                           <span
                             key={index}
                             className="bg-purple-100 text-purple-800 text-xs px-2 py-1 rounded-full"
                           >
-                            {language}
+                            {lang.language} ({lang.proficiency})
                           </span>
                         ))}
                       </div>
@@ -409,7 +550,7 @@ const OpportunityDetails = () => {
                   )}
                 </div>
               </div>
-            )}
+            ) : null}
 
             {/* Benefits */}
             {opportunity.benefits && opportunity.benefits.length > 0 && (
@@ -451,24 +592,110 @@ const OpportunityDetails = () => {
                   </div>
                 )}
                 
-                {opportunity.website && (
-                  <div className="flex items-center text-gray-700">
-                    <ExternalLink className="h-5 w-5 mr-3 text-gray-500" />
-                    <a
-                      href={opportunity.website}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-blue-600 hover:text-blue-800"
-                    >
-                      Visit Website
-                    </a>
-                  </div>
-                )}
+
               </div>
             </div>
           </div>
         </div>
+
+        {/* Application Form Modal */}
+        {showApplyForm && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg p-6 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-xl font-semibold text-gray-900">Apply for Opportunity</h2>
+                <button
+                  onClick={() => {
+                    setShowApplyForm(false);
+                    setCoverLetter('');
+                    setApplyError(null);
+                  }}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <X className="h-6 w-6" />
+                </button>
+              </div>
+
+              <div className="mb-4">
+                <h3 className="font-medium text-gray-900 mb-2">{opportunity.title || 'Untitled Opportunity'}</h3>
+                <p className="text-gray-600 text-sm">{opportunity.company || opportunity.providerName || 'Company not specified'}</p>
+              </div>
+
+              <form onSubmit={(e) => {
+                e.preventDefault();
+                handleApply();
+              }}>
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Cover Letter (Optional)
+                  </label>
+                  <textarea
+                    value={coverLetter}
+                    onChange={(e) => setCoverLetter(e.target.value)}
+                    placeholder="Tell the provider why you're interested in this opportunity and why you'd be a great fit..."
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    rows={6}
+                    maxLength={2000}
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    {coverLetter.length}/2000 characters
+                  </p>
+                </div>
+
+                {applyError && (
+                  <div className="mb-4 bg-red-50 border border-red-200 rounded-lg p-3">
+                    <div className="flex items-center">
+                      <AlertCircle className="h-4 w-4 text-red-400 mr-2" />
+                      <p className="text-red-800 text-sm">{applyError}</p>
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex justify-end space-x-3">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowApplyForm(false);
+                      setCoverLetter('');
+                      setApplyError(null);
+                    }}
+                    className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={applyLoading}
+                    className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+                  >
+                    {applyLoading ? (
+                      <div className="flex items-center">
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current mr-2"></div>
+                        Applying...
+                      </div>
+                    ) : (
+                      'Submit Application'
+                    )}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
       </div>
+
+      {/* Success Toast Notification */}
+      {showSuccessToast && (
+        <div className="fixed top-4 right-4 bg-green-500 text-white px-6 py-4 rounded-lg shadow-lg z-50 animate-in slide-in-from-right duration-300">
+          <div className="flex items-center">
+            <CheckCircle className="h-6 w-6 mr-3" />
+            <div>
+              <h4 className="font-semibold">Application Submitted!</h4>
+              <p className="text-sm opacity-90">Your application has been sent successfully.</p>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

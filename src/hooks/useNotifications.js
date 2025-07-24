@@ -23,11 +23,11 @@ export const useNotifications = () => {
     fetchNotifications();
   }, []);
 
-  // Add real-time polling for notifications (every 10 seconds)
+  // Add real-time polling for notifications (every 5 seconds for better responsiveness)
   useEffect(() => {
     const interval = setInterval(() => {
       fetchNotifications();
-    }, 10000); // Poll every 10 seconds
+    }, 5000); // Poll every 5 seconds for better real-time updates
 
     return () => clearInterval(interval);
   }, []);

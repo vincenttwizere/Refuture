@@ -94,6 +94,53 @@ router.post('/test', protect, async (req, res) => {
   }
 });
 
+// @desc    Check for data inconsistencies
+// @route   GET /api/profiles/check-inconsistencies
+// @access  Private (Admin only)
+router.get('/check-inconsistencies', protect, authorize('admin'), async (req, res) => {
+  try {
+    console.log('=== CHECKING FOR DATA INCONSISTENCIES ===');
+    
+    // Check for profiles without users
+    const orphanedProfiles = await Profile.find({ user: { $exists: false } });
+    console.log('Orphaned profiles (no user):', orphanedProfiles.length);
+    
+    // Check for duplicate emails
+    const duplicateEmails = await Profile.aggregate([
+      { $group: { _id: '$email', count: { $sum: 1 } } },
+      { $match: { count: { $gt: 1 } } }
+    ]);
+    console.log('Duplicate emails:', duplicateEmails);
+    
+    // Check for duplicate users
+    const duplicateUsers = await Profile.aggregate([
+      { $group: { _id: '$user', count: { $sum: 1 } } },
+      { $match: { count: { $gt: 1 } } }
+    ]);
+    console.log('Duplicate users:', duplicateUsers);
+    
+    res.json({
+      success: true,
+      data: {
+        orphanedProfiles: orphanedProfiles.length,
+        duplicateEmails: duplicateEmails.length,
+        duplicateUsers: duplicateUsers.length,
+        details: {
+          orphanedProfiles: orphanedProfiles.map(p => ({ id: p._id, email: p.email })),
+          duplicateEmails,
+          duplicateUsers
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Error checking inconsistencies:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error checking data inconsistencies'
+    });
+  }
+});
+
 // @desc    Test profile creation with minimal data
 // @route   POST /api/profiles/test-minimal
 // @access  Private
@@ -204,15 +251,55 @@ router.get('/check', protect, async (req, res) => {
 // @access  Public
 router.get('/', async (req, res) => {
   try {
-    const { email, isPublic } = req.query;
+    const { email, isPublic, role, option } = req.query;
     const filter = {};
+
+    console.log('=== GET PROFILES REQUEST ===');
+    console.log('Query params:', req.query);
+    console.log('Email filter:', email);
+    console.log('Role filter:', role);
+    console.log('Option filter:', option);
 
     if (email) filter.email = email;
     if (isPublic !== undefined) filter.isPublic = isPublic === 'true';
+    if (option) filter.option = option;
 
-    const profiles = await Profile.find(filter)
+    console.log('Final filter:', filter);
+
+    let profiles = await Profile.find(filter)
       .populate('user', 'firstName lastName email role')
       .sort({ createdAt: -1 });
+
+    // If role filter is specified, filter by user role
+    if (role) {
+      profiles = profiles.filter(profile => 
+        profile.user && profile.user.role === role
+      );
+    }
+
+    // Log the profiles for debugging
+    console.log('Profiles found:', profiles.length);
+    profiles.forEach((profile, index) => {
+      console.log(`Profile ${index + 1}:`, {
+        id: profile._id,
+        email: profile.email,
+        fullName: profile.fullName || `${profile.firstName} ${profile.lastName}`,
+        option: profile.option,
+        userRole: profile.user?.role,
+        isPublic: profile.isPublic
+      });
+    });
+
+    console.log('Found profiles count:', profiles.length);
+    if (profiles.length > 0) {
+      console.log('First profile:', {
+        id: profiles[0]._id,
+        email: profiles[0].email,
+        fullName: profiles[0].fullName || `${profiles[0].firstName} ${profiles[0].lastName}`,
+        option: profiles[0].option,
+        userRole: profiles[0].user?.role
+      });
+    }
 
     res.json({
       success: true,
@@ -334,15 +421,62 @@ router.post('/', protect, authorize('refugee', 'provider'), [
 
     // Check if profile already exists for this user
     const existingProfile = await Profile.findOne({ user: req.user._id });
+    console.log('=== PROFILE EXISTENCE CHECK ===');
+    console.log('User ID:', req.user._id);
+    console.log('Existing profile found:', !!existingProfile);
     if (existingProfile) {
-      console.log('Profile already exists for user:', req.user._id, 'Will update after processing data...');
+      console.log('Existing profile ID:', existingProfile._id);
+      console.log('Existing profile email:', existingProfile.email);
+      console.log('Will update after processing data...');
+    } else {
+      console.log('No existing profile found for this user');
+    }
+
+    // Additional check: Look for any profile with the same email
+    const emailProfile = await Profile.findOne({ email: req.body.email.trim() });
+    console.log('=== EMAIL PROFILE CHECK ===');
+    console.log('Checking email:', req.body.email.trim());
+    console.log('Profile with this email found:', !!emailProfile);
+    if (emailProfile) {
+      console.log('Email profile ID:', emailProfile._id);
+      console.log('Email profile user ID:', emailProfile.user);
+      console.log('Current user ID:', req.user._id);
+      console.log('Same user?', emailProfile.user.toString() === req.user._id.toString());
     }
 
     // Check if email is already taken (only for new profiles)
     if (!existingProfile) {
-      const emailExists = await Profile.findOne({ email: req.body.email });
+      const emailExists = await Profile.findOne({ email: req.body.email.trim() });
+      console.log('=== EMAIL CHECK FOR NEW PROFILE ===');
+      console.log('Checking email:', req.body.email.trim());
+      console.log('Email exists:', !!emailExists);
       if (emailExists) {
-        console.log('Email already taken:', req.body.email);
+        console.log('Email already taken by profile ID:', emailExists._id);
+        console.log('Email already taken by user ID:', emailExists.user);
+        
+        // Check if this is an orphaned profile (no user) or belongs to a different user
+        if (!emailExists.user || emailExists.user.toString() !== req.user._id.toString()) {
+          return res.status(400).json({
+            success: false,
+            message: 'Email is already associated with another profile'
+          });
+        } else {
+          console.log('Email belongs to current user, will update existing profile');
+          // This shouldn't happen if existingProfile check worked, but handle it gracefully
+        }
+      }
+    } else {
+      // For existing profiles, check if email is taken by someone else
+      const emailExists = await Profile.findOne({ 
+        email: req.body.email.trim(),
+        user: { $ne: req.user._id } // Exclude current user
+      });
+      console.log('=== EMAIL CHECK FOR EXISTING PROFILE ===');
+      console.log('Checking email:', req.body.email.trim());
+      console.log('Email exists for other user:', !!emailExists);
+      if (emailExists) {
+        console.log('Email already taken by another profile ID:', emailExists._id);
+        console.log('Email already taken by another user ID:', emailExists.user);
         return res.status(400).json({
           success: false,
           message: 'Email is already associated with another profile'
@@ -554,6 +688,28 @@ router.post('/', protect, authorize('refugee', 'provider'), [
     
     // Create new profile if no existing profile
     try {
+      console.log('=== ATTEMPTING PROFILE CREATION ===');
+      console.log('Profile data to create:', JSON.stringify(profileData, null, 2));
+      
+      // Double-check that no profile exists for this user
+      const finalCheck = await Profile.findOne({ user: req.user._id });
+      if (finalCheck) {
+        console.log('Profile already exists for user, updating instead');
+        const updatedProfile = await Profile.findByIdAndUpdate(
+          finalCheck._id,
+          profileData,
+          { new: true, runValidators: true }
+        );
+        
+        console.log('Profile updated successfully:', updatedProfile._id);
+        
+        return res.status(200).json({
+          success: true,
+          message: 'Profile updated successfully',
+          profile: updatedProfile
+        });
+      }
+      
       const profile = await Profile.create(profileData);
       console.log('Profile created successfully:', profile._id);
       
@@ -578,12 +734,36 @@ router.post('/', protect, authorize('refugee', 'provider'), [
       }
       
       if (createError.code === 11000) {
+        console.error('=== DUPLICATE KEY ERROR DETAILS ===');
         console.error('Duplicate key error:', createError.keyValue);
-        return res.status(400).json({
-          success: false,
-          message: 'Profile already exists for this user',
-          error: 'Duplicate key error'
-        });
+        console.error('Full error object:', JSON.stringify(createError, null, 2));
+        console.error('Error message:', createError.message);
+        console.error('Profile data that caused error:', JSON.stringify(profileData, null, 2));
+        
+        // Check which field caused the duplicate key error
+        if (createError.keyValue && createError.keyValue.email) {
+          console.error('Email duplicate detected:', createError.keyValue.email);
+          return res.status(400).json({
+            success: false,
+            message: 'Email is already associated with another profile',
+            error: 'Duplicate email'
+          });
+        } else if (createError.keyValue && createError.keyValue.user) {
+          console.error('User duplicate detected:', createError.keyValue.user);
+          return res.status(400).json({
+            success: false,
+            message: 'Profile already exists for this user',
+            error: 'Duplicate user profile'
+          });
+        } else {
+          console.error('Unknown duplicate key detected:', createError.keyValue);
+          return res.status(400).json({
+            success: false,
+            message: 'Profile with this information already exists',
+            error: 'Duplicate key error',
+            details: createError.keyValue
+          });
+        }
       }
       
       throw createError; // Re-throw to be caught by outer catch block

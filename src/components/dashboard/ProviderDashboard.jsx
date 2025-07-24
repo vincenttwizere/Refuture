@@ -142,9 +142,63 @@ const ProviderDashboard = () => {
     loading: profilesLoading, 
     error: profilesError,
     fetchProfiles,
-    fetchProfileById,
-    lastGoodProfiles // <-- add this if not already destructured
+    fetchProfileById
   } = useProfiles();
+
+  // Memoize the fetchProfiles function to prevent unnecessary re-renders
+  const stableFetchProfiles = useCallback(() => {
+    fetchProfiles();
+  }, [fetchProfiles]);
+
+  // Ensure profiles are fetched when component mounts
+  useEffect(() => {
+    if (profiles.length === 0 && !profilesLoading) {
+      stableFetchProfiles();
+    }
+  }, [profiles.length, profilesLoading, stableFetchProfiles]);
+
+  // Memoize refugee profiles filtering to prevent unnecessary re-computations
+  const validCategories = ['student', 'job seeker', 'undocumented_talent'];
+  const allRefugeeProfiles = useMemo(() => {
+    if (!profiles || profiles.length === 0) return [];
+    
+    // Debug logging
+    console.log('ProviderDashboard - Available Talents Debug:', {
+      totalProfiles: profiles.length,
+      profiles: profiles.map(p => ({
+        id: p._id,
+        email: p.email,
+        fullName: p.fullName || `${p.firstName} ${p.lastName}`,
+        option: p.option,
+        userRole: p.user?.role,
+        isPublic: p.isPublic
+      }))
+    });
+    
+    const filtered = profiles.filter(p => {
+      // Check if user role is refugee
+      const isRefugeeUser = p.user && p.user.role === 'refugee';
+      // Check if option is a valid refugee category
+      const hasValidOption = validCategories.includes(p.option);
+      // Check if profile is public (optional, but good for filtering)
+      const isPublic = p.isPublic !== false; // Default to true if not specified
+      
+      return isRefugeeUser || hasValidOption;
+    });
+    
+    console.log('ProviderDashboard - Filtered Refugee Profiles:', {
+      filteredCount: filtered.length,
+      profiles: filtered.map(p => ({
+        id: p._id,
+        email: p.email,
+        fullName: p.fullName || `${p.firstName} ${p.lastName}`,
+        option: p.option,
+        userRole: p.user?.role
+      }))
+    });
+    
+    return filtered;
+  }, [profiles]);
 
   const { notifications, refetch: refetchNotifications } = useNotifications();
   const { messages, loading: messagesLoading, error: messagesError, refetch: refetchMessages } = useMessages();
@@ -288,6 +342,8 @@ const ProviderDashboard = () => {
     category: '',
     location: '',
     type: '',
+    company: '',
+    contactEmail: '',
     salary: {
       min: '',
       max: '',
@@ -306,7 +362,6 @@ const ProviderDashboard = () => {
     isRemote: false,
     maxApplicants: '',
     tags: '',
-    contactEmail: '',
     contactPhone: '',
     website: '',
     isActive: true,
@@ -641,24 +696,60 @@ const ProviderDashboard = () => {
     setFormSuccess(null);
 
     try {
+      // Map form data to match backend expectations
       const opportunityData = {
-        ...formData,
-        tags: formData.tags ? formData.tags.split(',').map(tag => tag.trim()).filter(Boolean) : [],
-        requirements: {
-          ...formData.requirements,
-          skills: Array.isArray(formData.requirements.skills) 
-            ? formData.requirements.skills 
-            : (formData.requirements.skills ? formData.requirements.skills.split(',').map(skill => skill.trim()).filter(Boolean) : []),
-          languages: Array.isArray(formData.requirements.languages) 
-            ? formData.requirements.languages 
-            : (formData.requirements.languages ? formData.requirements.languages.split(',').map(lang => lang.trim()).filter(Boolean) : [])
+        title: formData.title,
+        description: formData.description,
+        company: formData.company || user?.company || 'Company Name', // Required by backend
+        location: formData.location,
+        jobType: (() => {
+          const type = formData.type;
+          if (!type) return 'full_time';
+          if (type === 'job') return 'full_time';
+          if (type === 'internship') return 'internship';
+          if (type === 'scholarship') return 'volunteer';
+          if (type === 'mentorship') return 'volunteer';
+          if (type === 'funding') return 'volunteer';
+          return 'full_time';
+        })(), // Map 'type' to 'jobType' as required by backend
+        category: formData.category,
+        salary: {
+          min: parseInt(formData.salary?.min) || 0,
+          max: parseInt(formData.salary?.max) || 0,
+          currency: formData.salary?.currency || 'USD'
         },
+        experienceLevel: (() => {
+          const exp = formData.requirements?.experience;
+          if (!exp) return 'entry';
+          if (exp.includes('Entry')) return 'entry';
+          if (exp.includes('Mid')) return 'mid';
+          if (exp.includes('Senior')) return 'senior';
+          if (exp.includes('Executive')) return 'executive';
+          return 'entry';
+        })(), // Required by backend
+        contactEmail: formData.contactEmail || user?.email, // Required by backend
+        contactPhone: formData.contactPhone || '',
+        isRemote: formData.isRemote || false,
+        applicationDeadline: formData.applicationDeadline ? new Date(formData.applicationDeadline).toISOString() : null,
+        startDate: formData.startDate ? new Date(formData.startDate).toISOString() : null,
+        duration: formData.duration,
+        maxApplicants: parseInt(formData.maxApplicants) || 0,
+        tags: formData.tags ? formData.tags.split(',').map(tag => tag.trim()).filter(Boolean) : [],
+        requirements: formData.requirements?.experience || '',
+        skills: Array.isArray(formData.requirements?.skills) 
+          ? formData.requirements.skills 
+          : (formData.requirements?.skills ? formData.requirements.skills.split(',').map(skill => skill.trim()).filter(Boolean) : []),
+        languages: Array.isArray(formData.requirements?.languages) 
+          ? formData.requirements.languages.map(lang => ({ language: lang, proficiency: 'intermediate' }))
+          : (formData.requirements?.languages ? formData.requirements.languages.split(',').map(lang => ({ language: lang.trim(), proficiency: 'intermediate' })).filter(lang => lang.language) : []),
         benefits: Array.isArray(formData.benefits) 
           ? formData.benefits 
           : (formData.benefits ? formData.benefits.split(',').map(benefit => benefit.trim()).filter(Boolean) : []),
         provider: user?._id,
         providerName: user?.fullName || user?.name || ''
       };
+
+      console.log('Sending opportunity data:', opportunityData);
 
       if (showEditModal && editingOpportunity) {
         await updateOpportunity(editingOpportunity._id, opportunityData);
@@ -673,7 +764,14 @@ const ProviderDashboard = () => {
         refetchOpportunities();
       }, 1500);
     } catch (error) {
-      setFormError(error.response?.data?.message || 'An error occurred. Please try again.');
+      console.error('Opportunity creation error:', error.response?.data);
+      if (error.response?.data?.errors) {
+        // Show specific validation errors
+        const errorMessages = error.response.data.errors.map(err => `${err.path}: ${err.msg}`).join(', ');
+        setFormError(`Validation errors: ${errorMessages}`);
+      } else {
+        setFormError(error.response?.data?.message || 'An error occurred. Please try again.');
+      }
     } finally {
       setFormLoading(false);
     }
@@ -806,9 +904,7 @@ const ProviderDashboard = () => {
     }
 
     if (activeItem === 'available-talents') {
-      // Only show profiles with a valid refugee category
-      const validCategories = ['student', 'job seeker', 'undocumented_talent'];
-      const allRefugeeProfiles = (lastGoodProfiles || []).filter(p => validCategories.includes(p.option));
+      // Use the memoized refugee profiles from the top level
       // Category labels
       const categoryLabels = {
         all: 'All',
@@ -823,7 +919,18 @@ const ProviderDashboard = () => {
         : allRefugeeProfiles.filter(p => p.option === selectedCategory);
       // Sort students by score descending if 'Students' is selected
       if (selectedCategory === 'student') {
-        displayProfiles = displayProfiles.slice().sort((a, b) => (b.score || 0) - (a.score || 0));
+        displayProfiles = displayProfiles.slice().sort((a, b) => {
+          // Get scores from different possible sources
+          const scoreA = a.score || 
+                         (a.academicRecords && a.academicRecords.length > 0 ? 
+                          parseFloat(a.academicRecords[0].percentage) : 0);
+          const scoreB = b.score || 
+                         (b.academicRecords && b.academicRecords.length > 0 ? 
+                          parseFloat(b.academicRecords[0].percentage) : 0);
+          
+          // Sort by score descending (highest first)
+          return scoreB - scoreA;
+        });
       }
       return (
         <div className="space-y-6">
@@ -846,19 +953,36 @@ const ProviderDashboard = () => {
               </button>
             ))}
           </div>
+          
+                    {/* Information for Students */}
+          {selectedCategory === 'student' && (
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
+              <div className="flex items-center">
+                <div className="p-2 bg-blue-100 rounded-lg mr-3">
+                  <Award className="h-5 w-5 text-blue-600" />
+                </div>
+                <div>
+                  <h4 className="font-medium text-blue-900">Student Rankings</h4>
+                  <p className="text-sm text-blue-700">
+                    Ranked by academic performance
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
           {/* Warning if error */}
           {profilesError && (
             <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-2">
               <div className="flex items-center">
                 <AlertCircle className="h-5 w-5 text-yellow-400 mr-2" />
                 <p className="text-yellow-800 text-sm">
-                  Could not refresh talents. Showing last available data. <button onClick={fetchProfiles} className="ml-2 underline text-blue-600">Retry</button>
+                  Could not refresh talents. Showing last available data. <button onClick={stableFetchProfiles} className="ml-2 underline text-blue-600">Retry</button>
                 </p>
               </div>
             </div>
           )}
           {/* Table or Loader */}
-          {profilesLoading && displayProfiles.length === 0 ? (
+          {profilesLoading && allRefugeeProfiles.length === 0 ? (
             <div className="space-y-4">
               {[1, 2, 3].map(i => (
                 <div key={i} className="bg-white p-6 rounded-lg border animate-pulse">
@@ -867,11 +991,15 @@ const ProviderDashboard = () => {
                 </div>
               ))}
             </div>
-          ) : displayProfiles.length > 0 ? (
+          ) : allRefugeeProfiles.length > 0 ? (
             <div className="overflow-x-auto bg-white rounded-lg border">
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
+                    {/* Add ranking column for students */}
+                    {selectedCategory === 'student' && (
+                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Rank</th>
+                    )}
                     <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
                     <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Age</th>
                     <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Gender</th>
@@ -879,14 +1007,47 @@ const ProviderDashboard = () => {
                     <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Key Skills</th>
                     {/* Add Score column for students */}
                     {selectedCategory === 'student' && (
-                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Score</th>
+                                          <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Score/GPA
+                    </th>
                     )}
                     <th className="px-4 py-2"></th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-100">
-                  {displayProfiles.map((profile) => (
+                  {displayProfiles.map((profile, index) => (
                     <tr key={profile._id} className="hover:bg-blue-50 transition-colors">
+                      {/* Show ranking for students */}
+                      {selectedCategory === 'student' && (
+                        <td className="px-4 py-2">
+                          {(() => {
+                            const rank = index + 1;
+                            if (rank === 1) {
+                              return (
+                                <div className="flex items-center">
+                                  <span className="bg-yellow-100 text-yellow-800 text-xs font-bold px-2 py-1 rounded-full">🥇 1st</span>
+                                </div>
+                              );
+                            } else if (rank === 2) {
+                              return (
+                                <div className="flex items-center">
+                                  <span className="bg-gray-100 text-gray-800 text-xs font-bold px-2 py-1 rounded-full">🥈 2nd</span>
+                                </div>
+                              );
+                            } else if (rank === 3) {
+                              return (
+                                <div className="flex items-center">
+                                  <span className="bg-orange-100 text-orange-800 text-xs font-bold px-2 py-1 rounded-full">🥉 3rd</span>
+                                </div>
+                              );
+                            } else {
+                              return (
+                                <span className="text-sm font-medium text-gray-600">#{rank}</span>
+                              );
+                            }
+                          })()}
+                        </td>
+                      )}
                       <td className="px-4 py-2 font-semibold text-gray-900">{profile.fullName || profile.firstName + ' ' + profile.lastName}</td>
                       <td className="px-4 py-2">{profile.age || '-'}</td>
                       <td className="px-4 py-2">{profile.gender || '-'}</td>
@@ -905,7 +1066,45 @@ const ProviderDashboard = () => {
                       </td>
                       {/* Show score for students */}
                       {selectedCategory === 'student' && (
-                        <td className="px-4 py-2 font-bold text-blue-700">{profile.score ?? '-'}</td>
+                        <td className="px-4 py-2">
+                          {(() => {
+                            // Try to get score from different possible sources
+                            const score = profile.score || 
+                                         (profile.academicRecords && profile.academicRecords.length > 0 ? 
+                                          profile.academicRecords[0].percentage : null);
+                            
+                            if (score) {
+                              const numericScore = parseFloat(score);
+                              return (
+                                <div className="flex flex-col">
+                                  <div className="flex items-center">
+                                    <span className="font-bold text-blue-700">{score}%</span>
+                                    {numericScore >= 90 && (
+                                      <span className="ml-2 text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full">Excellent</span>
+                                    )}
+                                    {numericScore >= 80 && numericScore < 90 && (
+                                      <span className="ml-2 text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full">Good</span>
+                                    )}
+                                    {numericScore >= 70 && numericScore < 80 && (
+                                      <span className="ml-2 text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded-full">Average</span>
+                                    )}
+                                    {numericScore < 70 && (
+                                      <span className="ml-2 text-xs bg-red-100 text-red-800 px-2 py-1 rounded-full">Needs Improvement</span>
+                                    )}
+                                  </div>
+                                  {/* Show academic level if available */}
+                                  {profile.academicRecords && profile.academicRecords.length > 0 && (
+                                    <div className="text-xs text-gray-500 mt-1">
+                                      {profile.academicRecords[0].level} • {profile.academicRecords[0].year}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            } else {
+                              return <span className="text-gray-400">No score available</span>;
+                            }
+                          })()}
+                        </td>
                       )}
                       <td className="px-4 py-2">
                         <button 
@@ -937,8 +1136,23 @@ const ProviderDashboard = () => {
           ) : (
             <div className="text-center py-12">
               <Users className="h-16 w-16 mx-auto text-gray-300 mb-4" />
-              <h3 className="text-lg font-medium text-gray-900 mb-2">No talents found</h3>
-              <p className="text-gray-600">Try again later or contact support</p>
+              <h3 className="text-lg font-medium text-gray-900 mb-2">
+                {profilesLoading ? 'Loading talents...' : 'No refugee talents found'}
+              </h3>
+              <p className="text-gray-600 mb-4">
+                {profilesLoading 
+                  ? 'Please wait while we fetch available refugee profiles...'
+                  : 'No refugee profiles have been created yet. Refugees need to create profiles to appear here.'
+                }
+              </p>
+              {!profilesLoading && (
+                <button 
+                  onClick={stableFetchProfiles}
+                  className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+                >
+                  Refresh
+                </button>
+              )}
             </div>
           )}
         </div>
@@ -3234,17 +3448,58 @@ const ProviderDashboard = () => {
                     className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   >
                     <option value="">Select Category</option>
-                    <option value="Technology">Technology</option>
-                    <option value="Healthcare">Healthcare</option>
-                    <option value="Education">Education</option>
-                    <option value="Business">Business</option>
-                    <option value="Engineering">Engineering</option>
-                    <option value="Arts & Design">Arts & Design</option>
-                    <option value="Marketing">Marketing</option>
-                    <option value="Finance">Finance</option>
-                    <option value="Non-profit">Non-profit</option>
-                    <option value="Other">Other</option>
+                    <option value="technology">Technology</option>
+                    <option value="healthcare">Healthcare</option>
+                    <option value="education">Education</option>
+                    <option value="finance">Finance</option>
+                    <option value="marketing">Marketing</option>
+                    <option value="sales">Sales</option>
+                    <option value="customer_service">Customer Service</option>
+                    <option value="manufacturing">Manufacturing</option>
+                    <option value="logistics">Logistics</option>
+                    <option value="hospitality">Hospitality</option>
+                    <option value="retail">Retail</option>
+                    <option value="construction">Construction</option>
+                    <option value="other">Other</option>
                   </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Company Name *</label>
+                  <input
+                    type="text"
+                    name="company"
+                    value={formData.company || ''}
+                    onChange={handleFormChange}
+                    required
+                    placeholder="Enter company name"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Contact Email *</label>
+                  <input
+                    type="email"
+                    name="contactEmail"
+                    value={formData.contactEmail || ''}
+                    onChange={handleFormChange}
+                    required
+                    placeholder="Enter contact email"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Contact Phone</label>
+                  <input
+                    type="tel"
+                    name="contactPhone"
+                    value={formData.contactPhone || ''}
+                    onChange={handleFormChange}
+                    placeholder="Enter contact phone"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
                 </div>
               </div>
 

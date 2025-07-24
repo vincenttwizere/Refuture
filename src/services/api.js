@@ -117,6 +117,7 @@ export const notificationsAPI = {
   getAll: () => api.get('/notifications'),
   create: (data) => api.post('/notifications', data),
   markAsRead: (id) => api.put(`/notifications/${id}/read`),
+  markAllAsRead: () => api.put('/notifications/read-all'),
   delete: (id) => api.delete(`/notifications/${id}`)
 };
 
@@ -128,6 +129,7 @@ export const messagesAPI = {
 };
 
 export const applicationsAPI = {
+  create: (data) => api.post('/applications', data),
   getOpportunityApplications: (opportunityId) => api.get(`/applications/opportunity/${opportunityId}`),
   getProviderApplications: () => api.get('/applications/provider'),
   getUserApplications: () => api.get('/applications/user'),

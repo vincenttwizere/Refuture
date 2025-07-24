@@ -116,6 +116,23 @@ const AdminDashboard = () => {
   });
   const [editingOpportunity, setEditingOpportunity] = useState(null); // Placeholder for edit modal
 
+  // Get display name from profile data
+  const getDisplayName = (profile) => {
+    if (profile.fullName) {
+      return profile.fullName;
+    }
+    if (profile.firstName && profile.lastName) {
+      return `${profile.firstName} ${profile.lastName}`;
+    }
+    if (profile.firstName) {
+      return profile.firstName;
+    }
+    if (profile.lastName) {
+      return profile.lastName;
+    }
+    return 'Unknown User';
+  };
+
   // Defensive loading state (must be after all hooks)
   if (loading) return <div className="min-h-screen flex items-center justify-center">Loading user...</div>;
   if (!user) return <div className="min-h-screen flex items-center justify-center text-red-600">User not found. Please log in again.</div>;
@@ -617,11 +634,11 @@ const AdminDashboard = () => {
                         />
                       ) : null}
                       <div className="w-12 h-12 rounded-full bg-gray-300 flex items-center justify-center text-gray-600 font-medium">
-                        {profile.fullName?.[0] || 'U'}
+                        {getDisplayName(profile)?.[0] || 'U'}
                       </div>
                     </div>
                     <div className="flex-1">
-                      <h3 className="font-medium text-gray-900">{profile.fullName}</h3>
+                      <h3 className="font-medium text-gray-900">{getDisplayName(profile)}</h3>
                       <p className="text-sm text-gray-500">{profile.email}</p>
                     </div>
                   </div>
@@ -861,7 +878,7 @@ const AdminDashboard = () => {
       // Calculate profile completion rate (example: profiles with at least 5 fields filled)
       const completedProfiles = profiles.filter(p => {
         let filled = 0;
-        if (p.fullName) filled++;
+        if (getDisplayName(p)) filled++;
         if (p.age) filled++;
         if (p.gender) filled++;
         if (p.currentLocation) filled++;
