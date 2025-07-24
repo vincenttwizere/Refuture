@@ -108,7 +108,7 @@ const ProfileViewPage = () => {
     try {
       const response = await fetch(profile.resumeUrl.startsWith('http') 
         ? profile.resumeUrl 
-        : `https://refuture-backend-1.onrender.com/${profile.resumeUrl}`
+        : `http://localhost:5001/${profile.resumeUrl}`
       );
       
       if (!response.ok) {
@@ -236,7 +236,7 @@ const ProfileViewPage = () => {
                 <div className="w-24 h-24 bg-gray-300 rounded-full flex items-center justify-center overflow-hidden">
                   {profile.photoUrl ? (
                     <img 
-                      src={profile.photoUrl.startsWith('http') ? profile.photoUrl : `https://refuture-backend-1.onrender.com/${profile.photoUrl}`} 
+                      src={profile.photoUrl.startsWith('http') ? profile.photoUrl : `http://localhost:5001/api/images/${profile.photoUrl}`} 
                       alt={profile.fullName} 
                       className="w-24 h-24 rounded-full object-cover"
                       onError={(e) => {

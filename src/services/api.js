@@ -2,7 +2,7 @@ import axios from 'axios';
 
 // Create axios instance with base configuration
 const api = axios.create({
-  baseURL: 'https://refuture-backend-1.onrender.com/api',
+  baseURL: 'http://localhost:5001/api', // Local backend URL
   headers: {
     'Content-Type': 'application/json',
   },
@@ -19,10 +19,18 @@ api.interceptors.request.use(
     } else {
       console.log('No token found in localStorage');
     }
+    
+    // Don't override Content-Type for FormData
+    if (config.data instanceof FormData) {
+      console.log('FormData request detected, keeping original Content-Type');
+      delete config.headers['Content-Type']; // Let browser set it automatically
+    }
+    
     console.log('Request config:', {
       method: config.method,
       url: config.url,
-      data: config.data
+      hasData: !!config.data,
+      isFormData: config.data instanceof FormData
     });
     return config;
   },

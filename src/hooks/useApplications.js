@@ -5,7 +5,6 @@ import { useAuth } from '../contexts/AuthContext';
 export const useApplications = (opportunityId = null, userRole = null) => {
   const { user } = useAuth();
   const [applications, setApplications] = useState([]);
-  const [lastGoodApplications, setLastGoodApplications] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -13,6 +12,8 @@ export const useApplications = (opportunityId = null, userRole = null) => {
     try {
       setLoading(true);
       setError(null);
+      console.log('Fetching applications - opportunityId:', opportunityId, 'userRole:', userRole, 'user:', user?.role);
+      
       // Add timeout logic
       const timeoutMs = 10000; // 10 seconds
       const controller = new AbortController();
@@ -31,15 +32,16 @@ export const useApplications = (opportunityId = null, userRole = null) => {
         fetchPromise = applicationsAPI.getProviderApplications({ signal: controller.signal });
       }
       const response = await Promise.race([fetchPromise, timeoutPromise]);
+      console.log('Applications response:', response.data);
       setApplications(response.data.applications || []);
-      setLastGoodApplications(response.data.applications || []); // Only update on success
     } catch (err) {
       if (err.name === 'AbortError') {
         setError('Request was aborted or timed out');
         return;
       }
       setError(err.response?.data?.message || 'Failed to fetch applications');
-      // Do NOT clear lastGoodApplications
+      // Do NOT clear applications on error - keep existing data
+      console.error('Error fetching applications:', err);
     } finally {
       setLoading(false);
     }
@@ -64,7 +66,11 @@ export const useApplications = (opportunityId = null, userRole = null) => {
   };
 
   useEffect(() => {
+    // Add a small delay to prevent rapid re-fetching
+    const timer = setTimeout(() => {
     fetchApplications();
+    }, 100);
+    return () => clearTimeout(timer);
   }, [opportunityId]);
 
   // Add real-time polling for applications (every 10 seconds)
@@ -77,7 +83,7 @@ export const useApplications = (opportunityId = null, userRole = null) => {
   }, [opportunityId]);
 
   return {
-    applications: lastGoodApplications,
+    applications: applications,
     loading,
     error,
     refetch: fetchApplications,

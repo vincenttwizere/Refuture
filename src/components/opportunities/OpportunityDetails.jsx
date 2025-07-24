@@ -53,7 +53,7 @@ const OpportunityDetails = () => {
       console.log('Applying for opportunity:', applicationData);
 
       // Send application to backend
-      const response = await fetch('https://refuture-backend-1.onrender.com/api/applications', {
+      const response = await fetch('http://localhost:5001/api/applications', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

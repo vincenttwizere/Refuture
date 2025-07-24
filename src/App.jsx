@@ -41,7 +41,7 @@ import CreateProfile from './components/profiles/CreateProfile'
 function AppRouter() {
   return (
     <AuthProvider>
-      <Router>
+      <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <Routes>
           <Route path="/" element={<LandingPage />} />
           <Route path="/login" element={<LoginForm />} />
@@ -113,12 +113,18 @@ function ProtectedRoute({ children, role }) {
   
   if (loading) return <div className="min-h-screen flex items-center justify-center">Loading...</div>
   if (!isAuthenticated) return <Navigate to="/login" replace />
+  
+  // Check role-specific requirements
   if (role && user?.role !== role) {
     console.log('Role mismatch:', { expected: role, actual: user?.role });
     return <Navigate to="/" replace />
   }
   
-
+  // For refugee dashboard, check if user has a profile
+  if (role === 'refugee' && window.location.pathname === '/refugee-dashboard' && !user?.hasProfile) {
+    console.log('Refugee without profile, redirecting to create-profile');
+    return <Navigate to="/create-profile" replace />
+  }
   
   return <>{children}</>
 }

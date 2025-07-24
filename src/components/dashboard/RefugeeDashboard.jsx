@@ -153,6 +153,21 @@ const RefugeeDashboard = () => {
   const displayMessages = Array.isArray(messages) ? messages : [];
   const displayNotifications = Array.isArray(notifications) ? notifications : [];
 
+  // Debug logging for main component
+  console.log('RefugeeDashboard Debug:', {
+    user: user ? { id: user._id, email: user.email, role: user.role } : null,
+    opportunities: displayOpportunities.length,
+    interviews: displayInterviews.length,
+    applications: displayApplications.length,
+    profiles: displayProfiles.length,
+    opportunitiesLoading,
+    interviewsLoading,
+    applicationsLoading,
+    opportunitiesError,
+    interviewsError,
+    applicationsError
+  });
+
   // Derived data with safety checks
   const profile = displayProfiles && displayProfiles.length > 0 ? displayProfiles[0] : null;
   const unreadNotificationsCount = displayNotifications.filter(notification => !notification.isRead).length;
@@ -178,6 +193,22 @@ const RefugeeDashboard = () => {
     }, 30000);
     return () => clearInterval(interval);
   }, [refetchNotifications, refetchMessages]);
+
+  // Test backend connectivity
+  useEffect(() => {
+    const testBackend = async () => {
+      try {
+        const response = await fetch('http://localhost:5001/api/health');
+        console.log('Backend health check:', response.status, response.ok);
+        if (!response.ok) {
+          console.error('Backend is not responding properly');
+        }
+      } catch (error) {
+        console.error('Backend connectivity test failed:', error);
+      }
+    };
+    testBackend();
+  }, []);
 
   // Profile redirect
   useEffect(() => {
@@ -432,6 +463,19 @@ const RefugeeDashboard = () => {
 
 // Overview Section Component
 const OverviewSection = ({ opportunities = [], interviews = [], applications = [], opportunitiesLoading, interviewsLoading, applicationsLoading, opportunitiesError, interviewsError, applicationsError }) => {
+  // Debug logging
+  console.log('OverviewSection Debug:', {
+    opportunities: opportunities.length,
+    interviews: interviews.length,
+    applications: applications.length,
+    opportunitiesLoading,
+    interviewsLoading,
+    applicationsLoading,
+    opportunitiesError,
+    interviewsError,
+    applicationsError
+  });
+
   const activeApplications = applications.filter(app => 
     app.status === 'pending' || app.status === 'accepted' || app.status === 'under_review'
   ).length;
@@ -445,6 +489,14 @@ const OverviewSection = ({ opportunities = [], interviews = [], applications = [
   // Only show loading if we have no data at all
   const hasAnyData = opportunities.length > 0 || interviews.length > 0 || applications.length > 0;
   const showLoading = !hasAnyData && (opportunitiesLoading || interviewsLoading || applicationsLoading);
+
+  console.log('OverviewSection Calculated:', {
+    activeApplications,
+    interviewsScheduled,
+    newOpportunities,
+    hasAnyData,
+    showLoading
+  });
 
   return (
     <div className="space-y-6">
@@ -558,7 +610,20 @@ const OverviewSection = ({ opportunities = [], interviews = [], applications = [
         <div className="text-center py-12">
           <Home className="h-16 w-16 mx-auto mb-4 text-gray-300" />
           <h3 className="text-lg font-medium text-gray-900 mb-2">Welcome to your dashboard!</h3>
-          <p className="text-gray-600">Start by exploring opportunities and building your profile.</p>
+          <p className="text-gray-600 mb-4">Start by exploring opportunities and building your profile.</p>
+          
+          {/* Debug information */}
+          <div className="bg-gray-50 p-4 rounded-lg text-left max-w-md mx-auto">
+            <h4 className="font-medium text-gray-900 mb-2">Debug Info:</h4>
+            <div className="text-sm text-gray-600 space-y-1">
+              <div>Opportunities: {opportunities.length} (Loading: {opportunitiesLoading ? 'Yes' : 'No'})</div>
+              <div>Interviews: {interviews.length} (Loading: {interviewsLoading ? 'Yes' : 'No'})</div>
+              <div>Applications: {applications.length} (Loading: {applicationsLoading ? 'Yes' : 'No'})</div>
+              {opportunitiesError && <div className="text-red-600">Opportunities Error: {opportunitiesError}</div>}
+              {interviewsError && <div className="text-red-600">Interviews Error: {interviewsError}</div>}
+              {applicationsError && <div className="text-red-600">Applications Error: {applicationsError}</div>}
+            </div>
+          </div>
         </div>
       )}
     </div>
@@ -1131,7 +1196,6 @@ const NotificationsSection = ({ notifications, markNotificationAsRead, navigate,
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <h3 className="text-lg font-semibold text-gray-900">Notifications</h3>
         <div className="flex space-x-2">
           <button 
             onClick={async () => {
@@ -1223,6 +1287,8 @@ const NotificationsSection = ({ notifications, markNotificationAsRead, navigate,
 // Profile Section Component
 const ProfileSection = ({ profile, profileMode, setProfileMode, refetchProfile }) => {
   const handleProfileUpdated = async () => {
+    // Add a small delay to ensure backend has processed the update
+    await new Promise(resolve => setTimeout(resolve, 1000));
     await refetchProfile();
     setProfileMode('view');
   };

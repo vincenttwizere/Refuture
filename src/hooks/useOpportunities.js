@@ -5,7 +5,6 @@ import { useAuth } from '../contexts/AuthContext';
 export const useOpportunities = (filters = {}) => {
   const { user } = useAuth();
   const [opportunities, setOpportunities] = useState([]);
-  const [lastGoodOpportunities, setLastGoodOpportunities] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [pagination, setPagination] = useState({
@@ -24,12 +23,14 @@ export const useOpportunities = (filters = {}) => {
     try {
       setLoading(true);
       setError(null);
+      console.log('Fetching opportunities with filters:', filters, 'params:', params);
+      
       // Add timeout logic
       const timeoutMs = 30000; // 30 seconds
       const timeoutPromise = new Promise((_, reject) =>
         setTimeout(() => {
           abortControllerRef.current.abort();
-          reject(new Error('Request timed out after 10 seconds'));
+          reject(new Error('Request timed out after 30 seconds'));
         }, timeoutMs)
       );
       const fetchPromise = opportunitiesAPI.getAll({
@@ -38,16 +39,18 @@ export const useOpportunities = (filters = {}) => {
         signal: abortControllerRef.current.signal
       });
       const response = await Promise.race([fetchPromise, timeoutPromise]);
-      setOpportunities(response.data.opportunities);
-      setLastGoodOpportunities(response.data.opportunities); // Only update on success
-      setPagination(response.data.pagination);
+      console.log('Opportunities response:', response.data);
+      // Handle both response formats: {opportunities: []} and {data: []}
+      const opportunities = response.data.opportunities || response.data.data || [];
+      setOpportunities(opportunities);
+      setPagination(response.data.pagination || {});
     } catch (err) {
       if (err.name === 'AbortError') {
         setError('Request was aborted or timed out');
         return;
       }
       setError(err.response?.data?.message || err.message || 'Failed to fetch opportunities');
-      // Do NOT clear lastGoodOpportunities
+      // Do NOT clear opportunities on error - keep existing data
       console.error('Error fetching opportunities:', err);
     } finally {
       setLoading(false);
@@ -111,7 +114,11 @@ export const useOpportunities = (filters = {}) => {
 
   useEffect(() => {
     if (user && user._id) {
+      // Add a small delay to prevent rapid re-fetching
+      const timer = setTimeout(() => {
       fetchOpportunities();
+      }, 100);
+      return () => clearTimeout(timer);
     }
     return () => {
       if (abortControllerRef.current) {
@@ -121,7 +128,7 @@ export const useOpportunities = (filters = {}) => {
   }, [user?._id, fetchOpportunities]);
 
   return {
-    opportunities: lastGoodOpportunities,
+    opportunities: opportunities,
     loading,
     error,
     pagination,

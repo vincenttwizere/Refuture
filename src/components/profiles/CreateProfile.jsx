@@ -1,6 +1,7 @@
 ﻿import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { useAuth } from '../../contexts/AuthContext';
+import api from '../../services/api';
 import { useNavigate } from 'react-router-dom';
 import { 
   User, 
@@ -74,7 +75,7 @@ const talentCategories = [
 ];
 
 const CreateProfile = ({ onProfileUpdated }) => {
-  const { user } = useAuth();
+  const { user, refreshUser } = useAuth();
   const navigate = useNavigate();
   const [option, setOption] = useState('');
   const [form, setForm] = useState({});
@@ -91,18 +92,40 @@ const CreateProfile = ({ onProfileUpdated }) => {
   const [portfolio, setPortfolio] = useState([]);
   // 1. State for all documents (existing and new)
   const [supportingDocuments, setSupportingDocuments] = useState([]);
+  const [imageUpdateKey, setImageUpdateKey] = useState(0); // Force re-render for image updates
+  const [imageLoading, setImageLoading] = useState(false); // Loading state for image updates
 
-  // Check for existing profile when component loads
-  useEffect(() => {
+  // Function to check for existing profile
     const checkExistingProfile = async () => {
       if (user?.email) {
-        try {
-          const response = await axios.get(`https://refuture-backend-1.onrender.com/api/profiles?email=${user.email}`);
-          if (response.data.profiles && response.data.profiles.length > 0) {
-            const p = response.data.profiles[0];
+      console.log('Checking for existing profile for user:', user.email);
+      try {
+        // Use the new user-specific route for better security
+        const response = await api.get(`/profiles/user/${user._id}`);
+        console.log('Profile check response:', response.data);
+        
+        if (response.data.success && response.data.profile) {
+          const p = response.data.profile;
+          console.log('Found existing profile:', p);
+          console.log('Profile name fields:', {
+            fullName: p.fullName,
+            firstName: p.firstName,
+            lastName: p.lastName
+          });
             setExistingProfile(p);
+          
+          // Handle name properly - combine firstName and lastName if fullName is not available
+          let displayName = p.fullName || '';
+          if (!displayName && p.firstName && p.lastName) {
+            displayName = `${p.firstName} ${p.lastName}`;
+          } else if (!displayName && p.firstName) {
+            displayName = p.firstName;
+          }
+          
+          console.log('Display name calculated:', displayName);
+          
             setForm({
-              fullName: p.fullName || '',
+            fullName: displayName,
               age: p.age || '',
               gender: p.gender || '',
               nationality: p.nationality || '',
@@ -111,13 +134,19 @@ const CreateProfile = ({ onProfileUpdated }) => {
               skills: p.skills || [],
               language: p.language || [],
               tags: p.tags || [],
-              isPublic: p.isPublic || false,
+            isPublic: p.isPublic !== undefined ? p.isPublic : true,
               highSchoolSubjects: p.highSchoolSubjects || '',
               desiredField: p.desiredField || '',
               talentCategory: p.talentCategory || '',
               talentExperience: p.talentExperience || '',
               talentDescription: p.talentDescription || ''
             });
+          
+          console.log('Form state after setting:', {
+            fullName: displayName,
+            age: p.age,
+            email: p.email || user.email
+          });
             setOption(p.option || '');
             setEducation(p.education || []);
             setExperience(p.experience || []);
@@ -140,21 +169,104 @@ const CreateProfile = ({ onProfileUpdated }) => {
             setSupportingDocuments((p.supportingDocuments || []).map(doc => ({ path: doc.path, originalname: doc.originalname })));
             if (p.photoUrl) {
               const photoUrl = p.photoUrl;
+            console.log('Loading profile image with URL:', photoUrl);
+            
               if (photoUrl.startsWith('http')) {
+              console.log('Setting initial image preview to external URL:', photoUrl);
                 setImagePreview(photoUrl);
               } else {
-                setImagePreview(`https://refuture-backend-1.onrender.com/${photoUrl}`);
-              }
+              // Use the proxy route to avoid CORS issues
+              const fullImageUrl = `http://localhost:5001/api/images/${photoUrl}`;
+              console.log('Setting initial image preview to proxy URL:', fullImageUrl);
+              setImagePreview(fullImageUrl);
             }
+            // Force re-render of image component
+            setImageUpdateKey(prev => prev + 1);
+          } else {
+            console.log('No photoUrl in profile, no image to display');
+          }
+        } else {
+          console.log('No existing profile found, initializing new profile form');
+          // Initialize form for new user
+          setForm({
+            fullName: '',
+            age: '',
+            gender: '',
+            nationality: '',
+            currentLocation: '',
+            email: user.email,
+            skills: [],
+            language: [],
+            tags: [],
+            isPublic: true,
+            highSchoolSubjects: '',
+            desiredField: '',
+            talentCategory: '',
+            talentExperience: '',
+            talentDescription: ''
+          });
+          setOption('');
+          setEducation([]);
+          setExperience([]);
+          setAcademicRecords([]);
+          setPortfolio([]);
+          setSupportingDocuments([]);
           }
         } catch (error) {
           console.error('Error checking existing profile:', error);
-        }
+        // Initialize form for new user even if there's an error
+        setForm({
+          fullName: '',
+          age: '',
+          gender: '',
+          nationality: '',
+          currentLocation: '',
+          email: user.email,
+          skills: [],
+          language: [],
+          tags: [],
+          isPublic: true,
+          highSchoolSubjects: '',
+          desiredField: '',
+          talentCategory: '',
+          talentExperience: '',
+          talentDescription: ''
+        });
+        setOption('');
+        setEducation([]);
+        setExperience([]);
+        setAcademicRecords([]);
+        setPortfolio([]);
+        setSupportingDocuments([]);
       }
-    };
+    }
+  };
 
+  // Refresh profile data when user changes or component mounts
+  useEffect(() => {
+    if (user) {
     checkExistingProfile();
+    }
+  }, [user]);
+
+  // Check for existing profile when component mounts
+  useEffect(() => {
+    if (user?.email) {
+      checkExistingProfile();
+    }
   }, [user?.email]);
+
+  // Monitor form changes for debugging
+  useEffect(() => {
+    console.log('Form state changed:', form);
+  }, [form]);
+
+  // Monitor imagePreview changes for debugging
+  useEffect(() => {
+    console.log('Image preview changed:', imagePreview);
+    console.log('Image loading state:', imageLoading);
+    console.log('Image update key:', imageUpdateKey);
+  }, [imagePreview, imageLoading, imageUpdateKey]);
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
@@ -348,44 +460,78 @@ const CreateProfile = ({ onProfileUpdated }) => {
         talentDescription: form.talentDescription
       });
       
+      // Validate required fields
+      if (!form.fullName || form.fullName.trim() === '') {
+        setError('Full name is required');
+        setLoading(false);
+        return;
+      }
+      
+      if (!option || option.trim() === '') {
+        setError('Please select a talent track');
+        setLoading(false);
+        return;
+      }
+      
+      if (!form.email || form.email.trim() === '') {
+        setError('Email is required');
+        setLoading(false);
+        return;
+      }
+      
       // Ensure experience is properly formatted
       const cleanExperience = Array.isArray(experience) ? experience : [];
       console.log('Clean experience to send:', cleanExperience);
       
       const data = new FormData();
+      
+      // Required fields
       data.append('option', option);
-      data.append('fullName', form.fullName || '');
+      data.append('fullName', form.fullName.trim());
+      data.append('email', form.email.trim());
+      
+      // Optional fields with proper fallbacks
       data.append('age', form.age || '');
       data.append('gender', form.gender || '');
       data.append('nationality', form.nationality || '');
       data.append('currentLocation', form.currentLocation || '');
-      data.append('email', form.email || user?.email || '');
-      data.append('skills', JSON.stringify(form.skills || []));
-      data.append('language', JSON.stringify(form.language || []));
-      data.append('tags', JSON.stringify(form.tags || []));
-      data.append('education', JSON.stringify(education));
-      data.append('experience', JSON.stringify(cleanExperience));
-      data.append('academicRecords', JSON.stringify(academicRecords));
-      data.append('portfolio', JSON.stringify(portfolio));
       data.append('highSchoolSubjects', form.highSchoolSubjects || '');
       data.append('desiredField', form.desiredField || '');
       
-      // Only append talent fields if they have values
+      // Arrays with proper JSON stringification
+      data.append('skills', JSON.stringify(form.skills || []));
+      data.append('language', JSON.stringify(form.language || []));
+      data.append('tags', JSON.stringify(form.tags || []));
+      data.append('education', JSON.stringify(education || []));
+      data.append('experience', JSON.stringify(cleanExperience));
+      data.append('academicRecords', JSON.stringify(academicRecords || []));
+      data.append('portfolio', JSON.stringify(portfolio || []));
+      
+      // Talent fields (only if they have values)
       if (form.talentCategory && form.talentCategory.trim() !== '') {
-        data.append('talentCategory', form.talentCategory);
+        data.append('talentCategory', form.talentCategory.trim());
       }
       if (form.talentExperience && form.talentExperience.trim() !== '') {
-        data.append('talentExperience', form.talentExperience);
+        data.append('talentExperience', form.talentExperience.trim());
       }
       if (form.talentDescription && form.talentDescription.trim() !== '') {
-        data.append('talentDescription', form.talentDescription);
+        data.append('talentDescription', form.talentDescription.trim());
       }
       
-      if (typeof form.isPublic !== 'undefined') data.append('isPublic', form.isPublic);
-      if (files.document) data.append('document', files.document);
-      if (profileImage) data.append('profileImage', profileImage);
+      // Boolean fields
+      if (typeof form.isPublic !== 'undefined') {
+        data.append('isPublic', form.isPublic.toString());
+      }
       
-      // Separate existing and new
+      // File uploads
+      if (files.document) {
+        data.append('document', files.document);
+      }
+      if (profileImage) {
+        data.append('profileImage', profileImage);
+      }
+      
+      // Supporting documents
       const existingDocs = supportingDocuments.filter(doc => doc.path && doc.originalname);
       const newFiles = supportingDocuments.filter(doc => doc.file && doc.originalname);
       if (existingDocs.length > 0) {
@@ -401,20 +547,136 @@ const CreateProfile = ({ onProfileUpdated }) => {
         console.log(`${key}:`, value);
       }
       
-      const response = await axios.post('https://refuture-backend-1.onrender.com/api/profiles', data, {
-        headers: { 
-          'Content-Type': 'multipart/form-data',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
-      });
+      // Make the API call
+      const response = await api.post('/profiles', data);
       
       console.log('Backend response:', response.data);
       setSuccess(true);
+      
       // Debug: Log what is returned
       console.log('Backend returned profile:', response.data.profile);
+      
       // Update supportingDocuments with the latest from backend
       if (response.data && response.data.profile && response.data.profile.supportingDocuments) {
         setSupportingDocuments((response.data.profile.supportingDocuments || []).map(doc => ({ path: doc.path, originalname: doc.originalname })));
+      }
+      
+      // Refresh the profile data to show updated information
+      if (response.data.success && response.data.profile) {
+        const updatedProfile = response.data.profile;
+        console.log('Refreshing form with updated profile data:', updatedProfile);
+        console.log('Updated profile name fields:', {
+          fullName: updatedProfile.fullName,
+          firstName: updatedProfile.firstName,
+          lastName: updatedProfile.lastName
+        });
+        
+        // Handle name properly - combine firstName and lastName if fullName is not available
+        let displayName = updatedProfile.fullName || '';
+        if (!displayName && updatedProfile.firstName && updatedProfile.lastName) {
+          displayName = `${updatedProfile.firstName} ${updatedProfile.lastName}`;
+        } else if (!displayName && updatedProfile.firstName) {
+          displayName = updatedProfile.firstName;
+        }
+        
+        console.log('Updated display name calculated:', displayName);
+        
+        // Update the form with the latest data from the backend
+        setForm({
+          fullName: displayName,
+          age: updatedProfile.age || '',
+          gender: updatedProfile.gender || '',
+          nationality: updatedProfile.nationality || '',
+          currentLocation: updatedProfile.currentLocation || '',
+          email: updatedProfile.email || user.email,
+          skills: updatedProfile.skills || [],
+          language: updatedProfile.language || [],
+          tags: updatedProfile.tags || [],
+          isPublic: updatedProfile.isPublic !== undefined ? updatedProfile.isPublic : true,
+          highSchoolSubjects: updatedProfile.highSchoolSubjects || '',
+          desiredField: updatedProfile.desiredField || '',
+          talentCategory: updatedProfile.talentCategory || '',
+          talentExperience: updatedProfile.talentExperience || '',
+          talentDescription: updatedProfile.talentDescription || ''
+        });
+        
+        console.log('Updated form state after setting:', {
+          fullName: displayName,
+          age: updatedProfile.age,
+          email: updatedProfile.email || user.email
+        });
+        
+        setOption(updatedProfile.option || '');
+        setEducation(updatedProfile.education || []);
+        setExperience(updatedProfile.experience || []);
+        setAcademicRecords(updatedProfile.academicRecords || []);
+        setPortfolio(updatedProfile.portfolio || []);
+        setExistingProfile(updatedProfile);
+        
+        // Update profile image if it was changed
+        if (updatedProfile.photoUrl) {
+          const photoUrl = updatedProfile.photoUrl;
+          console.log('Updating profile image with URL:', photoUrl);
+          
+          // Set loading state
+          setImageLoading(true);
+          
+          let imageUrl;
+          if (photoUrl.startsWith('http')) {
+            imageUrl = photoUrl;
+            console.log('Setting image preview to external URL:', imageUrl);
+          } else {
+            // Use the proxy route to avoid CORS issues
+            imageUrl = `http://localhost:5001/api/images/${photoUrl}`;
+            console.log('Setting image preview to proxy URL:', imageUrl);
+          }
+          
+          // Set the image preview immediately
+          setImagePreview(imageUrl);
+          
+          // Force re-render of image component
+          setImageUpdateKey(prev => prev + 1);
+          
+          // Wait for image to load before proceeding
+          console.log('Waiting for image to load...');
+          try {
+            await new Promise((resolve, reject) => {
+              const img = new Image();
+              img.onload = () => {
+                console.log('Image loaded successfully:', imageUrl);
+                setImageLoading(false);
+                resolve();
+              };
+              img.onerror = (error) => {
+                console.log('Image failed to load:', imageUrl, error);
+                setImageLoading(false);
+                // Don't reject, just resolve to continue
+                resolve();
+              };
+              img.src = imageUrl;
+              
+              // Timeout after 5 seconds
+              setTimeout(() => {
+                console.log('Image loading timeout, continuing...');
+                setImageLoading(false);
+                resolve();
+              }, 5000);
+            });
+          } catch (error) {
+            console.log('Image loading error, continuing:', error);
+            setImageLoading(false);
+          }
+        } else {
+          console.log('No photoUrl in updated profile, clearing image preview');
+          setImagePreview(null);
+          setImageUpdateKey(prev => prev + 1);
+        }
+      }
+      
+      // Refresh user data to update hasProfile status
+      if (refreshUser) {
+        console.log('Refreshing user data...');
+        await refreshUser();
       }
       
       // Debug logs for redirect
@@ -431,7 +693,14 @@ const CreateProfile = ({ onProfileUpdated }) => {
       // Always redirect after success
       console.log('Performing redirect...');
       
-      // Small delay to ensure success state is set
+      // Show success message and wait for image to be visible
+      setSuccess(true);
+      
+      // Wait longer to ensure image is visible to user
+      console.log('Waiting for image to be visible to user...');
+      await new Promise(resolve => setTimeout(resolve, 3000));
+      
+      // Small delay to ensure success state is set and image is updated
         setTimeout(() => {
         try {
           if (user?.role === 'refugee') {
@@ -455,14 +724,40 @@ const CreateProfile = ({ onProfileUpdated }) => {
             navigate('/');
           }
         }
-      }, 1000); // 1 second delay
+      }, 1000);
       
     } catch (error) {
       console.error('=== FRONTEND PROFILE ERROR ===');
       console.error('Error saving profile:', error);
       console.error('Error response:', error.response?.data);
       console.error('Error status:', error.response?.status);
-      setError(error.response?.data?.message || error.response?.data?.error || 'Error saving profile');
+      console.error('Error message:', error.message);
+      
+      // More detailed error handling
+      let errorMessage = 'Error saving profile';
+      
+      if (error.response?.data?.message) {
+        errorMessage = error.response.data.message;
+      } else if (error.response?.data?.error) {
+        errorMessage = error.response.data.error;
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
+      // Handle specific error types
+      if (error.response?.status === 400) {
+        errorMessage = error.response.data.message || 'Invalid data provided';
+      } else if (error.response?.status === 401) {
+        errorMessage = 'Authentication failed. Please log in again.';
+      } else if (error.response?.status === 403) {
+        errorMessage = 'You are not authorized to perform this action.';
+      } else if (error.response?.status === 500) {
+        errorMessage = 'Server error. Please try again later.';
+      } else if (!error.response) {
+        errorMessage = 'Network error. Please check your connection.';
+      }
+      
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -488,7 +783,9 @@ const CreateProfile = ({ onProfileUpdated }) => {
         {success && (
           <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg flex items-center">
             <CheckCircle className="h-5 w-5 text-green-500 mr-2" />
-            <span className="text-green-700">Profile saved successfully! Redirecting to dashboard...</span>
+            <span className="text-green-700">
+              {imageLoading ? 'Updating profile and image...' : 'Profile and image updated successfully! Redirecting to dashboard...'}
+            </span>
         </div>
       )}
 
@@ -509,12 +806,17 @@ const CreateProfile = ({ onProfileUpdated }) => {
             <div className="flex items-center space-x-6">
               <div className="relative">
                 {imagePreview ? (
-                  <div className="relative">
+                  <div className="relative" key={imageUpdateKey}>
                     <img 
                       src={imagePreview} 
                       alt="Profile preview" 
-                      className="w-24 h-24 rounded-full object-cover border-2 border-gray-200"
+                      className={`w-24 h-24 rounded-full object-cover border-2 ${imageLoading ? 'border-blue-300 opacity-75' : 'border-gray-200'}`}
                     />
+                    {imageLoading && (
+                      <div className="absolute inset-0 flex items-center justify-center bg-blue-50 bg-opacity-75 rounded-full">
+                        <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-500"></div>
+                      </div>
+                    )}
                     <button
                       type="button"
                       onClick={removeProfileImage}

@@ -3,7 +3,6 @@ import { profilesAPI } from '../services/api';
 
 export const useProfiles = (filters = {}) => {
   const [profiles, setProfiles] = useState([]);
-  const [lastGoodProfiles, setLastGoodProfiles] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -11,13 +10,15 @@ export const useProfiles = (filters = {}) => {
     try {
       setLoading(true);
       setError(null);
+      console.log('Fetching profiles with filters:', filters, 'params:', params);
+      
       // Add timeout logic
       const timeoutMs = 30000; // 30 seconds
       const controller = new AbortController();
       const timeoutPromise = new Promise((_, reject) =>
         setTimeout(() => {
           controller.abort();
-          reject(new Error('Request timed out after 10 seconds'));
+          reject(new Error('Request timed out after 30 seconds'));
         }, timeoutMs)
       );
       const fetchPromise = profilesAPI.getAll({
@@ -26,15 +27,15 @@ export const useProfiles = (filters = {}) => {
         signal: controller.signal
       });
       const response = await Promise.race([fetchPromise, timeoutPromise]);
+      console.log('Profiles response:', response.data);
       setProfiles(response.data.profiles || []);
-      setLastGoodProfiles(response.data.profiles || []); // Only update on success
     } catch (err) {
       if (err.name === 'AbortError') {
         setError('Request was aborted or timed out');
         return;
       }
       setError(err.response?.data?.message || err.message || 'Failed to fetch profiles');
-      // Do NOT clear lastGoodProfiles
+      // Do NOT clear profiles on error - keep existing data
       console.error('Error fetching profiles:', err);
     } finally {
       setLoading(false);
@@ -81,12 +82,15 @@ export const useProfiles = (filters = {}) => {
   };
 
   useEffect(() => {
+    // Add a small delay to prevent rapid re-fetching
+    const timer = setTimeout(() => {
     fetchProfiles();
+    }, 100);
+    return () => clearTimeout(timer);
   }, [fetchProfiles]);
 
   return {
-    profiles: lastGoodProfiles, // <--- keep this for backward compatibility
-    lastGoodProfiles,          // <--- and also export this
+    profiles: profiles, // Use current state instead of lastGoodProfiles
     loading,
     error,
     fetchProfiles,

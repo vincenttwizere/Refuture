@@ -19,6 +19,13 @@ import { useNavigate } from 'react-router-dom';
 
 const ProfileView = ({ profile, onEdit }) => {
   const navigate = useNavigate();
+  
+  // Debug logging for profile data
+  console.log('ProfileView - Received profile data:', {
+    fullName: profile?.fullName,
+    photoUrl: profile?.photoUrl,
+    _id: profile?._id
+  });
 
   // Function to expand common degree abbreviations
   const expandDegreeAbbreviation = (degree) => {
@@ -52,7 +59,10 @@ const ProfileView = ({ profile, onEdit }) => {
   const getProfileImageUrl = (photoUrl) => {
     if (!photoUrl) return '/default-avatar.png';
     if (photoUrl.startsWith('http')) return photoUrl;
-    return `https://refuture-backend-1.onrender.com/${photoUrl}`;
+    // Use the proxy route to avoid CORS issues
+    const imageUrl = `http://localhost:5001/api/images/${photoUrl}`;
+    console.log('ProfileView - Constructed image URL:', imageUrl, 'from photoUrl:', photoUrl);
+    return imageUrl;
   };
 
   // Handle image loading errors

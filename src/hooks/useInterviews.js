@@ -5,7 +5,6 @@ import { useAuth } from '../contexts/AuthContext';
 export const useInterviews = (userRole = 'provider') => {
   const { user } = useAuth();
   const [interviews, setInterviews] = useState([]);
-  const [lastGoodInterviews, setLastGoodInterviews] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [pagination, setPagination] = useState({
@@ -24,14 +23,16 @@ export const useInterviews = (userRole = 'provider') => {
     try {
       setLoading(true);
       setError(null);
+      console.log('Fetching interviews - userRole:', userRole, 'params:', params);
+      
       let response;
       if (userRole === 'provider') {
         response = await interviewsAPI.getProviderInterviews(params);
       } else {
         response = await interviewsAPI.getTalentInterviews(params);
       }
+      console.log('Interviews response:', response.data);
       setInterviews(response.data.interviews || []);
-      setLastGoodInterviews(response.data.interviews || []); // Only update on success
       setPagination(response.data.pagination || {
         current: 1,
         total: 1,
@@ -48,8 +49,8 @@ export const useInterviews = (userRole = 'provider') => {
         setError(null);
       } else {
         setError(err.response?.data?.message || 'Failed to fetch interviews');
+        // Do NOT clear interviews on error - keep existing data
       }
-      // Do NOT clear lastGoodInterviews
     } finally {
       setLoading(false);
     }
@@ -142,7 +143,11 @@ export const useInterviews = (userRole = 'provider') => {
 
   useEffect(() => {
     if (user && user._id) {
+      // Add a small delay to prevent rapid re-fetching
+      const timer = setTimeout(() => {
       fetchInterviews();
+      }, 100);
+      return () => clearTimeout(timer);
     }
     return () => {
       if (abortControllerRef.current) {
@@ -152,7 +157,7 @@ export const useInterviews = (userRole = 'provider') => {
   }, [user?._id, userRole]);
 
   return {
-    interviews: lastGoodInterviews,
+    interviews: interviews,
     loading,
     error,
     pagination,

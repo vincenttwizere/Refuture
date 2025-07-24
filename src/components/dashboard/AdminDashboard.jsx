@@ -607,7 +607,7 @@ const AdminDashboard = () => {
                     <div className="w-12 h-12 rounded-full bg-gray-300 flex items-center justify-center">
                       {profile.photoUrl ? (
                         <img 
-                          src={profile.photoUrl} 
+                          src={profile.photoUrl.startsWith('http') ? profile.photoUrl : `http://localhost:5001/api/images/${profile.photoUrl}`} 
                           alt="Profile" 
                           className="w-12 h-12 rounded-full object-cover"
                           onError={(e) => {
