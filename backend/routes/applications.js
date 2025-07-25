@@ -137,6 +137,14 @@ router.post('/', protect, authorize('refugee'), [
       });
     }
 
+    // Check if opportunity deadline has passed
+    if (opportunity.applicationDeadline && new Date() > opportunity.applicationDeadline) {
+      return res.status(400).json({
+        success: false,
+        message: 'The application deadline for this opportunity has passed'
+      });
+    }
+
     // Check if user has a profile
     const profile = await Profile.findOne({ user: req.user._id });
     if (!profile) {

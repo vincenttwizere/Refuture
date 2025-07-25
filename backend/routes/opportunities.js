@@ -50,6 +50,12 @@ router.get('/', [
     // Build filter object
     const filter = { isActive: true };
 
+    // Filter out expired opportunities (deadline has passed)
+    filter.$or = [
+      { applicationDeadline: { $exists: false } }, // No deadline set
+      { applicationDeadline: { $gt: new Date() } } // Deadline is in the future
+    ];
+
     if (category) filter.category = category;
     if (jobType) filter.jobType = jobType;
     if (experienceLevel) filter.experienceLevel = experienceLevel;
@@ -58,12 +64,17 @@ router.get('/', [
       filter.location = { $regex: location, $options: 'i' };
     }
     if (search) {
-      filter.$or = [
-        { title: { $regex: search, $options: 'i' } },
-        { description: { $regex: search, $options: 'i' } },
-        { company: { $regex: search, $options: 'i' } },
-        { requirements: { $regex: search, $options: 'i' } }
-      ];
+      // Combine search with deadline filter
+      const searchFilter = {
+        $or: [
+          { title: { $regex: search, $options: 'i' } },
+          { description: { $regex: search, $options: 'i' } },
+          { company: { $regex: search, $options: 'i' } },
+          { requirements: { $regex: search, $options: 'i' } }
+        ]
+      };
+      filter.$and = [filter.$or, searchFilter];
+      delete filter.$or; // Remove the original $or since we're using $and now
     }
 
     // Calculate pagination

@@ -178,4 +178,41 @@ opportunitySchema.methods.isExpired = function() {
   return new Date() > this.applicationDeadline;
 };
 
+// Static method to deactivate expired opportunities
+opportunitySchema.statics.deactivateExpiredOpportunities = async function() {
+  try {
+    const result = await this.updateMany(
+      {
+        isActive: true,
+        applicationDeadline: { $exists: true, $lt: new Date() }
+      },
+      {
+        $set: { isActive: false }
+      }
+    );
+    
+    if (result.modifiedCount > 0) {
+      console.log(`Deactivated ${result.modifiedCount} expired opportunities`);
+    }
+    
+    return result.modifiedCount;
+  } catch (error) {
+    console.error('Error deactivating expired opportunities:', error);
+    throw error;
+  }
+};
+
+// Static method to get active and non-expired opportunities
+opportunitySchema.statics.getActiveOpportunities = function(filter = {}) {
+  const baseFilter = {
+    isActive: true,
+    $or: [
+      { applicationDeadline: { $exists: false } }, // No deadline set
+      { applicationDeadline: { $gt: new Date() } } // Deadline is in the future
+    ]
+  };
+  
+  return this.find({ ...baseFilter, ...filter });
+};
+
 module.exports = mongoose.model('Opportunity', opportunitySchema); 

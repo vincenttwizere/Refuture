@@ -7,9 +7,6 @@ const fileUpload = require('express-fileupload');
 const path = require('path');
 require('dotenv').config();
 
-const app = express();
-const PORT = process.env.PORT || 5001;
-
 // Import routes
 const authRoutes = require('./routes/auth');
 const opportunitiesRoutes = require('./routes/opportunities');
@@ -18,6 +15,12 @@ const interviewsRoutes = require('./routes/interviews');
 const applicationsRoutes = require('./routes/applications');
 const messagesRoutes = require('./routes/messages');
 const notificationsRoutes = require('./routes/notifications');
+
+// Import models
+const Opportunity = require('./models/Opportunity');
+
+const app = express();
+const PORT = process.env.PORT || 5001;
 
 // Security middleware with adjusted CSP for images
 app.use(helmet({
@@ -169,6 +172,25 @@ app.get('/api/health', (req, res) => {
   });
 });
 
+// Manual trigger for expired opportunities cleanup (for testing)
+app.post('/api/admin/cleanup-expired-opportunities', async (req, res) => {
+  try {
+    const deactivatedCount = await Opportunity.deactivateExpiredOpportunities();
+    res.json({
+      success: true,
+      message: `Successfully deactivated ${deactivatedCount} expired opportunities`,
+      deactivatedCount
+    });
+  } catch (error) {
+    console.error('Error in manual cleanup:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error during cleanup',
+      error: error.message
+    });
+  }
+});
+
 // Proxy route for serving images with CORS headers
 app.get('/api/images/:filename', (req, res) => {
   const filename = req.params.filename;
@@ -212,6 +234,32 @@ app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
   console.log(`📡 API available at http://localhost:${PORT}/api`);
   console.log(`🏥 Health check at http://localhost:${PORT}/api/health`);
+  
+  // Schedule task to deactivate expired opportunities
+  scheduleExpiredOpportunitiesCleanup();
 });
+
+// Function to schedule expired opportunities cleanup
+function scheduleExpiredOpportunitiesCleanup() {
+  // Run immediately on startup
+  deactivateExpiredOpportunities();
+  
+  // Then run every hour
+  setInterval(deactivateExpiredOpportunities, 60 * 60 * 1000); // 1 hour
+  
+  console.log('🕐 Scheduled expired opportunities cleanup (runs every hour)');
+}
+
+// Function to deactivate expired opportunities
+async function deactivateExpiredOpportunities() {
+  try {
+    const deactivatedCount = await Opportunity.deactivateExpiredOpportunities();
+    if (deactivatedCount > 0) {
+      console.log(`✅ Deactivated ${deactivatedCount} expired opportunities`);
+    }
+  } catch (error) {
+    console.error('❌ Error in expired opportunities cleanup:', error);
+  }
+}
 
 module.exports = app; 
