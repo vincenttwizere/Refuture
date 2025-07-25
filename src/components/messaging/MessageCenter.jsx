@@ -1,8 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { X, Send, User, Mail, MessageCircle } from 'lucide-react';
-import { messagesAPI } from '../../services/api';
+import { messagesAPI, usersAPI } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
-import axios from 'axios';
 
 const MessageCenter = ({ isOpen, onClose, preSelectedRecipient = null }) => {
   const { user } = useAuth();
@@ -32,6 +31,17 @@ const MessageCenter = ({ isOpen, onClose, preSelectedRecipient = null }) => {
     }
   }, [isOpen, preSelectedRecipient]);
 
+  // Poll for new messages every 5 seconds when message center is open
+  useEffect(() => {
+    if (!isOpen) return;
+    
+    const interval = setInterval(() => {
+      fetchConversations();
+    }, 5000);
+    
+    return () => clearInterval(interval);
+  }, [isOpen]);
+
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
@@ -39,9 +49,7 @@ const MessageCenter = ({ isOpen, onClose, preSelectedRecipient = null }) => {
   // Fetch all users for autocomplete
   useEffect(() => {
     if (isOpen) {
-      axios.get('/api/users?limit=1000', {
-        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
-      })
+      usersAPI.getAll({ limit: 1000 })
         .then(res => {
           if (res.data.success) setAllUsers(res.data.users.filter(u => u._id !== user._id));
         })
@@ -91,8 +99,8 @@ const MessageCenter = ({ isOpen, onClose, preSelectedRecipient = null }) => {
     
     // Filter messages to only include conversations where current user is involved
     const userMessages = messages.filter(message => {
-      const senderId = message.senderId?._id || message.senderId;
-      const recipientId = message.recipientId?._id || message.recipientId;
+      const senderId = message.sender?._id || message.sender;
+      const recipientId = message.recipient?._id || message.recipient;
       return senderId === currentUserId || recipientId === currentUserId;
     });
     
@@ -100,24 +108,27 @@ const MessageCenter = ({ isOpen, onClose, preSelectedRecipient = null }) => {
     const conversations = {};
     
     userMessages.forEach(message => {
-      const senderId = message.senderId?._id || message.senderId;
-      const recipientId = message.recipientId?._id || message.recipientId;
+      const senderId = message.sender?._id || message.sender;
+      const recipientId = message.recipient?._id || message.recipient;
       
-      // Determine the other user in this conversation
+      // Determine the other user in the conversation
       const otherUserId = senderId === currentUserId ? recipientId : senderId;
-      const otherUser = senderId === currentUserId ? message.recipientId : message.senderId;
+      const otherUserName = senderId === currentUserId 
+        ? `${message.recipient?.firstName || ''} ${message.recipient?.lastName || ''}`.trim()
+        : `${message.sender?.firstName || ''} ${message.sender?.lastName || ''}`.trim();
+      const otherUserEmail = senderId === currentUserId 
+        ? message.recipient?.email 
+        : message.sender?.email;
       
-      // Create a unique conversation key
-      const conversationKey = [currentUserId, otherUserId].sort().join('_');
+      // Create a unique key for the conversation
+      const conversationKey = [currentUserId, otherUserId].sort().join('-');
       
       if (!conversations[conversationKey]) {
         conversations[conversationKey] = {
-          conversationKey: conversationKey,
-          otherUserId: otherUserId,
-          otherUserName: otherUser?.firstName && otherUser?.lastName 
-            ? `${otherUser.firstName} ${otherUser.lastName}`
-            : otherUser?.email || 'Unknown User',
-          otherUserEmail: otherUser?.email || '',
+          conversationKey,
+          otherUserId,
+          otherUserName: otherUserName || otherUserEmail || 'Unknown User',
+          otherUserEmail,
           messages: [],
           unreadCount: 0,
           lastMessage: null
@@ -125,18 +136,51 @@ const MessageCenter = ({ isOpen, onClose, preSelectedRecipient = null }) => {
       }
       
       conversations[conversationKey].messages.push(message);
-      conversations[conversationKey].lastMessage = message;
-      if (!message.isRead) conversations[conversationKey].unreadCount++;
+      
+      // Update last message
+      if (!conversations[conversationKey].lastMessage || 
+          new Date(message.createdAt) > new Date(conversations[conversationKey].lastMessage.createdAt)) {
+        conversations[conversationKey].lastMessage = message;
+      }
+      
+      // Count unread messages (messages sent to current user that are not read)
+      if (recipientId === currentUserId && !message.isRead) {
+        conversations[conversationKey].unreadCount++;
+      }
     });
     
-    return Object.values(conversations).sort((a, b) => 
-      new Date(b.lastMessage?.createdAt || 0) - new Date(a.lastMessage?.createdAt || 0)
-    );
+    // Convert to array and sort by last message date
+    return Object.values(conversations).sort((a, b) => {
+      if (!a.lastMessage) return 1;
+      if (!b.lastMessage) return -1;
+      return new Date(b.lastMessage.createdAt) - new Date(a.lastMessage.createdAt);
+    });
   };
 
-  const selectConversation = (conversation) => {
+  const selectConversation = async (conversation) => {
     setSelectedConversation(conversation);
-    setMessages(conversation.messages);
+    setMessages(conversation.messages || []);
+    setError(null);
+    
+    // Mark unread messages as read
+    if (conversation.unreadCount > 0) {
+      try {
+        const unreadMessages = conversation.messages.filter(message => {
+          const recipientId = message.recipient?._id || message.recipient;
+          return recipientId === user._id && !message.isRead;
+        });
+        
+        // Mark each unread message as read
+        for (const message of unreadMessages) {
+          await messagesAPI.markAsRead(message._id);
+        }
+        
+        // Refresh conversations to update unread counts
+        await fetchConversations();
+      } catch (error) {
+        console.error('Error marking messages as read:', error);
+      }
+    }
   };
 
   const isValidObjectId = (id) => /^[a-fA-F0-9]{24}$/.test(id);
@@ -144,29 +188,43 @@ const MessageCenter = ({ isOpen, onClose, preSelectedRecipient = null }) => {
 
   const sendMessage = async () => {
     if (!newMessage.trim()) return;
-    // Only block if recipient is missing or invalid
+    
     if (!selectedConversation?.otherUserId) {
       setError('No recipient selected. Please select a conversation.');
       return;
     }
-    if (!isValidObjectId(selectedConversation.otherUserId)) {
-      setError('Invalid recipient. Please refresh your conversations.');
-      return;
-    }
+    
     try {
       setLoading(true);
+      setError(null);
+      
       const messageData = {
-        content: newMessage,
+        content: newMessage.trim(),
         recipient: selectedConversation.otherUserId
       };
+      
       const response = await messagesAPI.send(messageData);
+      
       if (response.data.success) {
         setNewMessage('');
-        fetchConversations();
+        // Refresh conversations to show the new message
+        await fetchConversations();
+        // Update the current conversation messages
+        if (selectedConversation) {
+          const updatedConversations = await messagesAPI.getAll();
+          if (updatedConversations.data.success) {
+            const conversations = groupMessagesBySender(updatedConversations.data.messages);
+            const updatedConversation = conversations.find(c => c.conversationKey === selectedConversation.conversationKey);
+            if (updatedConversation) {
+              setSelectedConversation(updatedConversation);
+              setMessages(updatedConversation.messages || []);
+            }
+          }
+        }
       }
     } catch (error) {
       console.error('Error sending message:', error);
-      setError('Failed to send message');
+      setError('Failed to send message: ' + (error.response?.data?.message || error.message));
     } finally {
       setLoading(false);
     }
@@ -175,37 +233,53 @@ const MessageCenter = ({ isOpen, onClose, preSelectedRecipient = null }) => {
   const sendNewMessage = async () => {
     if (!newMessage.trim()) return;
     setError('');
+    
     let recipientValue = '';
+    
     if (preSelectedRecipient && preSelectedRecipient._id) {
       recipientValue = preSelectedRecipient._id;
     } else if (selectedUser?._id) {
       recipientValue = selectedUser._id;
     } else if (newMessageRecipientEmail) {
-      recipientValue = newMessageRecipientEmail.trim().toLowerCase();
+      // Find user by email
+      const userByEmail = allUsers.find(u => u.email.toLowerCase() === newMessageRecipientEmail.trim().toLowerCase());
+      if (userByEmail) {
+        recipientValue = userByEmail._id;
+      } else {
+        setError('User not found with this email address.');
+        return;
+      }
     }
+    
     if (!recipientValue) {
       setError('Please select a recipient.');
       return;
     }
-    if (!(isValidEmail(recipientValue) || isValidObjectId(recipientValue))) {
+    
+    if (!isValidObjectId(recipientValue)) {
       setError('Please select a valid user.');
       return;
     }
+    
     try {
       setLoading(true);
+      
       const messageData = {
         content: newMessage.trim(),
         recipient: recipientValue
       };
+      
       const response = await messagesAPI.send(messageData);
+      
       if (response.data.success) {
         setNewMessage('');
         setNewMessageRecipientEmail('');
         setSelectedUser(null);
         setUserSearch('');
-        fetchConversations();
+        await fetchConversations();
       }
     } catch (error) {
+      console.error('Error sending new message:', error);
       setError('Failed to send message: ' + (error.response?.data?.message || error.message));
     } finally {
       setLoading(false);
@@ -293,11 +367,18 @@ const MessageCenter = ({ isOpen, onClose, preSelectedRecipient = null }) => {
                   </div>
                 </div>
 
+                {/* Error Display */}
+                {error && (
+                  <div className="p-3 bg-red-50 border border-red-200">
+                    <p className="text-red-800 text-sm">{error}</p>
+                  </div>
+                )}
+
                 {/* Messages */}
                 <div className="flex-1 overflow-y-auto p-4 space-y-4">
                   {messages.map((message) => {
                     const currentUserId = user?._id;
-                    const messageSenderId = message.senderId?._id || message.senderId;
+                    const messageSenderId = message.sender?._id || message.sender;
                     const isFromCurrentUser = messageSenderId === currentUserId;
                     
                     return (
@@ -341,8 +422,17 @@ const MessageCenter = ({ isOpen, onClose, preSelectedRecipient = null }) => {
                       disabled={loading || !newMessage.trim()}
                       className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
                     >
-                      <Send className="h-4 w-4" />
-                      <span>Send</span>
+                      {loading ? (
+                        <>
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                          <span>Sending...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Send className="h-4 w-4" />
+                          <span>Send</span>
+                        </>
+                      )}
                     </button>
                   </div>
                 </div>
@@ -424,8 +514,17 @@ const MessageCenter = ({ isOpen, onClose, preSelectedRecipient = null }) => {
                         disabled={loading || !newMessage.trim()}
                         className={`w-full bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center justify-center space-x-2${(loading || !newMessage.trim() ? ' opacity-50 cursor-not-allowed' : '')}`}
                       >
-                        <Send className="h-4 w-4" />
-                        <span>Send</span>
+                        {loading ? (
+                          <>
+                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                            <span>Sending...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Send className="h-4 w-4" />
+                            <span>Send</span>
+                          </>
+                        )}
                       </button>
                     </div>
                   )}
@@ -439,4 +538,4 @@ const MessageCenter = ({ isOpen, onClose, preSelectedRecipient = null }) => {
   );
 };
 
-export default MessageCenter; 
+export default MessageCenter;

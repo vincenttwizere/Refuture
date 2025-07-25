@@ -15,6 +15,7 @@ const interviewsRoutes = require('./routes/interviews');
 const applicationsRoutes = require('./routes/applications');
 const messagesRoutes = require('./routes/messages');
 const notificationsRoutes = require('./routes/notifications');
+const usersRoutes = require('./routes/users');
 
 // Import models
 const Opportunity = require('./models/Opportunity');
@@ -162,6 +163,7 @@ app.use('/api/applications', applicationsRoutes);
 app.use('/api/messages', messagesRoutes);
 app.use('/api/notifications', notificationsRoutes);
 app.use('/api/settings', require('./routes/settings'));
+app.use('/api/users', usersRoutes);
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {

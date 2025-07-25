@@ -128,6 +128,12 @@ export const messagesAPI = {
   delete: (id) => api.delete(`/messages/${id}`)
 };
 
+export const usersAPI = {
+  getAll: (params = {}) => api.get('/users', { params }),
+  getById: (id) => api.get(`/users/${id}`),
+  search: (query) => api.get('/users', { params: { search: query } })
+};
+
 export const applicationsAPI = {
   create: (data) => api.post('/applications', data),
   getOpportunityApplications: (opportunityId) => api.get(`/applications/opportunity/${opportunityId}`),
