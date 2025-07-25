@@ -31,8 +31,6 @@ const OpportunityDetails = () => {
   const [applyError, setApplyError] = useState(null);
   const [applySuccess, setApplySuccess] = useState(false);
   const [hasApplied, setHasApplied] = useState(false);
-  const [showApplyForm, setShowApplyForm] = useState(false);
-  const [coverLetter, setCoverLetter] = useState('');
   const [showSuccessToast, setShowSuccessToast] = useState(false);
 
   // Check if user has already applied for this opportunity
@@ -90,66 +88,21 @@ const OpportunityDetails = () => {
         throw new Error('This opportunity is no longer active and cannot accept applications.');
       }
 
-      // Check if user has a profile (this is required by the backend)
-      // We'll let the backend handle this validation, but we can show a better error message
-      console.log('Checking if user has profile...');
-
-
-      // Create application data
+      // Create application data (without cover letter)
       const applicationData = {
-        opportunity: id,
-        coverLetter: coverLetter.trim() || undefined
+        opportunity: id
       };
 
       console.log('Applying for opportunity:', applicationData);
-      console.log('Opportunity ID:', id);
-      console.log('Opportunity ID type:', typeof id);
-      console.log('User data:', { id: user._id, role: user.role });
-      console.log('Opportunity data:', opportunity);
-
-      // Check if backend is accessible
-      try {
-        const response = await fetch('http://localhost:5001/api/health');
-        if (!response.ok) {
-          throw new Error('Backend server is not responding properly');
-        }
-        console.log('Backend is accessible');
-      } catch (healthError) {
-        console.error('Backend health check failed:', healthError);
-        throw new Error('Backend server is not accessible. Please try again later.');
-      }
-
-      // Check if user has a profile (this is likely the cause of the 500 error)
-      try {
-        const profileResponse = await fetch('http://localhost:5001/api/profiles/user', {
-          headers: {
-            'Authorization': `Bearer ${localStorage.getItem('token')}`
-          }
-        });
-        
-        if (profileResponse.status === 404) {
-          throw new Error('You must create a profile before applying for opportunities. Please complete your profile first.');
-        } else if (!profileResponse.ok) {
-          console.warn('Profile check failed:', profileResponse.status);
-        } else {
-          console.log('User has a profile');
-        }
-      } catch (profileError) {
-        if (profileError.message.includes('create a profile')) {
-          throw profileError;
-        }
-        console.warn('Profile check error:', profileError);
-      }
 
       // Send application to backend using API service
       const response = await applicationsAPI.create(applicationData);
       console.log('API Response:', response);
       const result = response.data;
       console.log('Application submitted successfully:', result);
+      
       setApplySuccess(true);
       setHasApplied(true);
-      setShowApplyForm(false);
-      setCoverLetter('');
       setShowSuccessToast(true);
       
       // Hide the toast after 5 seconds
@@ -159,18 +112,6 @@ const OpportunityDetails = () => {
       
     } catch (err) {
       console.error('Error applying for opportunity:', err);
-      console.error('Error details:', {
-        message: err.message,
-        status: err.response?.status,
-        statusText: err.response?.statusText,
-        data: err.response?.data,
-        config: err.config
-      });
-      
-      // Log the full error response for debugging
-      if (err.response?.data) {
-        console.error('Full backend error response:', JSON.stringify(err.response.data, null, 2));
-      }
       
       // Try to get detailed error message from backend response
       let errorMessage = 'Failed to apply for opportunity';
@@ -330,7 +271,7 @@ const OpportunityDetails = () => {
             {/* Apply Button - Only show for refugees */}
             {user?.role === 'refugee' && !hasApplied && !applySuccess && opportunity && (
               <button
-                onClick={() => setShowApplyForm(true)}
+                onClick={handleApply}
                 className="flex items-center px-6 py-2 rounded-lg transition-colors bg-blue-600 text-white hover:bg-blue-700"
               >
                 <Briefcase className="h-4 w-4 mr-2" />
@@ -598,104 +539,19 @@ const OpportunityDetails = () => {
           </div>
         </div>
 
-        {/* Application Form Modal */}
-        {showApplyForm && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg p-6 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
-              <div className="flex justify-between items-center mb-4">
-                <h2 className="text-xl font-semibold text-gray-900">Apply for Opportunity</h2>
-                <button
-                  onClick={() => {
-                    setShowApplyForm(false);
-                    setCoverLetter('');
-                    setApplyError(null);
-                  }}
-                  className="text-gray-400 hover:text-gray-600"
-                >
-                  <X className="h-6 w-6" />
-                </button>
+        {/* Success Toast Notification */}
+        {showSuccessToast && (
+          <div className="fixed top-4 right-4 bg-green-500 text-white px-6 py-4 rounded-lg shadow-lg z-50 animate-in slide-in-from-right duration-300">
+            <div className="flex items-center">
+              <CheckCircle className="h-6 w-6 mr-3" />
+              <div>
+                <h4 className="font-semibold">Application Submitted!</h4>
+                <p className="text-sm opacity-90">Your application has been sent successfully.</p>
               </div>
-
-              <div className="mb-4">
-                <h3 className="font-medium text-gray-900 mb-2">{opportunity.title || 'Untitled Opportunity'}</h3>
-                <p className="text-gray-600 text-sm">{opportunity.company || opportunity.providerName || 'Company not specified'}</p>
-              </div>
-
-              <form onSubmit={(e) => {
-                e.preventDefault();
-                handleApply();
-              }}>
-                <div className="mb-4">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Cover Letter (Optional)
-                  </label>
-                  <textarea
-                    value={coverLetter}
-                    onChange={(e) => setCoverLetter(e.target.value)}
-                    placeholder="Tell the provider why you're interested in this opportunity and why you'd be a great fit..."
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    rows={6}
-                    maxLength={2000}
-                  />
-                  <p className="text-xs text-gray-500 mt-1">
-                    {coverLetter.length}/2000 characters
-                  </p>
-                </div>
-
-                {applyError && (
-                  <div className="mb-4 bg-red-50 border border-red-200 rounded-lg p-3">
-                    <div className="flex items-center">
-                      <AlertCircle className="h-4 w-4 text-red-400 mr-2" />
-                      <p className="text-red-800 text-sm">{applyError}</p>
-                    </div>
-                  </div>
-                )}
-
-                <div className="flex justify-end space-x-3">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowApplyForm(false);
-                      setCoverLetter('');
-                      setApplyError(null);
-                    }}
-                    className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={applyLoading}
-                    className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
-                  >
-                    {applyLoading ? (
-                      <div className="flex items-center">
-                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current mr-2"></div>
-                        Applying...
-                      </div>
-                    ) : (
-                      'Submit Application'
-                    )}
-                  </button>
-                </div>
-              </form>
             </div>
           </div>
         )}
       </div>
-
-      {/* Success Toast Notification */}
-      {showSuccessToast && (
-        <div className="fixed top-4 right-4 bg-green-500 text-white px-6 py-4 rounded-lg shadow-lg z-50 animate-in slide-in-from-right duration-300">
-          <div className="flex items-center">
-            <CheckCircle className="h-6 w-6 mr-3" />
-            <div>
-              <h4 className="font-semibold">Application Submitted!</h4>
-              <p className="text-sm opacity-90">Your application has been sent successfully.</p>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

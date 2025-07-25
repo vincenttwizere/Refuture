@@ -26,6 +26,19 @@ router.get('/test-db', async (req, res) => {
     const userCount = await User.countDocuments();
     console.log('Total users in database:', userCount);
     
+    // Get all profiles to check for duplicates
+    const allProfiles = await Profile.find({}).select('email user _id');
+    console.log('All profiles:', allProfiles);
+    
+    // Check for duplicate emails
+    const emailCounts = {};
+    allProfiles.forEach(profile => {
+      emailCounts[profile.email] = (emailCounts[profile.email] || 0) + 1;
+    });
+    
+    const duplicateEmails = Object.entries(emailCounts).filter(([email, count]) => count > 1);
+    console.log('Duplicate emails:', duplicateEmails);
+    
     res.json({
       success: true,
       message: 'Database connection test successful',
@@ -33,7 +46,9 @@ router.get('/test-db', async (req, res) => {
         dbState,
         profileCount,
         userCount,
-        dbStateText: dbState === 1 ? 'Connected' : 'Not connected'
+        dbStateText: dbState === 1 ? 'Connected' : 'Not connected',
+        allProfiles,
+        duplicateEmails
       }
     });
   } catch (error) {
@@ -49,6 +64,57 @@ router.get('/test-db', async (req, res) => {
 // Test Profile model import
 console.log('✅ Profile model imported successfully');
 console.log('📋 Profile schema fields:', Object.keys(Profile.schema.paths));
+
+// @desc    Check current user status
+// @route   GET /api/profiles/check-user
+// @access  Private
+router.get('/check-user', protect, async (req, res) => {
+  try {
+    console.log('=== CHECKING CURRENT USER ===');
+    console.log('User from token:', req.user);
+    
+    // Check if user exists in database
+    const user = await User.findById(req.user._id);
+    console.log('User found in database:', !!user);
+    
+    // Check if profile exists for this user
+    const profile = await Profile.findOne({ user: req.user._id });
+    console.log('Profile exists for user:', !!profile);
+    
+    if (profile) {
+      console.log('Profile details:', {
+        id: profile._id,
+        email: profile.email,
+        fullName: profile.fullName
+      });
+    }
+    
+    res.json({
+      success: true,
+      data: {
+        user: {
+          id: req.user._id,
+          email: req.user.email,
+          role: req.user.role
+        },
+        userExists: !!user,
+        profileExists: !!profile,
+        profile: profile ? {
+          id: profile._id,
+          email: profile.email,
+          fullName: profile.fullName
+        } : null
+      }
+    });
+  } catch (error) {
+    console.error('Check user error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error checking user status',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
 
 // @desc    Test profile creation
 // @route   POST /api/profiles/test
@@ -89,6 +155,115 @@ router.post('/test', protect, async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Test profile creation failed',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+// @desc    Clean up orphaned profiles and duplicates
+// @route   POST /api/profiles/cleanup
+// @access  Public (for testing)
+router.post('/cleanup', async (req, res) => {
+  try {
+    console.log('=== CLEANING UP ORPHANED PROFILES ===');
+    
+    // Find profiles without valid users
+    const orphanedProfiles = await Profile.find({
+      $or: [
+        { user: { $exists: false } },
+        { user: null },
+        { user: { $nin: await User.distinct('_id') } }
+      ]
+    });
+    
+    console.log('Found orphaned profiles:', orphanedProfiles.length);
+    
+    // Find duplicate emails
+    const duplicateEmails = await Profile.aggregate([
+      {
+        $group: {
+          _id: '$email',
+          count: { $sum: 1 },
+          profiles: { $push: '$$ROOT' }
+        }
+      },
+      {
+        $match: {
+          count: { $gt: 1 }
+        }
+      }
+    ]);
+    
+    console.log('Found duplicate emails:', duplicateEmails.length);
+    
+    // Delete orphaned profiles
+    if (orphanedProfiles.length > 0) {
+      await Profile.deleteMany({ _id: { $in: orphanedProfiles.map(p => p._id) } });
+      console.log('Deleted orphaned profiles');
+    }
+    
+    // Keep only the most recent profile for each duplicate email
+    for (const duplicate of duplicateEmails) {
+      const profiles = duplicate.profiles.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+      const toDelete = profiles.slice(1); // Keep the first (most recent), delete the rest
+      
+      if (toDelete.length > 0) {
+        await Profile.deleteMany({ _id: { $in: toDelete.map(p => p._id) } });
+        console.log(`Deleted ${toDelete.length} duplicate profiles for email: ${duplicate._id}`);
+      }
+    }
+    
+    res.json({
+      success: true,
+      message: 'Database cleanup completed',
+      data: {
+        orphanedProfilesDeleted: orphanedProfiles.length,
+        duplicateEmailsFixed: duplicateEmails.length
+      }
+    });
+  } catch (error) {
+    console.error('Cleanup error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Cleanup failed',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+// @desc    Delete all profiles and drop indexes (for testing)
+// @route   DELETE /api/profiles/delete-all
+// @access  Public (for testing)
+router.delete('/delete-all', async (req, res) => {
+  try {
+    console.log('=== DELETING ALL PROFILES AND DROPPING INDEXES ===');
+    
+    // Drop all indexes except _id
+    await Profile.collection.dropIndexes();
+    console.log('Dropped all indexes');
+    
+    // Delete all profiles
+    const result = await Profile.deleteMany({});
+    console.log('Deleted profiles:', result.deletedCount);
+    
+    // Recreate the correct indexes
+    await Profile.collection.createIndex({ user: 1 }, { unique: true });
+    await Profile.collection.createIndex({ email: 1 });
+    await Profile.collection.createIndex({ isPublic: 1 });
+    await Profile.collection.createIndex({ option: 1 });
+    await Profile.collection.createIndex({ user: 1, isPublic: 1 });
+    console.log('Recreated indexes');
+    
+    res.json({
+      success: true,
+      message: 'All profiles deleted and indexes reset',
+      deletedCount: result.deletedCount
+    });
+  } catch (error) {
+    console.error('Delete all profiles error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to delete profiles',
       error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
@@ -319,8 +494,24 @@ router.get('/', async (req, res) => {
 // @access  Private
 router.get('/user/:userId', protect, async (req, res) => {
   try {
+    console.log('=== GETTING PROFILE FOR USER ===');
+    console.log('Requested user ID:', req.params.userId);
+    console.log('Current user ID:', req.user._id);
+    console.log('User match:', req.params.userId === req.user._id.toString());
+    
     const profile = await Profile.findOne({ user: req.params.userId })
       .populate('user', 'firstName lastName email role');
+    
+    console.log('Profile found:', !!profile);
+    
+    if (profile) {
+      console.log('Profile details:', {
+        id: profile._id,
+        email: profile.email,
+        user: profile.user,
+        fullName: profile.fullName
+      });
+    }
 
     if (!profile) {
       return res.status(404).json({
@@ -420,7 +611,7 @@ router.post('/', protect, authorize('refugee', 'provider'), [
     }
 
     // Check if profile already exists for this user
-    const existingProfile = await Profile.findOne({ user: req.user._id });
+    let existingProfile = await Profile.findOne({ user: req.user._id });
     console.log('=== PROFILE EXISTENCE CHECK ===');
     console.log('User ID:', req.user._id);
     console.log('Existing profile found:', !!existingProfile);
@@ -432,56 +623,20 @@ router.post('/', protect, authorize('refugee', 'provider'), [
       console.log('No existing profile found for this user');
     }
 
-    // Additional check: Look for any profile with the same email
-    const emailProfile = await Profile.findOne({ email: req.body.email.trim() });
-    console.log('=== EMAIL PROFILE CHECK ===');
+    // Check if email is already taken by another user
+    const emailProfile = await Profile.findOne({ 
+      email: req.body.email.trim(),
+      user: { $ne: req.user._id } // Exclude current user
+    });
+    console.log('=== EMAIL CHECK ===');
     console.log('Checking email:', req.body.email.trim());
-    console.log('Profile with this email found:', !!emailProfile);
+    console.log('Email taken by another user:', !!emailProfile);
     if (emailProfile) {
-      console.log('Email profile ID:', emailProfile._id);
-      console.log('Email profile user ID:', emailProfile.user);
-      console.log('Current user ID:', req.user._id);
-      console.log('Same user?', emailProfile.user.toString() === req.user._id.toString());
-    }
-
-    // Check if email is already taken (only for new profiles)
-    if (!existingProfile) {
-      const emailExists = await Profile.findOne({ email: req.body.email.trim() });
-      console.log('=== EMAIL CHECK FOR NEW PROFILE ===');
-      console.log('Checking email:', req.body.email.trim());
-      console.log('Email exists:', !!emailExists);
-      if (emailExists) {
-        console.log('Email already taken by profile ID:', emailExists._id);
-        console.log('Email already taken by user ID:', emailExists.user);
-        
-        // Check if this is an orphaned profile (no user) or belongs to a different user
-        if (!emailExists.user || emailExists.user.toString() !== req.user._id.toString()) {
-          return res.status(400).json({
-            success: false,
-            message: 'Email is already associated with another profile'
-          });
-        } else {
-          console.log('Email belongs to current user, will update existing profile');
-          // This shouldn't happen if existingProfile check worked, but handle it gracefully
-        }
-      }
-    } else {
-      // For existing profiles, check if email is taken by someone else
-      const emailExists = await Profile.findOne({ 
-        email: req.body.email.trim(),
-        user: { $ne: req.user._id } // Exclude current user
+      console.log('Email already taken by another user');
+      return res.status(400).json({
+        success: false,
+        message: 'Email is already associated with another profile'
       });
-      console.log('=== EMAIL CHECK FOR EXISTING PROFILE ===');
-      console.log('Checking email:', req.body.email.trim());
-      console.log('Email exists for other user:', !!emailExists);
-      if (emailExists) {
-        console.log('Email already taken by another profile ID:', emailExists._id);
-        console.log('Email already taken by another user ID:', emailExists.user);
-        return res.status(400).json({
-          success: false,
-          message: 'Email is already associated with another profile'
-        });
-      }
     }
 
     // Check if user ID is valid
@@ -846,11 +1001,25 @@ router.put('/:id', protect, [
     if (req.body.academicRecords) profile.academicRecords = JSON.parse(req.body.academicRecords);
     if (req.body.portfolio) profile.portfolio = JSON.parse(req.body.portfolio);
 
+    // Handle file uploads if present
+    if (req.files && req.files.profileImage) {
+      const profileImage = req.files.profileImage;
+      const fileName = `profileImage-${Date.now()}-${Math.random().toString(36).substring(7)}.${profileImage.name.split('.').pop()}`;
+      await profileImage.mv(`./uploads/${fileName}`);
+      profile.photoUrl = fileName;
+    }
+
+    // Handle image removal
+    if (req.body.removeProfileImage === 'true') {
+      profile.photoUrl = undefined;
+    }
+
     // Update other fields
     Object.keys(req.body).forEach(key => {
       if (key !== 'user' && key !== '_id' && key !== 'fullName' && 
           key !== 'skills' && key !== 'language' && key !== 'tags' && 
-          key !== 'education' && key !== 'experience' && key !== 'academicRecords' && key !== 'portfolio') {
+          key !== 'education' && key !== 'experience' && key !== 'academicRecords' && key !== 'portfolio' &&
+          key !== 'removeProfileImage') {
         profile[key] = req.body[key];
       }
     });

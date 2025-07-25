@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { 
   User, 
   BarChart3, 
@@ -27,6 +27,7 @@ import {
 } from 'lucide-react'
 import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
+import { useSettings } from './hooks/useSettings'
 import LandingPage from './LandingPage'
 import LoginForm from './components/auth/LoginForm'
 import SignupForm from './components/auth/SignupForm'
@@ -38,67 +39,110 @@ import OpportunityDetails from './components/opportunities/OpportunityDetails'
 import ProfileViewPage from './components/profiles/ProfileViewPage'
 import CreateProfile from './components/profiles/CreateProfile'
 
+// Settings Provider Component
+function SettingsProvider({ children }) {
+  const { settings } = useSettings();
+  
+  // Apply settings to the entire app
+  useEffect(() => {
+    if (settings) {
+      // Apply theme
+      if (settings.preferences?.theme) {
+        const root = document.documentElement;
+        root.classList.remove('theme-light', 'theme-dark', 'theme-auto');
+        root.classList.add(`theme-${settings.preferences.theme}`);
+        
+        if (settings.preferences.theme === 'dark' || 
+            (settings.preferences.theme === 'auto' && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+          root.classList.add('dark');
+        } else {
+          root.classList.remove('dark');
+        }
+      }
+
+      // Apply dark mode
+      if (settings.preferences?.darkMode !== undefined) {
+        const root = document.documentElement;
+        if (settings.preferences.darkMode) {
+          root.classList.add('dark');
+        } else {
+          root.classList.remove('dark');
+        }
+      }
+
+      // Apply language
+      if (settings.preferences?.language) {
+        document.documentElement.lang = settings.preferences.language;
+      }
+    }
+  }, [settings]);
+
+  return children;
+}
+
 function AppRouter() {
   return (
     <AuthProvider>
-      <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-        <Routes>
-          <Route path="/" element={<LandingPage />} />
-          <Route path="/login" element={<LoginForm />} />
-          <Route path="/signup" element={<SignupForm />} />
-          <Route
-            path="/refugee-dashboard"
-            element={
-              <ProtectedRoute role="refugee">
-                <RefugeeDashboard />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/provider-dashboard"
-            element={
-              <ProtectedRoute role="provider">
-                <ProviderDashboard />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/admin-dashboard"
-            element={
-              <ProtectedRoute role="admin">
-                <AdminDashboard />
-              </ProtectedRoute>
-            }
-          />
+      <SettingsProvider>
+        <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+          <Routes>
+            <Route path="/" element={<LandingPage />} />
+            <Route path="/login" element={<LoginForm />} />
+            <Route path="/signup" element={<SignupForm />} />
+            <Route
+              path="/refugee-dashboard"
+              element={
+                <ProtectedRoute role="refugee">
+                  <RefugeeDashboard />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/provider-dashboard"
+              element={
+                <ProtectedRoute role="provider">
+                  <ProviderDashboard />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin-dashboard"
+              element={
+                <ProtectedRoute role="admin">
+                  <AdminDashboard />
+                </ProtectedRoute>
+              }
+            />
 
-          <Route
-            path="/create-profile"
-            element={
-              <ProtectedRoute role="refugee">
-                <CreateProfile />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/opportunity/:id"
-            element={
-              <ProtectedRoute>
-                <OpportunityDetails />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/profile/:id"
-            element={
-              <ProtectedRoute>
-                <ProfileViewPage />
-              </ProtectedRoute>
-            }
-          />
-          {/* Add more routes as needed */}
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-      </Router>
+            <Route
+              path="/create-profile"
+              element={
+                <ProtectedRoute role="refugee">
+                  <CreateProfile />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/opportunity/:id"
+              element={
+                <ProtectedRoute>
+                  <OpportunityDetails />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/profile/:id"
+              element={
+                <ProtectedRoute>
+                  <ProfileViewPage />
+                </ProtectedRoute>
+              }
+            />
+            {/* Add more routes as needed */}
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </Router>
+      </SettingsProvider>
     </AuthProvider>
   )
 }

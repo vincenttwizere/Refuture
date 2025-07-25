@@ -77,17 +77,40 @@ const ProfileView = ({ profile, onEdit }) => {
   
   // Construct full URL for profile image
   const getProfileImageUrl = (photoUrl) => {
-    if (!photoUrl) return '/default-avatar.png';
-    if (photoUrl.startsWith('http')) return photoUrl;
-    // Use the proxy route to avoid CORS issues
-    const imageUrl = `http://localhost:5001/api/images/${photoUrl}`;
+    if (!photoUrl) {
+      console.log('ProfileView - No photoUrl provided, using default avatar');
+      return '/default-avatar.png';
+    }
+    
+    if (photoUrl.startsWith('http')) {
+      console.log('ProfileView - Using absolute URL:', photoUrl);
+      return photoUrl;
+    }
+    
+    // Use the static file serving route
+    const baseUrl = window.location.origin.replace('5173', '5001'); // Replace frontend port with backend port
+    const imageUrl = `${baseUrl}/uploads/${photoUrl}`;
+    
     console.log('ProfileView - Constructed image URL:', imageUrl, 'from photoUrl:', photoUrl);
+    console.log('ProfileView - Base URL:', baseUrl);
+    
     return imageUrl;
   };
 
   // Handle image loading errors
   const handleImageError = (e) => {
-    console.log('Image failed to load:', e.target.src);
+    console.log('ProfileView - Image failed to load:', e.target.src);
+    console.log('ProfileView - Original photoUrl:', profile.photoUrl);
+    
+    // Try the proxy route as fallback
+    if (profile.photoUrl && !profile.photoUrl.startsWith('http')) {
+      const fallbackUrl = `${window.location.origin.replace('5173', '5001')}/api/images/${profile.photoUrl}`;
+      console.log('ProfileView - Trying proxy route fallback URL:', fallbackUrl);
+      e.target.src = fallbackUrl;
+      return;
+    }
+    
+    // Use default avatar as final fallback
     e.target.src = '/default-avatar.png';
     e.target.onerror = null; // Prevent infinite loop
   };

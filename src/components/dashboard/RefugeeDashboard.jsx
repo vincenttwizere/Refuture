@@ -11,7 +11,11 @@ import {
   LogOut,
   AlertCircle,
   MapPin,
-  XCircle
+  XCircle,
+  Shield,
+  BookOpen,
+  Wrench,
+  ChevronDown
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
@@ -21,6 +25,7 @@ import { useApplications } from '../../hooks/useApplications';
 import { useProfiles } from '../../hooks/useProfiles';
 import { useNotifications } from '../../hooks/useNotifications';
 import { useMessages } from '../../hooks/useMessages';
+import { useSettings } from '../../hooks/useSettings';
 import { messagesAPI, notificationsAPI } from '../../services/api';
 import ProfileView from '../profiles/ProfileView';
 import CreateProfile from '../profiles/CreateProfile';
@@ -109,6 +114,7 @@ const RefugeeDashboard = () => {
   // Auth and navigation
   const { logout, user, loading } = useAuth();
   const navigate = useNavigate();
+  const { settings } = useSettings();
 
   // Data hooks
   const { 
@@ -133,7 +139,11 @@ const RefugeeDashboard = () => {
     error: applicationsError 
   } = useApplications(null, 'refugee');
 
-  const profileFilters = useMemo(() => ({ email: user?.email }), [user?.email]);
+  const profileFilters = useMemo(() => ({ 
+    email: user?.email,
+    // Apply privacy settings to profile visibility
+    isPublic: settings?.privacy?.profileVisibility === 'public' ? true : undefined
+  }), [user?.email, settings?.privacy?.profileVisibility]);
   const { 
     profiles, 
     loading: profileLoading, 
@@ -142,7 +152,7 @@ const RefugeeDashboard = () => {
     refetch: refetchProfile 
   } = useProfiles({ email: user?.email });
 
-  const { notifications, refetch: refetchNotifications } = useNotifications();
+  const { notifications, refetch: refetchNotifications } = useNotifications(settings);
   const { messages, loading: messagesLoading, error: messagesError, refetch: refetchMessages } = useMessages();
 
   // Use hook data directly for display with safety checks
@@ -187,14 +197,23 @@ const RefugeeDashboard = () => {
     { id: 'support', label: 'Help & Support', icon: HelpCircle }
   ];
 
-  // Real-time polling
+  // Real-time polling - respect user settings
   useEffect(() => {
+    // Check if user has enabled notifications and messages
+    const notificationsEnabled = settings?.notifications?.push !== false;
+    const messagesEnabled = settings?.notifications?.types?.messages !== false;
+    
     const interval = setInterval(() => {
-      refetchNotifications();
-      refetchMessages();
+      if (notificationsEnabled) {
+        refetchNotifications();
+      }
+      if (messagesEnabled) {
+        refetchMessages();
+      }
     }, 30000);
+    
     return () => clearInterval(interval);
-  }, [refetchNotifications, refetchMessages]);
+  }, [refetchNotifications, refetchMessages, settings?.notifications?.push, settings?.notifications?.types?.messages]);
 
   // Test backend connectivity
   useEffect(() => {
@@ -309,13 +328,13 @@ const RefugeeDashboard = () => {
     const Icon = item.icon;
     const isActive = activeItem === item.id;
     return (
-      <div key={item.id} className="mb-1">
+      <div key={item.id} className="mb-2">
         <button
           onClick={() => setActiveItem(item.id)}
-          className={`w-full flex items-center justify-between px-3 py-2 text-left text-sm rounded-lg transition-colors ${
+          className={`w-full flex items-center justify-between px-4 py-3 text-left text-sm rounded-lg transition-all duration-200 ${
             isActive 
-              ? 'bg-blue-50 text-blue-700 border-r-2 border-blue-500' 
-              : 'text-gray-700 hover:bg-gray-50'
+              ? 'bg-blue-50 text-blue-700 border-l-4 border-blue-500 shadow-sm' 
+              : 'text-gray-700 hover:bg-gray-50 hover:border-l-4 hover:border-gray-200'
           }`}
         >
           <div className="flex items-center">
@@ -323,7 +342,7 @@ const RefugeeDashboard = () => {
             <div className="font-medium">{item.label}</div>
           </div>
           {item.badge && (
-            <span className="bg-red-100 text-red-800 text-xs font-medium px-2 py-1 rounded-full">
+            <span className="bg-red-100 text-red-800 text-xs font-medium px-2 py-1 rounded-full min-w-[20px] text-center">
               {item.badge}
             </span>
           )}
@@ -459,32 +478,36 @@ const RefugeeDashboard = () => {
       {/* Main Dashboard */}
       <div className="flex h-screen bg-gray-50">
         {/* Sidebar */}
-        <div className="w-80 bg-white shadow-lg fixed h-full overflow-y-auto">
+        <div className="w-80 bg-white shadow-lg flex flex-col">
           <div className="p-6 border-b border-gray-200">
             <h1 className="text-xl font-bold text-gray-900">Refugee Dashboard</h1>
             <p className="text-sm text-gray-600 mt-1">Showcase your talents, find opportunities</p>
           </div>
 
-          <nav className="p-4">
+          <nav className="flex-1 p-4 overflow-y-auto">
             {navigationItems.map(item => renderMenuItem(item))}
+          </nav>
+
+          {/* Logout button at bottom */}
+          <div className="p-4 border-t border-gray-200">
             <button
               onClick={() => { logout(); navigate('/'); }}
-              className="w-full flex items-center justify-between px-3 py-2 text-left text-sm rounded-lg transition-colors text-gray-700 hover:bg-gray-100 mt-4 border-t border-gray-200"
+              className="w-full flex items-center justify-between px-3 py-2 text-left text-sm rounded-lg transition-colors text-gray-700 hover:bg-gray-100"
             >
               <span className="flex items-center">
                 <LogOut className="h-5 w-5 mr-3 text-gray-500" />
                 Logout
               </span>
             </button>
-          </nav>
+          </div>
         </div>
 
         {/* Main Content */}
-        <div className="flex-1 ml-80 overflow-y-auto">
-          <div className="p-8">
-            <div className="max-w-4xl mx-auto">
+        <div className="flex-1 overflow-y-auto">
+          <div className="p-6">
+            <div className="max-w-6xl mx-auto">
               <div className="bg-white rounded-lg shadow-sm p-6">
-                <h2 className="text-2xl font-bold text-gray-900 mb-4">
+                <h2 className="text-2xl font-bold text-gray-900 mb-6">
                   {navigationItems.find(item => item.id === activeItem)?.label || 'Dashboard Overview'}
                 </h2>
                 <div className="text-gray-600">
@@ -543,7 +566,7 @@ const OverviewSection = ({ opportunities = [], interviews = [], applications = [
   });
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       {/* Error Display */}
       {(opportunitiesError || interviewsError || applicationsError) && (
         <div className="bg-red-50 border border-red-200 rounded-lg p-4">
@@ -572,32 +595,54 @@ const OverviewSection = ({ opportunities = [], interviews = [], applications = [
       {/* Data Display - always show if we have data */}
       {hasAnyData && (
         <>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="bg-blue-50 p-4 rounded-lg">
-              <h3 className="font-medium text-blue-900">Active Applications</h3>
-              <p className="text-2xl font-bold text-blue-600 mt-2">{activeApplications}</p>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm">
+              <div>
+                <p className="text-gray-600 text-sm font-medium mb-1">Active Applications</p>
+                <p className="text-3xl font-bold text-gray-900">{activeApplications}</p>
+                <p className="text-gray-500 text-xs mt-1">In progress</p>
+              </div>
             </div>
-            <div className="bg-green-50 p-4 rounded-lg">
-              <h3 className="font-medium text-green-900">Interviews Scheduled</h3>
-              <p className="text-2xl font-bold text-green-600 mt-2">{interviewsScheduled}</p>
+            
+            <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm">
+              <div>
+                <p className="text-gray-600 text-sm font-medium mb-1">Scheduled Interviews</p>
+                <p className="text-3xl font-bold text-gray-900">{interviewsScheduled}</p>
+                <p className="text-gray-500 text-xs mt-1">Upcoming</p>
+              </div>
             </div>
-            <div className="bg-purple-50 p-4 rounded-lg">
-              <h3 className="font-medium text-purple-900">Available Opportunities</h3>
-              <p className="text-2xl font-bold text-purple-600 mt-2">{newOpportunities}</p>
+            
+            <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm">
+              <div>
+                <p className="text-gray-600 text-sm font-medium mb-1">Available Opportunities</p>
+                <p className="text-3xl font-bold text-gray-900">{newOpportunities}</p>
+                <p className="text-gray-500 text-xs mt-1">Ready to apply</p>
+              </div>
+            </div>
+            
+            <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm">
+              <div>
+                <p className="text-gray-600 text-sm font-medium mb-1">Total Interviews</p>
+                <p className="text-3xl font-bold text-gray-900">{interviews.length}</p>
+                <p className="text-gray-500 text-xs mt-1">All time</p>
+              </div>
             </div>
           </div>
           
-          <div>
-            <h3 className="font-medium text-gray-900 mb-3">Recent Activity</h3>
-            <div className="space-y-2">
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+            <h3 className="font-semibold text-gray-900 mb-4 flex items-center">
+              <div className="w-2 h-2 bg-blue-500 rounded-full mr-3"></div>
+              Recent Activity
+            </h3>
+            <div className="space-y-3">
               {[...applications.slice(0, 2), ...interviews.slice(0, 2)]
                 .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
                 .slice(0, 4)
                 .map((item) => {
                   const isApplication = item.hasOwnProperty('opportunityId');
                   return (
-                    <div key={item._id} className="flex items-center text-sm">
-                      <div className={`w-2 h-2 rounded-full mr-3 ${
+                    <div key={item._id} className="flex items-center p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors duration-200">
+                      <div className={`w-3 h-3 rounded-full mr-4 ${
                         isApplication ? (
                           item.status === 'pending' ? 'bg-yellow-500' :
                           item.status === 'accepted' ? 'bg-green-500' :
@@ -610,38 +655,43 @@ const OverviewSection = ({ opportunities = [], interviews = [], applications = [
                           'bg-blue-500'
                         )
                       }`}></div>
-                      <span>
-                        {isApplication ? (
-                          <>
-                            {item.status === 'pending' ? 'Application submitted for ' :
-                             item.status === 'accepted' ? 'Application accepted for ' :
-                             item.status === 'rejected' ? 'Application rejected for ' :
-                             'Application for '}
-                            {item.opportunityId?.title || 'Opportunity'}
-                          </>
-                        ) : (
-                          <>
-                            {item.status === 'pending' ? 'Interview invitation received from ' :
-                             item.status === 'accepted' ? 'Interview accepted with ' :
-                             item.status === 'declined' ? 'Interview declined with ' :
-                             'Interview with '}
-                            {item.providerId?.firstName && item.providerId?.lastName
-                              ? `${item.providerId.firstName} ${item.providerId.lastName}`
-                              : 'Unknown Provider'
-                            }
-                          </>
-                        )}
-                      </span>
-                      <span className="text-gray-500 ml-auto">
-                        {new Date(item.createdAt).toLocaleDateString()}
-                      </span>
+                      <div className="flex-1">
+                        <div className="text-sm font-medium text-gray-900">
+                          {isApplication ? (
+                            <>
+                              {item.status === 'pending' ? 'Application submitted for ' :
+                               item.status === 'accepted' ? 'Application accepted for ' :
+                               item.status === 'rejected' ? 'Application rejected for ' :
+                               'Application for '}
+                              {item.opportunityId?.title || 'Opportunity'}
+                            </>
+                          ) : (
+                            <>
+                              {item.status === 'pending' ? 'Interview invitation received from ' :
+                               item.status === 'accepted' ? 'Interview accepted with ' :
+                               item.status === 'declined' ? 'Interview declined with ' :
+                               'Interview with '}
+                              {item.providerId?.firstName && item.providerId?.lastName
+                                ? `${item.providerId.firstName} ${item.providerId.lastName}`
+                                : 'Unknown Provider'
+                              }
+                            </>
+                          )}
+                        </div>
+                        <div className="text-xs text-gray-500 mt-1">
+                          {new Date(item.createdAt).toLocaleDateString()} • {new Date(item.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                        </div>
+                      </div>
                     </div>
                   );
                 })}
               {applications.length === 0 && interviews.length === 0 && (
                 <div className="text-center py-8 text-gray-500">
-                  <MessageCircle className="h-12 w-12 mx-auto mb-2 text-gray-300" />
-                  <p>No recent activity</p>
+                  <div className="bg-gray-100 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4">
+                    <MessageCircle className="h-8 w-8 text-gray-400" />
+                  </div>
+                  <p className="font-medium text-gray-600">No recent activity</p>
+                  <p className="text-sm text-gray-500 mt-1">Your activity will appear here</p>
                 </div>
               )}
             </div>
@@ -651,23 +701,51 @@ const OverviewSection = ({ opportunities = [], interviews = [], applications = [
 
       {/* Show empty state if no data and not loading */}
       {!hasAnyData && !showLoading && (
-        <div className="text-center py-12">
-          <Home className="h-16 w-16 mx-auto mb-4 text-gray-300" />
-          <h3 className="text-lg font-medium text-gray-900 mb-2">Welcome to your dashboard!</h3>
-          <p className="text-gray-600 mb-4">Start by exploring opportunities and building your profile.</p>
+        <div className="text-center py-16">
+          <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-full w-24 h-24 flex items-center justify-center mx-auto mb-6">
+            <Home className="h-12 w-12 text-blue-500" />
+          </div>
+          <h3 className="text-2xl font-bold text-gray-900 mb-3">Welcome to your dashboard!</h3>
+          <p className="text-gray-600 mb-8 max-w-md mx-auto">Start by exploring opportunities and building your profile to showcase your talents.</p>
           
-          {/* Debug information */}
-          <div className="bg-gray-50 p-4 rounded-lg text-left max-w-md mx-auto">
-            <h4 className="font-medium text-gray-900 mb-2">Debug Info:</h4>
-            <div className="text-sm text-gray-600 space-y-1">
-              <div>Opportunities: {opportunities.length} (Loading: {opportunitiesLoading ? 'Yes' : 'No'})</div>
-              <div>Interviews: {interviews.length} (Loading: {interviewsLoading ? 'Yes' : 'No'})</div>
-              <div>Applications: {applications.length} (Loading: {applicationsLoading ? 'Yes' : 'No'})</div>
-              {opportunitiesError && <div className="text-red-600">Opportunities Error: {opportunitiesError}</div>}
-              {interviewsError && <div className="text-red-600">Interviews Error: {interviewsError}</div>}
-              {applicationsError && <div className="text-red-600">Applications Error: {applicationsError}</div>}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-4xl mx-auto">
+            <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+              <Search className="h-8 w-8 text-blue-500 mx-auto mb-3" />
+              <h4 className="font-semibold text-gray-900 mb-2">Find Opportunities</h4>
+              <p className="text-sm text-gray-600">Browse scholarships, jobs, and internships</p>
+            </div>
+            <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+              <User className="h-8 w-8 text-green-500 mx-auto mb-3" />
+              <h4 className="font-semibold text-gray-900 mb-2">Build Profile</h4>
+              <p className="text-sm text-gray-600">Showcase your skills and experience</p>
+            </div>
+            <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+              <Calendar className="h-8 w-8 text-purple-500 mx-auto mb-3" />
+              <h4 className="font-semibold text-gray-900 mb-2">Get Interviews</h4>
+              <p className="text-sm text-gray-600">Connect with providers and mentors</p>
             </div>
           </div>
+          
+          {/* Debug information - only show in development */}
+          {process.env.NODE_ENV === 'development' && (
+            <div className="bg-gray-50 p-6 rounded-xl text-left max-w-2xl mx-auto mt-8">
+              <h4 className="font-medium text-gray-900 mb-3">Debug Info:</h4>
+              <div className="text-sm text-gray-600 space-y-2">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>Opportunities: {opportunities.length} (Loading: {opportunitiesLoading ? 'Yes' : 'No'})</div>
+                  <div>Interviews: {interviews.length} (Loading: {interviewsLoading ? 'Yes' : 'No'})</div>
+                  <div>Applications: {applications.length} (Loading: {applicationsLoading ? 'Yes' : 'No'})</div>
+                </div>
+                {(opportunitiesError || interviewsError || applicationsError) && (
+                  <div className="mt-3 p-3 bg-red-50 rounded-lg">
+                    {opportunitiesError && <div className="text-red-600">Opportunities Error: {opportunitiesError}</div>}
+                    {interviewsError && <div className="text-red-600">Interviews Error: {interviewsError}</div>}
+                    {applicationsError && <div className="text-red-600">Applications Error: {applicationsError}</div>}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -819,7 +897,6 @@ const InterviewsSection = ({ interviews, loading, error, respondToInterview }) =
   return (
     <div className="space-y-6">
       <div className="mb-6">
-        <h2 className="text-2xl font-bold text-gray-900">Interviews</h2>
         <p className="text-gray-600">Manage your interview invitations and scheduled interviews</p>
       </div>
 
@@ -1059,7 +1136,6 @@ const MessagesSection = ({ messages, loading, error, user, markMessageAsRead, se
       <div className="w-1/3 bg-white border-r border-gray-200 flex flex-col">
         <div className="p-4 border-b border-gray-200">
           <div className="flex items-center justify-between mb-4">
-            <h1 className="text-xl font-semibold text-gray-900">Messages</h1>
             <button 
               onClick={() => setShowMessageCenter(true)}
               className="p-2 hover:bg-gray-100 rounded-full"
@@ -1232,7 +1308,6 @@ const NotificationsSection = ({ notifications, markNotificationAsRead, markAllNo
   return (
     <div className="space-y-6">
       <div className="mb-6">
-        <h2 className="text-2xl font-bold text-gray-900">Notifications</h2>
         <p className="text-gray-600">
           {unreadCount > 0 
             ? `You have ${unreadCount} unread notification${unreadCount > 1 ? 's' : ''}`
@@ -1331,12 +1406,31 @@ const ProfileSection = ({ profile, profileMode, setProfileMode, refetchProfile }
     setProfileMode('view');
   };
 
+  // Debug logging
+  console.log('ProfileSection Debug:', {
+    profileMode,
+    hasProfile: !!profile,
+    profileData: profile ? {
+      id: profile._id,
+      fullName: profile.fullName,
+      age: profile.age,
+      gender: profile.gender,
+      nationality: profile.nationality,
+      currentLocation: profile.currentLocation,
+      email: profile.email
+    } : null
+  });
+
   return (
     <div className="w-full">
       {profileMode === 'view' ? (
         <ProfileView profile={profile} onEdit={() => setProfileMode('edit')} />
       ) : (
-        <CreateProfile onProfileUpdated={handleProfileUpdated} />
+        <CreateProfile 
+          existingProfile={profile} 
+          isEditing={true}
+          onProfileUpdated={handleProfileUpdated} 
+        />
       )}
     </div>
   );
@@ -1344,11 +1438,342 @@ const ProfileSection = ({ profile, profileMode, setProfileMode, refetchProfile }
 
 // Settings Section Component
 const SettingsSection = () => {
+  const { settings, loading, updating, updateSettings } = useSettings();
+  const [settingsActiveTab, setSettingsActiveTab] = useState('account');
+  const [localSettings, setLocalSettings] = useState(null);
+  const [saveStatus, setSaveStatus] = useState('');
+
+  // Initialize local settings when settings are loaded
+  useEffect(() => {
+    if (settings) {
+      setLocalSettings(settings);
+    }
+  }, [settings]);
+
+  const handleSettingChange = (path, value) => {
+    setLocalSettings(prev => {
+      const newSettings = { ...prev };
+      const keys = path.split('.');
+      let current = newSettings;
+      
+      for (let i = 0; i < keys.length - 1; i++) {
+        current = current[keys[i]];
+      }
+      
+      current[keys[keys.length - 1]] = value;
+      return newSettings;
+    });
+  };
+
+  const handleSaveSettings = async () => {
+    if (!localSettings) return;
+    
+    setSaveStatus('saving');
+    const result = await updateSettings(localSettings);
+    
+    if (result.success) {
+      setSaveStatus('saved');
+      setTimeout(() => setSaveStatus(''), 2000);
+    } else {
+      setSaveStatus('error');
+      setTimeout(() => setSaveStatus(''), 3000);
+    }
+  };
+
+  const tabs = [
+    { id: 'account', label: 'Account Settings', icon: User },
+    { id: 'notifications', label: 'Notifications', icon: Bell },
+    { id: 'privacy', label: 'Privacy & Security', icon: Shield },
+    { id: 'preferences', label: 'Preferences', icon: Settings }
+  ];
+
+  const renderAccountSettings = () => (
+    <div className="space-y-6">
+      <div className="bg-white p-6 rounded-lg border border-gray-200">
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">Account Information</h3>
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Email Address</label>
+            <input
+              type="email"
+              value="user@example.com"
+              disabled
+              className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-50 text-gray-500"
+            />
+            <p className="text-xs text-gray-500 mt-1">Email cannot be changed</p>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Account Type</label>
+            <div className="flex items-center space-x-4">
+              <span className="px-3 py-2 bg-blue-100 text-blue-800 rounded-md text-sm font-medium">
+                Refugee
+              </span>
+              <span className="text-sm text-gray-500">Active since July 2025</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="bg-white p-6 rounded-lg border border-gray-200">
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">Password & Security</h3>
+        <div className="space-y-4">
+          <button className="w-full px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors">
+            Change Password
+          </button>
+          <button className="w-full px-4 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 transition-colors">
+            Enable Two-Factor Authentication
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderNotificationSettings = () => (
+    <div className="space-y-6">
+      <div className="bg-white p-6 rounded-lg border border-gray-200">
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">Notification Preferences</h3>
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h4 className="font-medium text-gray-900">Email Notifications</h4>
+              <p className="text-sm text-gray-500">Receive notifications via email</p>
+            </div>
+            <label className="relative inline-flex items-center cursor-pointer">
+              <input
+                type="checkbox"
+                checked={localSettings?.notifications?.email || false}
+                onChange={(e) => handleSettingChange('notifications.email', e.target.checked)}
+                className="sr-only peer"
+              />
+              <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+            </label>
+          </div>
+          
+          <div className="flex items-center justify-between">
+            <div>
+              <h4 className="font-medium text-gray-900">Push Notifications</h4>
+              <p className="text-sm text-gray-500">Receive notifications in browser</p>
+            </div>
+            <label className="relative inline-flex items-center cursor-pointer">
+              <input
+                type="checkbox"
+                checked={localSettings?.notifications?.push || false}
+                onChange={(e) => handleSettingChange('notifications.push', e.target.checked)}
+                className="sr-only peer"
+              />
+              <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <div className="bg-white p-6 rounded-lg border border-gray-200">
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">Notification Types</h3>
+        <div className="space-y-3">
+          {[
+            { id: 'opportunities', label: 'New Opportunities', description: 'When new opportunities match your profile' },
+            { id: 'interviews', label: 'Interview Invitations', description: 'When providers invite you for interviews' },
+            { id: 'messages', label: 'New Messages', description: 'When you receive new messages' },
+            { id: 'applications', label: 'Application Updates', description: 'Updates on your submitted applications' }
+          ].map((type) => (
+            <div key={type.id} className="flex items-center justify-between">
+              <div>
+                <h4 className="font-medium text-gray-900">{type.label}</h4>
+                <p className="text-sm text-gray-500">{type.description}</p>
+              </div>
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input 
+                  type="checkbox" 
+                  checked={localSettings?.notifications?.types?.[type.id] || false}
+                  onChange={(e) => handleSettingChange(`notifications.types.${type.id}`, e.target.checked)}
+                  className="sr-only peer" 
+                />
+                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+              </label>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderPrivacySettings = () => (
+    <div className="space-y-6">
+      <div className="bg-white p-6 rounded-lg border border-gray-200">
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">Profile Visibility</h3>
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Profile Visibility</label>
+            <select
+              value={localSettings?.privacy?.profileVisibility || 'public'}
+              onChange={(e) => handleSettingChange('privacy.profileVisibility', e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="public">Public - Visible to all providers</option>
+              <option value="private">Private - Only visible to providers you apply to</option>
+              <option value="hidden">Hidden - Not visible to providers</option>
+            </select>
+          </div>
+          
+          <div className="flex items-center justify-between">
+            <div>
+              <h4 className="font-medium text-gray-900">Show Contact Information</h4>
+              <p className="text-sm text-gray-500">Allow providers to see your contact details</p>
+            </div>
+            <label className="relative inline-flex items-center cursor-pointer">
+              <input 
+                type="checkbox" 
+                checked={localSettings?.privacy?.showContactInfo || false}
+                onChange={(e) => handleSettingChange('privacy.showContactInfo', e.target.checked)}
+                className="sr-only peer" 
+              />
+              <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <div className="bg-white p-6 rounded-lg border border-gray-200">
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">Data & Privacy</h3>
+        <div className="space-y-4">
+          <button className="w-full px-4 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 transition-colors text-left">
+            Download My Data
+          </button>
+          <button className="w-full px-4 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 transition-colors text-left">
+            Delete My Account
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderPreferences = () => (
+    <div className="space-y-6">
+      <div className="bg-white p-6 rounded-lg border border-gray-200">
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">Language & Region</h3>
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Language</label>
+            <select
+              value={localSettings?.preferences?.language || 'en'}
+              onChange={(e) => handleSettingChange('preferences.language', e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="en">English</option>
+              <option value="fr">Français</option>
+              <option value="es">Español</option>
+              <option value="ar">العربية</option>
+            </select>
+          </div>
+          
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Timezone</label>
+            <select
+              value={localSettings?.preferences?.timezone || 'UTC'}
+              onChange={(e) => handleSettingChange('preferences.timezone', e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="UTC">UTC</option>
+              <option value="EST">Eastern Time</option>
+              <option value="PST">Pacific Time</option>
+              <option value="GMT">GMT</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div className="bg-white p-6 rounded-lg border border-gray-200">
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">Display Settings</h3>
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h4 className="font-medium text-gray-900">Dark Mode</h4>
+              <p className="text-sm text-gray-500">Use dark theme</p>
+            </div>
+            <label className="relative inline-flex items-center cursor-pointer">
+              <input 
+                type="checkbox" 
+                checked={localSettings?.preferences?.darkMode || false}
+                onChange={(e) => handleSettingChange('preferences.darkMode', e.target.checked)}
+                className="sr-only peer" 
+              />
+              <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+            </label>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <div className="animate-pulse">
+          <div className="h-8 bg-gray-200 rounded w-1/4 mb-4"></div>
+          <div className="space-y-4">
+            <div className="h-4 bg-gray-200 rounded w-3/4"></div>
+            <div className="h-4 bg-gray-200 rounded w-1/2"></div>
+            <div className="h-4 bg-gray-200 rounded w-2/3"></div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
-      <h3 className="text-lg font-semibold text-gray-900">Settings</h3>
-      <div className="bg-white p-6 rounded-lg border border-gray-200">
-        <p className="text-gray-600">Settings functionality will be implemented here.</p>
+      {/* Settings Tabs */}
+      <div className="flex space-x-1 bg-gray-100 p-1 rounded-lg">
+        {tabs.map((tab) => (
+          <button
+            key={tab.id}
+            onClick={() => setSettingsActiveTab(tab.id)}
+            className={`flex items-center space-x-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+              settingsActiveTab === tab.id
+                ? 'bg-white text-blue-600 shadow-sm'
+                : 'text-gray-600 hover:text-gray-900'
+            }`}
+          >
+            <tab.icon className="h-4 w-4" />
+            <span>{tab.label}</span>
+          </button>
+        ))}
+      </div>
+
+      {/* Settings Content */}
+      {settingsActiveTab === 'account' && renderAccountSettings()}
+      {settingsActiveTab === 'notifications' && renderNotificationSettings()}
+      {settingsActiveTab === 'privacy' && renderPrivacySettings()}
+      {settingsActiveTab === 'preferences' && renderPreferences()}
+
+      {/* Save Button */}
+      <div className="flex justify-end pt-4 border-t border-gray-200">
+        <button
+          onClick={handleSaveSettings}
+          disabled={updating || !localSettings}
+          className={`px-6 py-2 rounded-md font-medium transition-colors ${
+            updating
+              ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+              : 'bg-blue-600 text-white hover:bg-blue-700'
+          }`}
+        >
+          {updating ? 'Saving...' : 'Save Settings'}
+        </button>
+        
+        {/* Save Status */}
+        {saveStatus && (
+          <div className={`ml-3 px-3 py-2 rounded-md text-sm ${
+            saveStatus === 'saved' 
+              ? 'bg-green-100 text-green-800' 
+              : saveStatus === 'error'
+              ? 'bg-red-100 text-red-800'
+              : 'bg-blue-100 text-blue-800'
+          }`}>
+            {saveStatus === 'saved' && 'Settings saved successfully!'}
+            {saveStatus === 'error' && 'Failed to save settings. Please try again.'}
+            {saveStatus === 'saving' && 'Saving settings...'}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -1356,12 +1781,269 @@ const SettingsSection = () => {
 
 // Support Section Component
 const SupportSection = () => {
+  const [supportActiveTab, setSupportActiveTab] = useState('faq');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedFAQ, setSelectedFAQ] = useState(null);
+
+  const tabs = [
+    { id: 'faq', label: 'FAQ', icon: HelpCircle },
+    { id: 'contact', label: 'Contact Support', icon: MessageCircle },
+    { id: 'resources', label: 'Resources', icon: BookOpen },
+    { id: 'troubleshooting', label: 'Troubleshooting', icon: Wrench }
+  ];
+
+  const faqs = [
+    {
+      id: 1,
+      question: "How do I create a profile?",
+      answer: "To create a profile, go to 'My Profile' section and click 'Edit Profile'. Fill in your personal information, skills, experience, and upload necessary documents. Make sure to complete all required fields for better visibility to providers."
+    },
+    {
+      id: 2,
+      question: "How do I apply for opportunities?",
+      answer: "Browse opportunities in the 'Opportunities' section. Click on any opportunity that interests you, review the details, and click 'Apply'. You'll need to submit your application with relevant documents and information."
+    },
+    {
+      id: 3,
+      question: "What happens after I apply?",
+      answer: "After applying, the provider will review your application. You may receive an interview invitation, acceptance, or rejection. You can track your application status in the 'Applications' section."
+    },
+    {
+      id: 4,
+      question: "How do I manage my privacy settings?",
+      answer: "Go to 'Settings' > 'Privacy & Security' to control your profile visibility, contact information sharing, and other privacy preferences. You can choose to be visible to all providers or only those you apply to."
+    },
+    {
+      id: 5,
+      question: "Can I change my email address?",
+      answer: "Currently, email addresses cannot be changed for security reasons. If you need to update your email, please contact support for assistance."
+    },
+    {
+      id: 6,
+      question: "How do I enable notifications?",
+      answer: "Go to 'Settings' > 'Notifications' to configure your notification preferences. You can enable email notifications, push notifications, and choose which types of updates you want to receive."
+    }
+  ];
+
+  const resources = [
+    {
+      title: "Profile Building Guide",
+      description: "Learn how to create an effective profile that attracts providers",
+      type: "Guide",
+      link: "#"
+    },
+    {
+      title: "Application Tips",
+      description: "Best practices for writing compelling applications",
+      type: "Tips",
+      link: "#"
+    },
+    {
+      title: "Interview Preparation",
+      description: "How to prepare for and succeed in interviews",
+      type: "Guide",
+      link: "#"
+    },
+    {
+      title: "Platform Safety",
+      description: "Guidelines for staying safe while using the platform",
+      type: "Safety",
+      link: "#"
+    }
+  ];
+
+  const troubleshooting = [
+    {
+      issue: "Can't log in to my account",
+      solution: "Check your email and password. If you've forgotten your password, use the 'Forgot Password' link on the login page. If the problem persists, contact support."
+    },
+    {
+      issue: "Profile not showing up in searches",
+      solution: "Ensure your profile is set to 'Public' in Settings > Privacy & Security. Complete all required profile fields and add relevant skills and experience."
+    },
+    {
+      issue: "Not receiving notifications",
+      solution: "Check your notification settings in Settings > Notifications. Ensure email notifications are enabled and check your spam folder."
+    },
+    {
+      issue: "Can't upload documents",
+      solution: "Make sure your files are in PDF, JPG, or PNG format and under 10MB. Try refreshing the page or using a different browser."
+    }
+  ];
+
+  const filteredFAQs = faqs.filter(faq => 
+    faq.question.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    faq.answer.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  const renderFAQ = () => (
+    <div className="space-y-6">
+      <div className="bg-white p-6 rounded-lg border border-gray-200">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold text-gray-900">Frequently Asked Questions</h3>
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Search FAQs..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+        </div>
+        
+        <div className="space-y-3">
+          {filteredFAQs.map((faq) => (
+            <div key={faq.id} className="border border-gray-200 rounded-lg">
+              <button
+                onClick={() => setSelectedFAQ(selectedFAQ === faq.id ? null : faq.id)}
+                className="w-full px-4 py-3 text-left flex items-center justify-between hover:bg-gray-50 transition-colors"
+              >
+                <span className="font-medium text-gray-900">{faq.question}</span>
+                <ChevronDown className={`w-5 h-5 text-gray-500 transition-transform ${selectedFAQ === faq.id ? 'rotate-180' : ''}`} />
+              </button>
+              {selectedFAQ === faq.id && (
+                <div className="px-4 pb-3">
+                  <p className="text-gray-600">{faq.answer}</p>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderContact = () => (
+    <div className="space-y-6">
+      <div className="bg-white p-6 rounded-lg border border-gray-200">
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">Contact Support</h3>
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="p-4 bg-blue-50 rounded-lg">
+              <h4 className="font-medium text-blue-900 mb-2">Email Support</h4>
+              <p className="text-sm text-blue-700 mb-2">support@refuture.com</p>
+              <p className="text-xs text-blue-600">Response within 24 hours</p>
+            </div>
+            <div className="p-4 bg-green-50 rounded-lg">
+              <h4 className="font-medium text-green-900 mb-2">Live Chat</h4>
+              <p className="text-sm text-green-700 mb-2">Available 9 AM - 6 PM UTC</p>
+              <button className="text-xs text-green-600 hover:text-green-700">Start Chat</button>
+            </div>
+          </div>
+          
+          <div className="border-t pt-4">
+            <h4 className="font-medium text-gray-900 mb-3">Send us a message</h4>
+            <form className="space-y-3">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Subject</label>
+                <select className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                  <option>General Inquiry</option>
+                  <option>Technical Issue</option>
+                  <option>Account Problem</option>
+                  <option>Feature Request</option>
+                  <option>Report a Bug</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Message</label>
+                <textarea
+                  rows={4}
+                  placeholder="Describe your issue or question..."
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <button
+                type="submit"
+                className="w-full px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+              >
+                Send Message
+              </button>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderResources = () => (
+    <div className="space-y-6">
+      <div className="bg-white p-6 rounded-lg border border-gray-200">
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">Helpful Resources</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {resources.map((resource, index) => (
+            <div key={index} className="p-4 border border-gray-200 rounded-lg hover:border-blue-300 transition-colors">
+              <div className="flex items-start justify-between mb-2">
+                <h4 className="font-medium text-gray-900">{resource.title}</h4>
+                <span className={`text-xs px-2 py-1 rounded-full ${
+                  resource.type === 'Guide' ? 'bg-blue-100 text-blue-800' :
+                  resource.type === 'Tips' ? 'bg-green-100 text-green-800' :
+                  'bg-orange-100 text-orange-800'
+                }`}>
+                  {resource.type}
+                </span>
+              </div>
+              <p className="text-sm text-gray-600 mb-3">{resource.description}</p>
+              <button className="text-sm text-blue-600 hover:text-blue-700 font-medium">
+                Read More →
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderTroubleshooting = () => (
+    <div className="space-y-6">
+      <div className="bg-white p-6 rounded-lg border border-gray-200">
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">Common Issues & Solutions</h3>
+        <div className="space-y-4">
+          {troubleshooting.map((item, index) => (
+            <div key={index} className="p-4 border border-gray-200 rounded-lg">
+              <h4 className="font-medium text-gray-900 mb-2">{item.issue}</h4>
+              <p className="text-sm text-gray-600">{item.solution}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+      
+      <div className="bg-yellow-50 p-6 rounded-lg border border-yellow-200">
+        <h3 className="text-lg font-semibold text-yellow-900 mb-2">Still Need Help?</h3>
+        <p className="text-yellow-800 mb-3">If you couldn't find the solution to your problem, our support team is here to help.</p>
+        <button className="px-4 py-2 bg-yellow-600 text-white rounded-md hover:bg-yellow-700 transition-colors">
+          Contact Support
+        </button>
+      </div>
+    </div>
+  );
+
   return (
     <div className="space-y-6">
-      <h3 className="text-lg font-semibold text-gray-900">Help & Support</h3>
-      <div className="bg-white p-6 rounded-lg border border-gray-200">
-        <p className="text-gray-600">Support functionality will be implemented here.</p>
+      {/* Support Tabs */}
+      <div className="flex space-x-1 bg-gray-100 p-1 rounded-lg">
+        {tabs.map((tab) => (
+          <button
+            key={tab.id}
+            onClick={() => setSupportActiveTab(tab.id)}
+            className={`flex items-center space-x-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+              supportActiveTab === tab.id
+                ? 'bg-white text-blue-600 shadow-sm'
+                : 'text-gray-600 hover:text-gray-900'
+            }`}
+          >
+            <tab.icon className="h-4 w-4" />
+            <span>{tab.label}</span>
+          </button>
+        ))}
       </div>
+
+      {/* Support Content */}
+      {supportActiveTab === 'faq' && renderFAQ()}
+      {supportActiveTab === 'contact' && renderContact()}
+      {supportActiveTab === 'resources' && renderResources()}
+      {supportActiveTab === 'troubleshooting' && renderTroubleshooting()}
     </div>
   );
 };

@@ -3,6 +3,7 @@ const { body, validationResult } = require('express-validator');
 const Application = require('../models/Application');
 const Opportunity = require('../models/Opportunity');
 const Profile = require('../models/Profile');
+const Notification = require('../models/Notification');
 const { protect, authorize } = require('../middleware/auth');
 
 const router = express.Router();
@@ -168,6 +169,31 @@ router.post('/', protect, authorize('refugee'), [
 
     // Increment application count on opportunity
     await opportunity.incrementApplicationCount();
+
+    // Create notification for the provider
+    try {
+      await Notification.create({
+        recipient: opportunity.provider,
+        title: 'New Application Received',
+        message: `A refugee has applied for your opportunity "${opportunity.title}"`,
+        type: 'application_received',
+        priority: 'medium',
+        relatedOpportunity: opportunity._id,
+        relatedApplication: application._id,
+        actionUrl: `/provider-dashboard?tab=applications`,
+        actionText: 'View Application',
+        metadata: {
+          opportunityId: opportunity._id,
+          opportunityTitle: opportunity.title,
+          applicantId: req.user._id,
+          applicationId: application._id
+        }
+      });
+      console.log('Notification created for provider:', opportunity.provider);
+    } catch (notificationError) {
+      console.error('Error creating notification for provider:', notificationError);
+      // Don't fail the application creation if notification creation fails
+    }
 
     res.status(201).json({
       success: true,

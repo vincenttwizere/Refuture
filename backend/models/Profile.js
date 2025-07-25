@@ -8,8 +8,7 @@ const profileSchema = new mongoose.Schema({
   },
   email: {
     type: String,
-    required: true,
-    unique: true
+    required: true
   },
   firstName: {
     type: String,
@@ -282,8 +281,9 @@ const profileSchema = new mongoose.Schema({
 profileSchema.index({ user: 1 });
 profileSchema.index({ isPublic: 1 });
 profileSchema.index({ option: 1 });
-profileSchema.index({ email: 1 }, { unique: true }); // Keep unique index on email
+profileSchema.index({ email: 1 }); // Index on email for queries, but not unique
 profileSchema.index({ user: 1, isPublic: 1 }); // Compound index for user queries
+profileSchema.index({ user: 1 }, { unique: true }); // Ensure one profile per user
 
 // Method to check if profile is complete
 profileSchema.methods.isProfileComplete = function() {
