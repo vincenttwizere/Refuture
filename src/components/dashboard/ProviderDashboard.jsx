@@ -3304,44 +3304,47 @@ const ProviderDashboard = () => {
   const [selectedCategory, setSelectedCategory] = useState('all');
 
   return (
-    <div className="h-screen bg-gray-50 flex flex-col">
-      {/* Header */}
-      <header className="bg-white shadow-sm border-b flex-shrink-0">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center py-4">
-            <div className="flex items-center">
-              <h1 className="text-2xl font-bold text-gray-900">Provider Dashboard</h1>
-            </div>
-            <div className="flex items-center space-x-4">
-            </div>
+    <div>
+      {/* Main Dashboard */}
+      <div className="flex h-screen bg-gray-50">
+        {/* Sidebar */}
+        <div className="w-80 bg-white shadow-lg flex flex-col">
+          <div className="p-6 border-b border-gray-200">
+            <h1 className="text-xl font-bold text-gray-900">Provider Dashboard</h1>
+            <p className="text-sm text-gray-600 mt-1">Post opportunities, manage applications</p>
           </div>
-        </div>
-      </header>
 
-      {/* Main Layout */}
-      <div className="flex flex-1 overflow-hidden">
-        {/* Fixed Sidebar */}
-        <div className="w-64 bg-white shadow-sm flex-shrink-0">
-          <div className="p-4">
-            <nav className="space-y-1">
-              {navigationItems.map(renderMenuItem)}
-              <button
-                onClick={logout}
-                className="w-full flex items-center justify-between px-3 py-2 text-left text-sm rounded-lg transition-colors text-gray-700 hover:bg-gray-100 mt-4 border-t border-gray-200"
-              >
-                <span className="flex items-center">
-                  <LogOut className="h-5 w-5 mr-3 text-gray-500" />
-                  Logout
-                </span>
-              </button>
-            </nav>
+          <nav className="flex-1 p-4 overflow-y-auto">
+            {navigationItems.map(renderMenuItem)}
+          </nav>
+
+          {/* Logout button at bottom */}
+          <div className="p-4 pb-8 border-t border-gray-200 mt-auto mb-4">
+            <button
+              onClick={logout}
+              className="w-full flex items-center justify-between px-3 py-2 text-left text-sm rounded-lg transition-colors text-gray-700 hover:bg-gray-100"
+            >
+              <span className="flex items-center">
+                <LogOut className="h-5 w-5 mr-3 text-gray-500" />
+                Logout
+              </span>
+            </button>
           </div>
         </div>
 
-        {/* Scrollable Main Content */}
+        {/* Main Content */}
         <div className="flex-1 overflow-y-auto">
-          <div className="p-8">
-            {renderMainContent()}
+          <div className="p-6">
+            <div className="max-w-6xl mx-auto">
+              <div className="bg-white rounded-lg shadow-sm p-6">
+                <h2 className="text-2xl font-bold text-gray-900 mb-6">
+                  {navigationItems.find(item => item.id === activeItem)?.label || 'Dashboard Overview'}
+                </h2>
+                <div className="text-gray-600">
+                  {renderMainContent()}
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { applicationsAPI } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -7,6 +7,8 @@ export const useApplications = (opportunityId = null, userRole = null) => {
   const [applications, setApplications] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const hasFetched = useRef(false);
+  const lastFetchTime = useRef(0);
 
   const fetchApplications = async () => {
     try {
@@ -34,6 +36,7 @@ export const useApplications = (opportunityId = null, userRole = null) => {
       const response = await Promise.race([fetchPromise, timeoutPromise]);
       console.log('Applications response:', response.data);
       setApplications(response.data.applications || []);
+      lastFetchTime.current = Date.now();
     } catch (err) {
       if (err.name === 'AbortError') {
         setError('Request was aborted or timed out');
@@ -66,21 +69,27 @@ export const useApplications = (opportunityId = null, userRole = null) => {
   };
 
   useEffect(() => {
-    // Add a small delay to prevent rapid re-fetching
-    const timer = setTimeout(() => {
-    fetchApplications();
-    }, 100);
-    return () => clearTimeout(timer);
+    // Only fetch once on mount or when opportunityId changes
+    const now = Date.now();
+    const timeSinceLastFetch = now - lastFetchTime.current;
+    const minInterval = 2000; // 2 seconds between fetches
+    
+    if (!hasFetched.current || (timeSinceLastFetch > minInterval && opportunityId)) {
+      hasFetched.current = true;
+      const timer = setTimeout(() => {
+        fetchApplications();
+      }, 100);
+      return () => clearTimeout(timer);
+    }
   }, [opportunityId]);
 
-  // Add real-time polling for applications (every 10 seconds)
-  useEffect(() => {
-    const interval = setInterval(() => {
-      fetchApplications();
-    }, 10000); // Poll every 10 seconds
-
-    return () => clearInterval(interval);
-  }, [opportunityId]);
+  // Remove the aggressive polling - only poll if explicitly needed
+  // useEffect(() => {
+  //   const interval = setInterval(() => {
+  //     fetchApplications();
+  //   }, 10000); // Poll every 10 seconds
+  //   return () => clearInterval(interval);
+  // }, [opportunityId]);
 
   return {
     applications: applications,

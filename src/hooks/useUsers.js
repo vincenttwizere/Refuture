@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
+import { apiRateLimiters } from '../utils/rateLimiter';
 
 export const useUsers = () => {
   const [users, setUsers] = useState([]);
@@ -13,6 +14,12 @@ export const useUsers = () => {
   });
 
   const fetchUsers = useCallback(async (params = {}) => {
+    // Check rate limit before making request
+    if (!apiRateLimiters.users.canMakeRequest()) {
+      console.log('Rate limit exceeded for users API, skipping request');
+      return;
+    }
+
     setLoading(true);
     setError(null);
     
@@ -34,6 +41,12 @@ export const useUsers = () => {
   }, []);
 
   const updateUserStatus = useCallback(async (userId, status, reason = '') => {
+    // Check rate limit before making request
+    if (!apiRateLimiters.users.canMakeRequest()) {
+      console.log('Rate limit exceeded for users API, skipping request');
+      throw new Error('Rate limit exceeded');
+    }
+
     try {
       const token = localStorage.getItem('token');
       const response = await axios.put(
@@ -59,6 +72,12 @@ export const useUsers = () => {
   }, []);
 
   const deleteUser = useCallback(async (userId) => {
+    // Check rate limit before making request
+    if (!apiRateLimiters.users.canMakeRequest()) {
+      console.log('Rate limit exceeded for users API, skipping request');
+      throw new Error('Rate limit exceeded');
+    }
+
     try {
       const token = localStorage.getItem('token');
       await axios.delete(
@@ -77,6 +96,12 @@ export const useUsers = () => {
   }, []);
 
   const getUserById = useCallback(async (userId) => {
+    // Check rate limit before making request
+    if (!apiRateLimiters.users.canMakeRequest()) {
+      console.log('Rate limit exceeded for users API, skipping request');
+      throw new Error('Rate limit exceeded');
+    }
+
     try {
       const token = localStorage.getItem('token');
       const response = await axios.get(
@@ -91,9 +116,10 @@ export const useUsers = () => {
     }
   }, []);
 
+  // Only fetch once on mount, not on every render
   useEffect(() => {
     fetchUsers();
-  }, [fetchUsers]);
+  }, []); // Empty dependency array
 
   return {
     users,

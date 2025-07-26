@@ -1,10 +1,12 @@
-﻿import { useState, useEffect, useCallback } from 'react';
+﻿import { useState, useEffect, useCallback, useRef } from 'react';
 import { profilesAPI } from '../services/api';
 
 export const useProfiles = (filters = {}) => {
   const [profiles, setProfiles] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const hasFetched = useRef(false);
+  const lastFetchTime = useRef(0);
 
   const fetchProfiles = useCallback(async (params = {}) => {
     try {
@@ -31,6 +33,7 @@ export const useProfiles = (filters = {}) => {
       console.log('Profiles response:', response.data);
       console.log('Profiles count:', response.data.profiles?.length || 0);
       setProfiles(response.data.profiles || []);
+      lastFetchTime.current = Date.now();
     } catch (err) {
       if (err.name === 'AbortError') {
         setError('Request was aborted or timed out');
@@ -89,15 +92,19 @@ export const useProfiles = (filters = {}) => {
   };
 
   useEffect(() => {
-    // Only fetch if we don't have profiles yet or if filters changed
-    if (profiles.length === 0 || Object.keys(filters).length > 0) {
-      // Add a small delay to prevent rapid re-fetching
+    // Only fetch once on mount or when filters change significantly
+    const now = Date.now();
+    const timeSinceLastFetch = now - lastFetchTime.current;
+    const minInterval = 2000; // 2 seconds between fetches
+    
+    if (!hasFetched.current || (timeSinceLastFetch > minInterval && Object.keys(filters).length > 0)) {
+      hasFetched.current = true;
       const timer = setTimeout(() => {
         fetchProfiles();
       }, 100);
       return () => clearTimeout(timer);
     }
-  }, [fetchProfiles, profiles.length, filters]);
+  }, [JSON.stringify(filters)]); // Use JSON.stringify to compare filters object
 
   return {
     profiles: profiles, // Use current state instead of lastGoodProfiles

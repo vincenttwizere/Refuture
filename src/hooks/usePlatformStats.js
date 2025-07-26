@@ -26,7 +26,7 @@ export const usePlatformStats = () => {
 
   useEffect(() => {
     fetchStats();
-  }, [fetchStats]);
+  }, []); // Empty dependency array
 
   return {
     stats,

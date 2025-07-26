@@ -489,7 +489,7 @@ const RefugeeDashboard = () => {
           </nav>
 
           {/* Logout button at bottom */}
-          <div className="p-4 border-t border-gray-200">
+          <div className="p-4 pb-8 border-t border-gray-200 mt-auto mb-4">
             <button
               onClick={() => { logout(); navigate('/'); }}
               className="w-full flex items-center justify-between px-3 py-2 text-left text-sm rounded-lg transition-colors text-gray-700 hover:bg-gray-100"

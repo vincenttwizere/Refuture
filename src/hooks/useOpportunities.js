@@ -178,7 +178,7 @@ export const useOpportunities = (filters = {}) => {
         abortControllerRef.current.abort();
       }
     };
-  }, [user?._id, fetchOpportunities]);
+  }, [user?._id, JSON.stringify(filters)]); // Use JSON.stringify for filters comparison
 
   return {
     opportunities: opportunities,

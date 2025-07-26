@@ -1,4 +1,12 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../../contexts/AuthContext';
+import { useUsers } from '../../hooks/useUsers';
+import { useProfiles } from '../../hooks/useProfiles';
+import { useOpportunities } from '../../hooks/useOpportunities';
+import { useNotifications } from '../../hooks/useNotifications';
+import { usePlatformStats } from '../../hooks/usePlatformStats';
+import { useApplications } from '../../hooks/useApplications';
 import { 
   Home, 
   Users, 
@@ -48,31 +56,25 @@ import {
   AlertCircle,
   Phone
 } from 'lucide-react';
-import { useAuth } from '../../contexts/AuthContext';
-import { useNavigate } from 'react-router-dom';
-import { useNotifications } from '../../hooks/useNotifications';
-import { useUsers } from '../../hooks/useUsers';
-import { useProfiles } from '../../hooks/useProfiles';
-import { useOpportunities } from '../../hooks/useOpportunities';
-import { usePlatformStats } from '../../hooks/usePlatformStats';
-import { useApplications } from '../../hooks/useApplications';
-import { toast } from 'react-hot-toast';
 
-// Add a reusable error alert component
+// Error Alert Component
 const ErrorAlert = ({ message, onRetry }) => (
-  <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-center justify-between mb-4">
+  <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4">
     <div className="flex items-center">
       <AlertCircle className="h-5 w-5 text-red-400 mr-2" />
-      <span className="text-red-800 font-medium">{message}</span>
+      <div className="flex-1">
+        <h3 className="text-sm font-medium text-red-800">Error</h3>
+        <p className="text-sm text-red-700 mt-1">{message}</p>
+      </div>
+      {onRetry && (
+        <button
+          onClick={onRetry}
+          className="ml-4 bg-red-100 text-red-700 px-3 py-1 rounded-md text-sm hover:bg-red-200"
+        >
+          Retry
+        </button>
+      )}
     </div>
-    {onRetry && (
-      <button
-        onClick={onRetry}
-        className="ml-4 flex items-center px-3 py-1 bg-red-100 text-red-700 rounded hover:bg-red-200 text-sm"
-      >
-        <RefreshCw className="h-4 w-4 mr-1" />Retry
-      </button>
-    )}
   </div>
 );
 
@@ -89,8 +91,8 @@ const AdminDashboard = () => {
   const navigate = useNavigate();
   const { notifications } = useNotifications();
   const { users, loading: usersLoading, error: usersError, fetchUsers, updateUserStatus, deleteUser, refetchUsers } = useUsers();
-  const { profiles, loading: profilesLoading, error: profilesError, fetchProfiles, deleteProfile, refetch: refetchProfiles } = useProfiles();
-  const { opportunities, loading: opportunitiesLoading, error: opportunitiesError, fetchOpportunities, deleteOpportunity, updateOpportunityStatus, refetch: refetchOpportunities } = useOpportunities();
+  const { profiles, loading: profilesLoading, error: profilesError, fetchProfiles, deleteProfile, refetch: refetchProfiles } = useProfiles({});
+  const { opportunities, loading: opportunitiesLoading, error: opportunitiesError, fetchOpportunities, deleteOpportunity, updateOpportunityStatus, refetch: refetchOpportunities } = useOpportunities({});
   const { stats, loading: statsLoading, error: statsError, refetchStats } = usePlatformStats();
   const { applications, loading: applicationsLoading, error: applicationsError, refetch: refetchApplications } = useApplications();
 
@@ -117,7 +119,7 @@ const AdminDashboard = () => {
   const [editingOpportunity, setEditingOpportunity] = useState(null); // Placeholder for edit modal
 
   // Get display name from profile data
-  const getDisplayName = (profile) => {
+  const getDisplayName = useCallback((profile) => {
     if (profile.fullName) {
       return profile.fullName;
     }
@@ -131,7 +133,7 @@ const AdminDashboard = () => {
       return profile.lastName;
     }
     return 'Unknown User';
-  };
+  }, []);
 
   // Defensive loading state (must be after all hooks)
   if (loading) return <div className="min-h-screen flex items-center justify-center">Loading user...</div>;
@@ -140,15 +142,15 @@ const AdminDashboard = () => {
   // Debug logging to prevent infinite re-renders
   console.log('AdminDashboard render - user:', user?._id, 'activeItem:', activeItem);
 
-  const toggleSection = (section) => {
+  const toggleSection = useCallback((section) => {
     setExpandedSections(prev => ({
       ...prev,
       [section]: !prev[section]
     }));
-  };
+  }, []);
 
   // Sidebar main categories only
-  const navigationItems = [
+  const navigationItems = useMemo(() => [
     { id: 'overview', label: 'Dashboard Overview', icon: BarChart3 },
     { id: 'users', label: 'User Management', icon: Users },
     { id: 'opportunities', label: 'Opportunities', icon: Briefcase },
@@ -162,91 +164,93 @@ const AdminDashboard = () => {
     { id: 'reports', label: 'Reports', icon: TrendingUp },
     { id: 'settings', label: 'Settings', icon: Settings },
     { id: 'support', label: 'Help & Support', icon: HelpCircle }
-  ];
+  ], [unreadNotificationsCount]);
 
   // Sidebar rendering (no dropdowns)
-  const renderMenuItem = (item) => {
+  const renderMenuItem = useCallback((item) => {
     const Icon = item.icon;
     const isActive = activeItem === item.id;
     return (
-      <div key={item.id} className="mb-1">
+      <div key={item.id} className="mb-2">
         <button
           onClick={() => setActiveItem(item.id)}
-          className={`w-full flex items-center justify-between px-3 py-2 text-left text-sm rounded-lg transition-colors ${
+          className={`w-full flex items-center justify-between px-4 py-3 text-left text-sm rounded-lg transition-all duration-200 ${
             isActive 
-              ? 'bg-blue-50 text-blue-700 border-r-2 border-blue-500' 
-              : 'text-gray-700 hover:bg-gray-50'
+              ? 'bg-blue-50 text-blue-700 border-l-4 border-blue-500 shadow-sm' 
+              : 'text-gray-700 hover:bg-gray-50 hover:border-l-4 hover:border-gray-200'
           }`}
         >
           <div className="flex items-center">
             <Icon className={`h-5 w-5 mr-3 ${isActive ? 'text-blue-600' : 'text-gray-500'}`} />
             <div className="font-medium">{item.label}</div>
-      </div>
+          </div>
           {item.badge && (
-            <span className="bg-red-100 text-red-800 text-xs font-medium px-2 py-1 rounded-full">
+            <span className="bg-red-100 text-red-800 text-xs font-medium px-2 py-1 rounded-full min-w-[20px] text-center">
               {item.badge}
             </span>
           )}
-    </button>
+        </button>
       </div>
     );
-  };
+  }, [activeItem]);
 
   // Handle user status update
-  const handleUserStatusUpdate = async (userId, newStatus) => {
+  const handleUserStatusUpdate = useCallback(async (userId, newStatus) => {
     try {
       await updateUserStatus(userId, newStatus);
-      refetchUsers();
+      // No need to refetch - the hook will update the local state
     } catch (error) {
       console.error('Error updating user status:', error);
     }
-  };
+  }, [updateUserStatus]);
 
   // Handle user deletion
-  const handleUserDelete = async (userId) => {
+  const handleUserDelete = useCallback(async (userId) => {
     if (window.confirm('Are you sure you want to delete this user? This action cannot be undone.')) {
       try {
         await deleteUser(userId);
-        refetchUsers();
+        // No need to refetch - the hook will update the local state
       } catch (error) {
         console.error('Error deleting user:', error);
       }
     }
-  };
+  }, [deleteUser]);
 
   // Handle profile deletion
-  const handleProfileDelete = async (profileId) => {
+  const handleProfileDelete = useCallback(async (profileId) => {
     if (window.confirm('Are you sure you want to delete this profile? This action cannot be undone.')) {
       try {
         await deleteProfile(profileId);
-        refetchProfiles();
+        // No need to refetch - the hook will update the local state
       } catch (error) {
         console.error('Error deleting profile:', error);
       }
     }
-  };
+  }, [deleteProfile]);
 
   // Handle opportunity deletion
-  const handleOpportunityDelete = async (opportunityId) => {
+  const handleOpportunityDelete = useCallback(async (opportunityId) => {
     if (window.confirm('Are you sure you want to delete this opportunity? This action cannot be undone.')) {
       try {
         await deleteOpportunity(opportunityId);
-        refetchOpportunities();
+        // No need to refetch - the hook will update the local state
       } catch (error) {
         console.error('Error deleting opportunity:', error);
       }
     }
-  };
+  }, [deleteOpportunity]);
 
   // Handle opportunity status update
-  const handleOpportunityStatusUpdate = async (opportunityId, newStatus) => {
+  const handleOpportunityStatusUpdate = useCallback(async (opportunityId, newStatus) => {
     try {
       await updateOpportunityStatus(opportunityId, newStatus);
-      refetchOpportunities();
+      // No need to refetch - the hook will update the local state
     } catch (error) {
       console.error('Error updating opportunity status:', error);
     }
-  };
+  }, [updateOpportunityStatus]);
+
+
 
   // Apply filters
   useEffect(() => {
@@ -300,7 +304,7 @@ const AdminDashboard = () => {
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-            <div className="bg-white p-6 rounded-lg border">
+            <div className="bg-white p-6 rounded-lg border border-gray-200 shadow-sm">
               <div className="flex items-center">
                 <div className="p-2 bg-blue-100 rounded-lg">
                   <Users className="h-6 w-6 text-blue-600" />
@@ -311,7 +315,7 @@ const AdminDashboard = () => {
                 </div>
               </div>
             </div>
-            <div className="bg-white p-6 rounded-lg border">
+            <div className="bg-white p-6 rounded-lg border border-gray-200 shadow-sm">
               <div className="flex items-center">
                 <div className="p-2 bg-green-100 rounded-lg">
                   <Briefcase className="h-6 w-6 text-green-600" />
@@ -322,7 +326,7 @@ const AdminDashboard = () => {
                 </div>
               </div>
             </div>
-            <div className="bg-white p-6 rounded-lg border">
+            <div className="bg-white p-6 rounded-lg border border-gray-200 shadow-sm">
               <div className="flex items-center">
                 <div className="p-2 bg-purple-100 rounded-lg">
                   <User className="h-6 w-6 text-purple-600" />
@@ -333,7 +337,7 @@ const AdminDashboard = () => {
                 </div>
               </div>
             </div>
-            <div className="bg-white p-6 rounded-lg border">
+            <div className="bg-white p-6 rounded-lg border border-gray-200 shadow-sm">
               <div className="flex items-center">
                 <div className="p-2 bg-orange-100 rounded-lg">
                   <Activity className="h-6 w-6 text-orange-600" />
@@ -349,8 +353,8 @@ const AdminDashboard = () => {
 
           {/* User Distribution Chart */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <div className="bg-white rounded-lg border p-6">
-              <h3 className="text-lg font-medium text-gray-900 mb-4">User Distribution</h3>
+            <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-6">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">User Distribution</h3>
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center">
@@ -406,25 +410,26 @@ const AdminDashboard = () => {
               <p className="text-gray-600">Manage platform users and their permissions</p>
 
           {/* Filters */}
-          <div className="bg-white p-6 rounded-lg border">
+          <div className="bg-white p-6 rounded-lg border border-gray-200 shadow-sm">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">User Management</h3>
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Search</label>
-                <input
-                  type="text"
-                  placeholder="Search users..."
-                  value={filters.search}
-                  onChange={(e) => setFilters(prev => ({ ...prev, search: e.target.value }))}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
-                />
+                                  <input
+                    type="text"
+                    placeholder="Search users..."
+                    value={filters.search}
+                    onChange={(e) => setFilters(prev => ({ ...prev, search: e.target.value }))}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                  />
               </div>
                   <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
-                <select
-                  value={filters.role}
-                  onChange={(e) => setFilters(prev => ({ ...prev, role: e.target.value }))}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
-                >
+                                  <select
+                    value={filters.role}
+                    onChange={(e) => setFilters(prev => ({ ...prev, role: e.target.value }))}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                  >
                   <option value="">All Roles</option>
                   <option value="refugee">Refugee</option>
                   <option value="provider">Provider</option>
@@ -433,11 +438,11 @@ const AdminDashboard = () => {
               </div>
                   <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
-                <select
-                  value={filters.status}
-                  onChange={(e) => setFilters(prev => ({ ...prev, status: e.target.value }))}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
-                >
+                                  <select
+                    value={filters.status}
+                    onChange={(e) => setFilters(prev => ({ ...prev, status: e.target.value }))}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                  >
                   <option value="">All Status</option>
                   <option value="active">Active</option>
                   <option value="pending">Pending</option>
@@ -445,10 +450,10 @@ const AdminDashboard = () => {
                 </select>
                   </div>
               <div className="flex items-end">
-                <button
-                  onClick={() => setFilters({ role: '', status: '', search: '' })}
-                  className="w-full bg-gray-100 text-gray-700 px-4 py-2 rounded-lg text-sm hover:bg-gray-200"
-                >
+                                  <button
+                    onClick={() => setFilters({ role: '', status: '', search: '' })}
+                    className="w-full bg-gray-100 text-gray-700 px-4 py-2 rounded-lg text-sm hover:bg-gray-200"
+                  >
                   Clear Filters
                 </button>
               </div>
@@ -457,7 +462,7 @@ const AdminDashboard = () => {
 
           {/* Users Table */}
           {usersLoading ? (
-            <div className="bg-white rounded-lg border p-6">
+            <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-6">
               <div className="animate-pulse space-y-4">
                 {[1, 2, 3, 4, 5].map(i => (
                   <div key={i} className="flex items-center space-x-4">
@@ -473,7 +478,7 @@ const AdminDashboard = () => {
           ) : usersError ? (
             <ErrorAlert message={usersError} onRetry={refetchUsers} />
           ) : (
-          <div className="bg-white rounded-lg border overflow-hidden">
+          <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
@@ -602,7 +607,7 @@ const AdminDashboard = () => {
 
           {/* Profiles Grid */}
           {profilesLoading ? (
-            <div className="bg-white rounded-lg border p-6">
+            <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-6">
               <div className="animate-pulse space-y-4">
                 {[1, 2, 3].map(i => (
                   <div key={i} className="bg-gray-200 h-32 rounded-lg"></div>
@@ -619,7 +624,7 @@ const AdminDashboard = () => {
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {profiles.map((profile) => (
-                <div key={profile._id} className="bg-gray-50 rounded-lg p-6 border border-gray-200 hover:shadow-md transition-shadow">
+                <div key={profile._id} className="bg-white rounded-lg p-6 border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
                   <div className="flex items-center space-x-3 mb-4">
                     <div className="w-12 h-12 rounded-full bg-gray-300 flex items-center justify-center">
                       {profile.photoUrl ? (
@@ -669,17 +674,17 @@ const AdminDashboard = () => {
           <p className="text-gray-600">Review and manage job opportunities posted by providers</p>
 
           {/* Filters */}
-          <div className="bg-white p-6 rounded-lg border mb-4">
+          <div className="bg-white p-6 rounded-lg border border-gray-200 shadow-sm mb-4">
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Search</label>
-                <input
-                  type="text"
-                  placeholder="Search opportunities..."
-                  value={opportunityFilters.search}
-                  onChange={(e) => setOpportunityFilters(prev => ({ ...prev, search: e.target.value }))}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
-                />
+                                  <input
+                    type="text"
+                    placeholder="Search opportunities..."
+                    value={opportunityFilters.search}
+                    onChange={(e) => setOpportunityFilters(prev => ({ ...prev, search: e.target.value }))}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                  />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Type</label>
@@ -1333,7 +1338,7 @@ const AdminDashboard = () => {
   };
 
   // Helper: Fake API call for quick actions
-  const fakeBackupApiCall = () => {
+  const fakeBackupApiCall = useCallback(() => {
     return new Promise((resolve, reject) => {
       setTimeout(() => {
         if (Math.random() > 0.1) { // 90% success rate
@@ -1343,45 +1348,48 @@ const AdminDashboard = () => {
         }
       }, 1000);
     });
-  };
+  }, []);
 
   return (
-    <div className="flex h-screen bg-gray-50">
-      {/* Sidebar - Fixed */}
-      <div className="w-80 bg-white shadow-lg fixed h-full overflow-y-auto">
-        {/* Header */}
-        <div className="p-6 border-b border-gray-200">
-          <h1 className="text-xl font-bold text-gray-900">Admin Dashboard</h1>
-          <p className="text-sm text-gray-600 mt-1">Platform administration and management</p>
+    <div>
+      {/* Main Dashboard */}
+      <div className="flex h-screen bg-gray-50">
+        {/* Sidebar */}
+        <div className="w-80 bg-white shadow-lg flex flex-col">
+          <div className="p-6 border-b border-gray-200">
+            <h1 className="text-xl font-bold text-gray-900">Admin Dashboard</h1>
+            <p className="text-sm text-gray-600 mt-1">Manage platform, users, and content</p>
+          </div>
+
+          <nav className="flex-1 p-4 overflow-y-auto">
+            {navigationItems.map(item => renderMenuItem(item))}
+          </nav>
+
+          {/* Logout button at bottom */}
+          <div className="p-4 pb-8 border-t border-gray-200 mt-auto mb-4">
+            <button
+              onClick={() => { logout(); navigate('/'); }}
+              className="w-full flex items-center justify-between px-3 py-2 text-left text-sm rounded-lg transition-colors text-gray-700 hover:bg-gray-100"
+            >
+              <span className="flex items-center">
+                <LogOut className="h-5 w-5 mr-3 text-gray-500" />
+                Logout
+              </span>
+            </button>
+          </div>
         </div>
 
-        {/* Navigation */}
-        <nav className="p-4">
-          {navigationItems.map(item => renderMenuItem(item))}
-          <button
-            onClick={() => { logout(); navigate('/'); }}
-            className="w-full flex items-center justify-between px-3 py-2 text-left text-sm rounded-lg transition-colors text-gray-700 hover:bg-gray-100 mt-4 border-t border-gray-200"
-          >
-            <span className="flex items-center">
-              <LogOut className="h-5 w-5 mr-3 text-gray-500" />
-              Logout
-            </span>
-          </button>
-        </nav>
-      </div>
-
-      {/* Main Content Area - Scrollable */}
-      <div className="flex-1 ml-80 overflow-y-auto">
-        <div className="p-8">
-          <div className="max-w-4xl mx-auto">
-            <div className="bg-white rounded-lg shadow-sm p-6">
-              <div className="mb-4">
-                <h2 className="text-2xl font-bold text-gray-900">
+        {/* Main Content */}
+        <div className="flex-1 overflow-y-auto">
+          <div className="p-6">
+            <div className="max-w-6xl mx-auto">
+              <div className="bg-white rounded-lg shadow-sm p-6">
+                <h2 className="text-2xl font-bold text-gray-900 mb-6">
                   {navigationItems.find(item => item.id === activeItem)?.label || 'Dashboard Overview'}
                 </h2>
-              </div>
-              <div className="text-gray-600">
-            {renderMainContent()}
+                <div className="text-gray-600">
+                  {renderMainContent()}
+                </div>
               </div>
             </div>
           </div>
