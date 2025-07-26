@@ -5,6 +5,24 @@ import { useAuth } from '../../contexts/AuthContext';
 
 const MessageCenter = ({ isOpen, onClose, preSelectedRecipient = null }) => {
   const { user } = useAuth();
+  
+  // Helper function to generate avatar color based on name
+  const getAvatarColor = (name) => {
+    const colors = [
+      'bg-blue-600', 'bg-green-600', 'bg-purple-600', 'bg-pink-600', 
+      'bg-indigo-600', 'bg-yellow-600', 'bg-red-600', 'bg-teal-600',
+      'bg-orange-600', 'bg-cyan-600', 'bg-lime-600', 'bg-emerald-600'
+    ];
+    if (!name) return colors[0];
+    const hash = name.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+    return colors[hash % colors.length];
+  };
+  
+  // Helper function to get initials from name
+  const getInitials = (name) => {
+    if (!name) return 'U';
+    return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
+  };
   const [conversations, setConversations] = useState([]);
   const [selectedConversation, setSelectedConversation] = useState(null);
   const [messages, setMessages] = useState([]);
@@ -310,35 +328,42 @@ const MessageCenter = ({ isOpen, onClose, preSelectedRecipient = null }) => {
           {/* Conversations Sidebar */}
           <div className="w-1/3 border-r border-gray-200 bg-gray-50">
             <div className="p-4">
-              <h3 className="text-sm font-medium text-gray-700 mb-4">Conversations</h3>
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Chat Conversations</h3>
               <div className="space-y-2">
                 {conversations.map((conversation) => (
                   <div
                     key={conversation.conversationKey}
                     onClick={() => selectConversation(conversation)}
-                    className={`p-3 rounded-lg cursor-pointer transition-colors ${
+                    className={`p-3 rounded-lg cursor-pointer transition-colors border ${
                       selectedConversation?.conversationKey === conversation.conversationKey
                         ? 'bg-blue-100 border-blue-300'
-                        : 'bg-white hover:bg-gray-100'
+                        : 'bg-white hover:bg-gray-100 border-gray-200'
                     }`}
                   >
                     <div className="flex items-center space-x-3">
-                      <div className="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center">
-                        <User className="h-5 w-5 text-white" />
+                      <div className={`w-10 h-10 ${getAvatarColor(conversation.otherUserName)} rounded-full flex items-center justify-center`}>
+                        <span className="text-white font-semibold text-sm">
+                          {getInitials(conversation.otherUserName)}
+                        </span>
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-gray-900 truncate">
-                          {conversation.otherUserName}
+                        <div className="flex items-center justify-between">
+                          <p className="text-sm font-semibold text-gray-900 truncate">
+                            {conversation.otherUserName}
+                          </p>
+                          {conversation.unreadCount > 0 && (
+                            <span className="bg-red-500 text-white text-xs rounded-full px-2 py-1 min-w-[20px] text-center ml-2">
+                              {conversation.unreadCount}
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs text-gray-500 truncate mt-1">
+                          {conversation.otherUserEmail}
                         </p>
-                        <p className="text-xs text-gray-500 truncate">
+                        <p className="text-xs text-gray-400 truncate mt-1">
                           {conversation.lastMessage?.content || 'No messages yet'}
                         </p>
                       </div>
-                      {conversation.unreadCount > 0 && (
-                        <span className="bg-red-500 text-white text-xs rounded-full px-2 py-1 min-w-[20px] text-center">
-                          {conversation.unreadCount}
-                        </span>
-                      )}
                     </div>
                   </div>
                 ))}
@@ -352,17 +377,31 @@ const MessageCenter = ({ isOpen, onClose, preSelectedRecipient = null }) => {
               <>
                 {/* Chat Header */}
                 <div className="p-4 border-b border-gray-200 bg-white">
-                  <div className="flex items-center space-x-3">
-                    <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center">
-                      <User className="h-4 w-4 text-white" />
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-3">
+                      <div className={`w-10 h-10 ${getAvatarColor(selectedConversation.otherUserName)} rounded-full flex items-center justify-center`}>
+                        <span className="text-white font-semibold text-sm">
+                          {getInitials(selectedConversation.otherUserName)}
+                        </span>
+                      </div>
+                      <div>
+                        <h3 className="font-semibold text-gray-900 text-lg">
+                          {selectedConversation.otherUserName}
+                        </h3>
+                        <p className="text-sm text-gray-500">
+                          {selectedConversation.otherUserEmail}
+                        </p>
+                      </div>
                     </div>
-                    <div>
-                      <h3 className="font-medium text-gray-900">
-                        {selectedConversation.otherUserName}
-                      </h3>
-                      <p className="text-sm text-gray-500">
-                        {selectedConversation.otherUserEmail}
-                      </p>
+                    <div className="text-right">
+                      <div className="text-xs text-gray-400">
+                        {selectedConversation.unreadCount > 0 && (
+                          <span className="bg-red-500 text-white text-xs rounded-full px-2 py-1 mr-2">
+                            {selectedConversation.unreadCount} new
+                          </span>
+                        )}
+                        Active now
+                      </div>
                     </div>
                   </div>
                 </div>
