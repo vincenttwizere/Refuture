@@ -2178,7 +2178,7 @@ const ProviderDashboard = () => {
               <input
                 type="text"
                 name="requirements.skills"
-                value={Array.isArray(formData.requirements.skills) ? formData.requirements.skills.join(', ') : formData.requirements.skills}
+                value={Array.isArray(formData.requirements?.skills) ? formData.requirements.skills.join(', ') : (formData.requirements?.skills || '')}
                 onChange={handleFormChange}
                 placeholder="JavaScript, React, Node.js"
                 required
@@ -2191,7 +2191,7 @@ const ProviderDashboard = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-2">Experience Level *</label>
                 <select
                   name="requirements.experience"
-                  value={formData.requirements.experience}
+                  value={formData.requirements?.experience || ''}
                   onChange={handleFormChange}
                   required
                   className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -2207,7 +2207,7 @@ const ProviderDashboard = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-2">Education Requirement</label>
                 <select
                   name="requirements.education"
-                  value={formData.requirements.education}
+                  value={formData.requirements?.education || ''}
                   onChange={handleFormChange}
                   className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 >
@@ -2321,7 +2321,7 @@ const ProviderDashboard = () => {
               <input
                 type="text"
                 name="requirements.skills"
-                value={Array.isArray(formData.requirements.skills) ? formData.requirements.skills.join(', ') : formData.requirements.skills}
+                value={Array.isArray(formData.requirements?.skills) ? formData.requirements.skills.join(', ') : (formData.requirements?.skills || '')}
                 onChange={handleFormChange}
                 placeholder="Basic programming, Communication skills"
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -3537,7 +3537,7 @@ const ProviderDashboard = () => {
                 <input
                   type="text"
                   name="requirements.languages"
-                  value={Array.isArray(formData.requirements.languages) ? formData.requirements.languages.join(', ') : formData.requirements.languages}
+                  value={Array.isArray(formData.requirements?.languages) ? formData.requirements.languages.join(', ') : (formData.requirements?.languages || '')}
                   onChange={handleFormChange}
                   placeholder="English, Spanish, French"
                   className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"

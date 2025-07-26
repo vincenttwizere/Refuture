@@ -2,6 +2,31 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { opportunitiesAPI } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 
+// Deep comparison function for arrays
+function deepEqual(arr1, arr2) {
+  if (arr1 === arr2) return true;
+  if (!arr1 || !arr2) return false;
+  if (arr1.length !== arr2.length) return false;
+  
+  for (let i = 0; i < arr1.length; i++) {
+    const item1 = arr1[i];
+    const item2 = arr2[i];
+    if (item1._id !== item2._id || 
+        item1.title !== item2.title ||
+        item1.type !== item2.type ||
+        item1.status !== item2.status ||
+        item1.description !== item2.description ||
+        item1.location !== item2.location ||
+        item1.salary !== item2.salary ||
+        item1.deadline !== item2.deadline ||
+        item1.updatedAt !== item2.updatedAt ||
+        item1.createdAt !== item2.createdAt) {
+      return false;
+    }
+  }
+  return true;
+}
+
 export const useOpportunities = (filters = {}) => {
   const { user } = useAuth();
   const [opportunities, setOpportunities] = useState([]);
@@ -14,14 +39,21 @@ export const useOpportunities = (filters = {}) => {
     itemsPerPage: 10
   });
   const abortControllerRef = useRef(null);
+  const isInitialLoad = useRef(true);
+  const opportunitiesRef = useRef([]);
+  const lastFetchTime = useRef(0);
 
   const fetchOpportunities = useCallback(async (params = {}) => {
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
     }
     abortControllerRef.current = new AbortController();
+    
     try {
-      setLoading(true);
+      // Only set loading to true on initial load or when explicitly refetching
+      if (isInitialLoad.current || opportunitiesRef.current.length === 0) {
+        setLoading(true);
+      }
       setError(null);
       console.log('Fetching opportunities with filters:', filters, 'params:', params);
       
@@ -41,9 +73,20 @@ export const useOpportunities = (filters = {}) => {
       const response = await Promise.race([fetchPromise, timeoutPromise]);
       console.log('Opportunities response:', response.data);
       // Handle both response formats: {opportunities: []} and {data: []}
-      const opportunities = response.data.opportunities || response.data.data || [];
-      setOpportunities(opportunities);
+      const newOpportunities = response.data.opportunities || response.data.data || [];
+      
+      // Only update state if data has actually changed
+      if (!deepEqual(opportunitiesRef.current, newOpportunities)) {
+        console.log('Opportunities data changed, updating state');
+        setOpportunities(newOpportunities);
+        opportunitiesRef.current = newOpportunities;
+      } else {
+        console.log('Opportunities data unchanged, skipping state update');
+      }
+      
       setPagination(response.data.pagination || {});
+      isInitialLoad.current = false;
+      lastFetchTime.current = Date.now();
     } catch (err) {
       if (err.name === 'AbortError') {
         setError('Request was aborted or timed out');
@@ -114,10 +157,20 @@ export const useOpportunities = (filters = {}) => {
 
   useEffect(() => {
     if (user && user._id) {
-      // Add a small delay to prevent rapid re-fetching
+      // Add more aggressive debounce to prevent rapid re-fetching
+      const now = Date.now();
+      const timeSinceLastFetch = now - lastFetchTime.current;
+      const minInterval = 3000; // Increased to 3 seconds between fetches
+      
+      if (timeSinceLastFetch < minInterval) {
+        console.log(`Skipping fetch, too soon since last fetch: ${timeSinceLastFetch}ms`);
+        return;
+      }
+      
+      console.log('Starting opportunities fetch...');
       const timer = setTimeout(() => {
-      fetchOpportunities();
-      }, 100);
+        fetchOpportunities();
+      }, 200); // Increased delay to 200ms
       return () => clearTimeout(timer);
     }
     return () => {

@@ -46,29 +46,10 @@ function SettingsProvider({ children }) {
   // Apply settings to the entire app
   useEffect(() => {
     if (settings) {
-      // Apply theme
-      if (settings.preferences?.theme) {
-        const root = document.documentElement;
-        root.classList.remove('theme-light', 'theme-dark', 'theme-auto');
-        root.classList.add(`theme-${settings.preferences.theme}`);
-        
-        if (settings.preferences.theme === 'dark' || 
-            (settings.preferences.theme === 'auto' && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
-          root.classList.add('dark');
-        } else {
-          root.classList.remove('dark');
-        }
-      }
-
-      // Apply dark mode
-      if (settings.preferences?.darkMode !== undefined) {
-        const root = document.documentElement;
-        if (settings.preferences.darkMode) {
-          root.classList.add('dark');
-        } else {
-          root.classList.remove('dark');
-        }
-      }
+      // Force light theme - disable dark mode
+      const root = document.documentElement;
+      root.classList.remove('dark', 'theme-dark', 'theme-auto');
+      root.classList.add('theme-light');
 
       // Apply language
       if (settings.preferences?.language) {

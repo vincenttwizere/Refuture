@@ -1003,14 +1003,43 @@ router.put('/:id', protect, [
 
     // Handle file uploads if present
     if (req.files && req.files.profileImage) {
+      console.log('Backend - Profile image upload detected:', {
+        fileName: req.files.profileImage.name,
+        size: req.files.profileImage.size,
+        mimetype: req.files.profileImage.mimetype,
+        tempFilePath: req.files.profileImage.tempFilePath
+      });
+      
       const profileImage = req.files.profileImage;
       const fileName = `profileImage-${Date.now()}-${Math.random().toString(36).substring(7)}.${profileImage.name.split('.').pop()}`;
-      await profileImage.mv(`./uploads/${fileName}`);
-      profile.photoUrl = fileName;
+      
+      console.log('Backend - Generated filename:', fileName);
+      console.log('Backend - Upload path:', `./uploads/${fileName}`);
+      
+      try {
+        await profileImage.mv(`./uploads/${fileName}`);
+        console.log('Backend - File saved to uploads directory successfully');
+        
+        // Check if file actually exists
+        const fs = require('fs');
+        const fileExists = fs.existsSync(`./uploads/${fileName}`);
+        console.log('Backend - File exists check:', fileExists);
+        
+        profile.photoUrl = fileName;
+        console.log('Backend - Set profile.photoUrl to:', fileName);
+      } catch (mvError) {
+        console.error('Backend - Error moving file:', mvError);
+        throw mvError;
+      }
+    } else {
+      console.log('Backend - No profile image in request');
+      console.log('Backend - req.files:', req.files);
+      console.log('Backend - req.files.profileImage:', req.files?.profileImage);
     }
 
     // Handle image removal
     if (req.body.removeProfileImage === 'true') {
+      console.log('Backend - Removing profile image');
       profile.photoUrl = undefined;
     }
 
@@ -1025,6 +1054,13 @@ router.put('/:id', protect, [
     });
 
     await profile.save();
+    console.log('Backend - Profile saved with photoUrl:', profile.photoUrl);
+    console.log('Backend - Full saved profile:', {
+      _id: profile._id,
+      fullName: profile.fullName,
+      photoUrl: profile.photoUrl,
+      email: profile.email
+    });
 
     res.json({
       success: true,

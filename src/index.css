@@ -4,57 +4,6 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Dark mode support */
-.dark {
-  color-scheme: dark;
-}
-
-.dark body {
-  background-color: #1f2937;
-  color: #f9fafb;
-}
-
-.dark .bg-white {
-  background-color: #374151;
-}
-
-.dark .bg-gray-50 {
-  background-color: #1f2937;
-}
-
-.dark .bg-gray-100 {
-  background-color: #374151;
-}
-
-.dark .text-gray-900 {
-  color: #f9fafb;
-}
-
-.dark .text-gray-700 {
-  color: #d1d5db;
-}
-
-.dark .text-gray-600 {
-  color: #9ca3af;
-}
-
-.dark .text-gray-500 {
-  color: #6b7280;
-}
-
-.dark .border-gray-200 {
-  border-color: #4b5563;
-}
-
-.dark .border-gray-300 {
-  border-color: #6b7280;
-}
-
-/* Theme transitions */
-* {
-  transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
-}
-
 /* Custom animations */
 @keyframes fadeInOut {
   0%, 100% {

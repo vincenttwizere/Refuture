@@ -58,13 +58,18 @@ export const useProfiles = (filters = {}) => {
 
   const updateProfile = async (id, profileData) => {
     try {
+      console.log('useProfiles - Updating profile:', { id, profileData });
       const response = await profilesAPI.update(id, profileData);
+      console.log('useProfiles - Backend response:', response.data);
+      
       // Update the local state
-      setProfiles(prev => 
-        prev.map(profile => 
+      setProfiles(prev => {
+        const updated = prev.map(profile => 
           profile._id === id ? response.data.profile : profile
-        )
-      );
+        );
+        console.log('useProfiles - Updated profiles state:', updated);
+        return updated;
+      });
       return response.data;
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to update profile');

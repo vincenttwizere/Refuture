@@ -1400,9 +1400,19 @@ const NotificationsSection = ({ notifications, markNotificationAsRead, markAllNo
 // Profile Section Component
 const ProfileSection = ({ profile, profileMode, setProfileMode, refetchProfile }) => {
   const handleProfileUpdated = async () => {
-    // Add a small delay to ensure backend has processed the update
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    console.log('Profile updated, starting refresh process...');
+    
+    // Add a longer delay to ensure backend has processed the update
+    await new Promise(resolve => setTimeout(resolve, 2000));
+    
+    console.log('Refreshing profile data...');
+    // Force a complete profile refresh
     await refetchProfile();
+    
+    // Add another delay to ensure UI updates
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    
+    console.log('Profile refresh completed, switching to view mode');
     setProfileMode('view');
   };
 
@@ -1413,6 +1423,7 @@ const ProfileSection = ({ profile, profileMode, setProfileMode, refetchProfile }
     profileData: profile ? {
       id: profile._id,
       fullName: profile.fullName,
+      photoUrl: profile.photoUrl, // Add photoUrl to debug
       age: profile.age,
       gender: profile.gender,
       nationality: profile.nationality,

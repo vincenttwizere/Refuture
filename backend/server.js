@@ -119,20 +119,21 @@ app.use(fileUpload({
 
 // Static file serving for uploads with CORS headers
 app.use('/uploads', (req, res, next) => {
-  // Set CORS headers for image files - allow any localhost origin
-  const origin = req.headers.origin;
-  if (origin && origin.startsWith('http://localhost:')) {
-    res.setHeader('Access-Control-Allow-Origin', origin);
-  }
+  // Set CORS headers for image files (proven solution)
+  res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
   res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
   
   // Handle preflight requests
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
   }
   
+  console.log('Backend - Static file request:', req.url);
   next();
 }, express.static(path.join(__dirname, 'uploads')));
 
@@ -198,17 +199,32 @@ app.get('/api/images/:filename', (req, res) => {
   const filename = req.params.filename;
   const imagePath = path.join(__dirname, 'uploads', filename);
   
-  // Set CORS headers
-  res.setHeader('Access-Control-Allow-Origin', 'http://localhost:5173');
+  console.log('Backend - Serving image:', filename);
+  console.log('Backend - Image path:', imagePath);
+  
+  // Set CORS headers (proven solution)
+  res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept');
   res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+  
+  // Check if file exists
+  const fs = require('fs');
+  if (!fs.existsSync(imagePath)) {
+    console.log('Backend - Image not found:', imagePath);
+    return res.status(404).json({ error: 'Image not found' });
+  }
   
   // Serve the image
   res.sendFile(imagePath, (err) => {
     if (err) {
-      console.error('Error serving image:', err);
-      res.status(404).json({ error: 'Image not found' });
+      console.error('Backend - Error serving image:', err);
+      res.status(500).json({ error: 'Error serving image' });
+    } else {
+      console.log('Backend - Image served successfully:', filename);
     }
   });
 });

@@ -87,14 +87,12 @@ const ProfileView = ({ profile, onEdit }) => {
       return photoUrl;
     }
     
-    // Use the static file serving route
-    const baseUrl = window.location.origin.replace('5173', '5001'); // Replace frontend port with backend port
-    const imageUrl = `${baseUrl}/uploads/${photoUrl}`;
+    // Use direct backend URL with cache busting (proven solution)
+    const cacheBuster = Date.now();
+    const apiUrl = `http://localhost:5001/api/images/${photoUrl}?t=${cacheBuster}`;
+    console.log('ProfileView - Using direct backend URL:', apiUrl);
     
-    console.log('ProfileView - Constructed image URL:', imageUrl, 'from photoUrl:', photoUrl);
-    console.log('ProfileView - Base URL:', baseUrl);
-    
-    return imageUrl;
+    return apiUrl;
   };
 
   // Handle image loading errors
@@ -102,17 +100,27 @@ const ProfileView = ({ profile, onEdit }) => {
     console.log('ProfileView - Image failed to load:', e.target.src);
     console.log('ProfileView - Original photoUrl:', profile.photoUrl);
     
-    // Try the proxy route as fallback
+    // Try the static uploads route as fallback
     if (profile.photoUrl && !profile.photoUrl.startsWith('http')) {
-      const fallbackUrl = `${window.location.origin.replace('5173', '5001')}/api/images/${profile.photoUrl}`;
-      console.log('ProfileView - Trying proxy route fallback URL:', fallbackUrl);
-      e.target.src = fallbackUrl;
-      return;
+      const fallbackUrl = `http://localhost:5001/uploads/${profile.photoUrl}?t=${Date.now()}`;
+      console.log('ProfileView - Trying static uploads fallback URL:', fallbackUrl);
+      
+      // Only try fallback if we haven't already tried this URL
+      if (e.target.src !== fallbackUrl) {
+        e.target.src = fallbackUrl;
+        return;
+      }
     }
     
     // Use default avatar as final fallback
+    console.log('ProfileView - Using default avatar as final fallback');
     e.target.src = '/default-avatar.png';
     e.target.onerror = null; // Prevent infinite loop
+  };
+
+  // Handle image load success
+  const handleImageLoad = (e) => {
+    console.log('ProfileView - Image loaded successfully:', e.target.src);
   };
 
   return (
@@ -131,6 +139,7 @@ const ProfileView = ({ profile, onEdit }) => {
           alt="Profile" 
           className="w-28 h-28 rounded-full border-4 border-white shadow-md object-cover -mt-16 md:mt-0" 
           onError={handleImageError}
+          onLoad={handleImageLoad}
           loading="lazy"
         />
         <div className="ml-0 md:ml-6 mt-4 md:mt-0 text-center md:text-left flex-1">

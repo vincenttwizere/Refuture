@@ -295,7 +295,12 @@ const CreateProfile = ({ existingProfile = null, isEditing = false, onProfileUpd
         data.append('document', files.document);
       }
       if (profileImage) {
+        console.log('CreateProfile - Appending profile image:', profileImage.name);
+        console.log('CreateProfile - Profile image size:', profileImage.size);
+        console.log('CreateProfile - Profile image type:', profileImage.type);
         data.append('profileImage', profileImage);
+      } else {
+        console.log('CreateProfile - No new profile image to upload');
       }
       
       // Supporting documents
@@ -309,6 +314,11 @@ const CreateProfile = ({ existingProfile = null, isEditing = false, onProfileUpd
       });
       
       console.log('Making API call to create/update profile...');
+      console.log('CreateProfile - Form data keys:', Array.from(data.keys()));
+      console.log('CreateProfile - Form data entries:');
+      for (let [key, value] of data.entries()) {
+        console.log(`  ${key}:`, value);
+      }
       
       // Determine if this is a create or update operation
       const profileToUpdate = isEditing ? existingProfile : null;
@@ -316,11 +326,18 @@ const CreateProfile = ({ existingProfile = null, isEditing = false, onProfileUpd
       const method = profileToUpdate ? 'put' : 'post';
       
       console.log(`Using ${method.toUpperCase()} ${endpoint}`);
+      console.log('CreateProfile - Existing profile photoUrl:', existingProfile?.photoUrl);
         
-      // Make the API call
+      // Make the API call - use direct API call for both create and update
+      console.log('CreateProfile - Using direct API call');
       const response = await api[method](endpoint, data);
         
       console.log('Backend response:', response.data);
+      
+      // Handle different response structures
+      const profileData = response.data.profile || response.data;
+      console.log('CreateProfile - Updated profile photoUrl:', profileData?.photoUrl);
+      console.log('CreateProfile - Full profile data:', profileData);
       setSuccess(true);
       
       // Reset user input flag after successful submission
@@ -333,7 +350,14 @@ const CreateProfile = ({ existingProfile = null, isEditing = false, onProfileUpd
       
       // Handle success based on mode
       if (isEditing && onProfileUpdated) {
-        // Call the callback for editing mode
+        // Call the callback for editing mode - this will refresh the profile
+        console.log('CreateProfile - Calling onProfileUpdated callback');
+        
+        // Force a page reload to ensure the image is displayed immediately
+        setTimeout(() => {
+          window.location.reload();
+        }, 1000);
+        
         onProfileUpdated();
       } else {
         // Redirect to dashboard after successful creation
@@ -467,10 +491,14 @@ const CreateProfile = ({ existingProfile = null, isEditing = false, onProfileUpd
                     className="w-24 h-24 rounded-full object-cover"
                   />
                 ) : existingProfile?.photoUrl ? (
-                  <img
-                    src={`/uploads/${existingProfile.photoUrl}`}
-                    alt="Profile"
-                    className="w-24 h-24 rounded-full object-cover"
+                  <img 
+                    src={`http://localhost:5001/api/images/${existingProfile.photoUrl}?t=${Date.now()}`}
+                    alt="Profile" 
+                    className="w-20 h-20 rounded-full object-cover border-2 border-gray-200"
+                    onError={(e) => {
+                      console.log('CreateProfile - Image failed to load, trying static route');
+                      e.target.src = `http://localhost:5001/uploads/${existingProfile.photoUrl}?t=${Date.now()}`;
+                    }}
                   />
                 ) : (
                   <Camera className="w-8 h-8 text-gray-400" />

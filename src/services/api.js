@@ -143,4 +143,9 @@ export const applicationsAPI = {
   getById: (applicationId) => api.get(`/applications/${applicationId}`)
 };
 
+export const settingsAPI = {
+  get: () => api.get('/settings'),
+  update: (data) => api.put('/settings', data)
+};
+
 export default api; 

@@ -1,160 +1,139 @@
 import { useState, useEffect, useCallback } from 'react';
-import axios from 'axios';
-
-// Create API instance for settings
-const settingsAPI = axios.create({
-  baseURL: 'http://localhost:5001/api',
-  headers: {
-    'Content-Type': 'application/json',
-  },
-  timeout: 30000,
-});
-
-// Add auth token to requests
-settingsAPI.interceptors.request.use((config) => {
-  const token = localStorage.getItem('token');
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
-  return config;
-});
+import { settingsAPI } from '../services/api';
+import { useAuth } from '../contexts/AuthContext';
 
 export const useSettings = () => {
   const [settings, setSettings] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [updating, setUpdating] = useState(false);
-
-  const defaultSettings = {
-    notifications: {
-      email: true,
-      push: true,
-      types: {
-        opportunities: true,
-        interviews: true,
-        messages: true,
-        applications: true
-      }
-    },
-    privacy: {
-      profileVisibility: 'public',
-      showContactInfo: true,
-      allowMessages: true
-    },
-    preferences: {
-      language: 'en',
-      timezone: 'UTC',
-      darkMode: false,
-      theme: 'light'
-    },
-    application: {
-      autoSave: true,
-      defaultCoverLetter: '',
-      preferredOpportunityTypes: []
-    }
-  };
-
-  const fetchSettings = useCallback(async () => {
-    try {
-      setLoading(true);
-      const response = await settingsAPI.get('/settings');
-      if (response.data.success) {
-        setSettings(response.data.data);
-        applySettingsToApp(response.data.data);
-      }
-    } catch (err) {
-      console.error('Error fetching settings:', err);
-      setSettings(defaultSettings);
-      applySettingsToApp(defaultSettings);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  const updateSettings = useCallback(async (updates) => {
-    try {
-      setUpdating(true);
-      const response = await settingsAPI.put('/settings', updates);
-      if (response.data.success) {
-        const updatedSettings = response.data.data;
-        setSettings(updatedSettings);
-        applySettingsToApp(updatedSettings);
-        return { success: true, data: updatedSettings };
-      }
-    } catch (err) {
-      console.error('Error updating settings:', err);
-      return { success: false, error: err.message };
-    } finally {
-      setUpdating(false);
-    }
-  }, []);
+  const { user } = useAuth();
 
   const applySettingsToApp = useCallback((settings) => {
     if (!settings) return;
 
-    // Apply theme
-    if (settings.preferences?.theme) {
-      const root = document.documentElement;
-      root.classList.remove('theme-light', 'theme-dark', 'theme-auto');
-      root.classList.add(`theme-${settings.preferences.theme}`);
-      
-      if (settings.preferences.theme === 'dark' || 
-          (settings.preferences.theme === 'auto' && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
-        root.classList.add('dark');
-      } else {
-        root.classList.remove('dark');
-      }
-    }
-
-    // Apply dark mode
-    if (settings.preferences?.darkMode !== undefined) {
-      const root = document.documentElement;
-      if (settings.preferences.darkMode) {
-        root.classList.add('dark');
-      } else {
-        root.classList.remove('dark');
-      }
-    }
+    // Force light theme - disable dark mode completely
+    const root = document.documentElement;
+    root.classList.remove('dark', 'theme-dark', 'theme-auto');
+    root.classList.add('theme-light');
 
     // Store in localStorage
     localStorage.setItem('userSettings', JSON.stringify(settings));
   }, []);
 
-  const getSetting = useCallback((path) => {
-    if (!settings) return null;
-    return path.split('.').reduce((obj, key) => obj?.[key], settings);
-  }, [settings]);
+  const fetchSettings = useCallback(async () => {
+    // Check if user is authenticated before making API call
+    const token = localStorage.getItem('token');
+    if (!token || !user?._id) {
+      console.log('No token or user found, skipping settings fetch');
+      // Apply default settings
+      const defaultSettings = {
+        preferences: {
+          theme: 'light',
+          language: 'en',
+          notifications: {
+            email: true,
+            push: true,
+            sms: false
+          }
+        }
+      };
+      setSettings(defaultSettings);
+      applySettingsToApp(defaultSettings);
+      return;
+    }
 
-  const isSettingEnabled = useCallback((path) => {
-    const value = getSetting(path);
-    return value === true || value === 'enabled';
-  }, [getSetting]);
+    setLoading(true);
+    setError(null);
+    
+    try {
+      const response = await settingsAPI.get();
+      if (response.data.success) {
+        setSettings(response.data.settings);
+        applySettingsToApp(response.data.settings);
+      } else {
+        throw new Error(response.data.message || 'Failed to fetch settings');
+      }
+    } catch (err) {
+      console.error('Error fetching settings:', err);
+      
+      // Handle 401 Unauthorized gracefully
+      if (err.response?.status === 401) {
+        console.log('Unauthorized access to settings, using defaults');
+        // Apply default settings instead of throwing error
+        const defaultSettings = {
+          preferences: {
+            theme: 'light',
+            language: 'en',
+            notifications: {
+              email: true,
+              push: true,
+              sms: false
+            }
+          }
+        };
+        setSettings(defaultSettings);
+        applySettingsToApp(defaultSettings);
+        return;
+      }
+      
+      setError(err.response?.data?.message || err.message || 'Failed to fetch settings');
+      
+      // Apply default settings on error
+      const defaultSettings = {
+        preferences: {
+          theme: 'light',
+          language: 'en',
+          notifications: {
+            email: true,
+            push: true,
+            sms: false
+          }
+        }
+      };
+      setSettings(defaultSettings);
+      applySettingsToApp(defaultSettings);
+    } finally {
+      setLoading(false);
+    }
+  }, [user?._id, applySettingsToApp]);
+
+  const updateSettings = useCallback(async (newSettings) => {
+    // Check if user is authenticated before making API call
+    const token = localStorage.getItem('token');
+    if (!token || !user?._id) {
+      console.log('No token or user found, skipping settings update');
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+    
+    try {
+      const response = await settingsAPI.update(newSettings);
+      if (response.data.success) {
+        setSettings(response.data.settings);
+        applySettingsToApp(response.data.settings);
+        return response.data;
+      } else {
+        throw new Error(response.data.message || 'Failed to update settings');
+      }
+    } catch (err) {
+      setError(err.response?.data?.message || err.message || 'Failed to update settings');
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  }, [user?._id, applySettingsToApp]);
 
   useEffect(() => {
     fetchSettings();
   }, [fetchSettings]);
 
-  useEffect(() => {
-    const savedSettings = localStorage.getItem('userSettings');
-    if (savedSettings && !settings) {
-      try {
-        const parsedSettings = JSON.parse(savedSettings);
-        setSettings(parsedSettings);
-        applySettingsToApp(parsedSettings);
-      } catch (err) {
-        console.error('Error parsing saved settings:', err);
-      }
-    }
-  }, [settings, applySettingsToApp]);
-
   return {
-    settings: settings || defaultSettings,
+    settings,
     loading,
     error,
-    updating,
-    fetchSettings,
     updateSettings,
-    getSetting,
-    isSettingEnabled
+    refetch: fetchSettings
   };
 }; 
