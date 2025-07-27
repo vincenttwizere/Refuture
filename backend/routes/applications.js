@@ -101,6 +101,30 @@ router.get('/user', protect, authorize('refugee'), async (req, res) => {
   }
 });
 
+// @desc    Get all applications (Admin only)
+// @route   GET /api/applications/all
+// @access  Private (Admin only)
+router.get('/all', protect, authorize('admin'), async (req, res) => {
+  try {
+    const applications = await Application.find()
+      .populate('opportunity', 'title company location jobType category')
+      .populate('applicant', 'firstName lastName email')
+      .populate('profile', 'firstName lastName email phone')
+      .sort({ createdAt: -1 });
+
+    res.json({
+      success: true,
+      applications
+    });
+  } catch (error) {
+    console.error('Get all applications error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while fetching applications'
+    });
+  }
+});
+
 // @desc    Create application
 // @route   POST /api/applications
 // @access  Private (Refugees only)
@@ -167,16 +191,55 @@ router.post('/', protect, authorize('refugee'), [
       });
     }
 
-    // Create application
-    const application = await Application.create({
+    // Create application with validation
+    const applicationData = {
       opportunity: opportunityId,
       applicant: req.user._id,
       profile: profile._id,
       coverLetter
-    });
+    };
 
-    // Increment application count on opportunity
-    await opportunity.incrementApplicationCount();
+    console.log('Creating application with data:', applicationData);
+
+    // Validate that all required fields are present
+    if (!applicationData.opportunity || !applicationData.applicant || !applicationData.profile) {
+      console.error('Missing required fields for application:', applicationData);
+      return res.status(400).json({
+        success: false,
+        message: 'Missing required fields for application'
+      });
+    }
+
+    let application;
+    try {
+      application = await Application.create(applicationData);
+      console.log('Application created successfully:', application._id);
+
+      // Increment application count on opportunity
+      await opportunity.incrementApplicationCount();
+    } catch (error) {
+      console.error('Error creating application:', error);
+      
+      // Handle duplicate key error specifically
+      if (error.code === 11000) {
+        return res.status(400).json({
+          success: false,
+          message: 'You have already applied for this opportunity'
+        });
+      }
+      
+      // Handle other validation errors
+      if (error.name === 'ValidationError') {
+        const validationErrors = Object.values(error.errors).map(err => err.message);
+        return res.status(400).json({
+          success: false,
+          message: 'Validation error',
+          errors: validationErrors
+        });
+      }
+      
+      throw error; // Re-throw other errors
+    }
 
     // Create notification for the provider
     try {

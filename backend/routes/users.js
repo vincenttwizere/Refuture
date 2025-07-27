@@ -55,10 +55,14 @@ router.get('/stats', protect, async (req, res) => {
     const activeUsers = await User.countDocuments({ isActive: true });
     const verifiedUsers = await User.countDocuments({ isVerified: true });
     
-    // Get users by role
-    const refugeeUsers = await User.countDocuments({ role: 'refugee', isActive: true });
-    const providerUsers = await User.countDocuments({ role: 'provider', isActive: true });
-    const adminUsers = await User.countDocuments({ role: 'admin', isActive: true });
+    // Get users by role (total and active)
+    const refugeeUsersTotal = await User.countDocuments({ role: 'refugee' });
+    const providerUsersTotal = await User.countDocuments({ role: 'provider' });
+    const adminUsersTotal = await User.countDocuments({ role: 'admin' });
+    
+    const refugeeUsersActive = await User.countDocuments({ role: 'refugee', isActive: true });
+    const providerUsersActive = await User.countDocuments({ role: 'provider', isActive: true });
+    const adminUsersActive = await User.countDocuments({ role: 'admin', isActive: true });
 
     // Get new users this month
     const startOfMonth = new Date();
@@ -69,16 +73,50 @@ router.get('/stats', protect, async (req, res) => {
       createdAt: { $gte: startOfMonth }
     });
 
+    // Get user growth data for last 6 months
+    const monthlyGrowth = [];
+    for (let i = 5; i >= 0; i--) {
+      const monthStart = new Date();
+      monthStart.setMonth(monthStart.getMonth() - i);
+      monthStart.setDate(1);
+      monthStart.setHours(0, 0, 0, 0);
+      
+      const monthEnd = new Date(monthStart);
+      monthEnd.setMonth(monthEnd.getMonth() + 1);
+      monthEnd.setDate(0);
+      monthEnd.setHours(23, 59, 59, 999);
+      
+      const newUsersInMonth = await User.countDocuments({
+        createdAt: { $gte: monthStart, $lte: monthEnd }
+      });
+      
+      monthlyGrowth.push({
+        month: monthStart.toLocaleDateString('en-US', { month: 'short' }),
+        users: newUsersInMonth
+      });
+    }
+
+    // Get recent activity (last 24 hours)
+    const last24Hours = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const recentActivity = await User.countDocuments({
+      createdAt: { $gte: last24Hours }
+    });
+
     res.json({
       success: true,
       stats: {
         totalUsers,
         activeUsers,
         verifiedUsers,
-        refugeeUsers,
-        providerUsers,
-        adminUsers,
-        newUsersThisMonth
+        refugeeUsersTotal,
+        providerUsersTotal,
+        adminUsersTotal,
+        refugeeUsersActive,
+        providerUsersActive,
+        adminUsersActive,
+        newUsersThisMonth,
+        monthlyGrowth,
+        recentActivity
       }
     });
   } catch (error) {

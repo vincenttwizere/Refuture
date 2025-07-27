@@ -30,6 +30,8 @@ export const useApplications = (opportunityId = null, userRole = null) => {
         fetchPromise = applicationsAPI.getOpportunityApplications(opportunityId, { signal: controller.signal });
       } else if (userRole === 'refugee' || user?.role === 'refugee') {
         fetchPromise = applicationsAPI.getUserApplications({ signal: controller.signal });
+      } else if (userRole === 'admin' || user?.role === 'admin') {
+        fetchPromise = applicationsAPI.getAllApplications({ signal: controller.signal });
       } else {
         fetchPromise = applicationsAPI.getProviderApplications({ signal: controller.signal });
       }
@@ -69,19 +71,19 @@ export const useApplications = (opportunityId = null, userRole = null) => {
   };
 
   useEffect(() => {
-    // Only fetch once on mount or when opportunityId changes
+    // Fetch on mount or when opportunityId/userRole changes
     const now = Date.now();
     const timeSinceLastFetch = now - lastFetchTime.current;
     const minInterval = 2000; // 2 seconds between fetches
     
-    if (!hasFetched.current || (timeSinceLastFetch > minInterval && opportunityId)) {
+    if (!hasFetched.current || (timeSinceLastFetch > minInterval && (opportunityId || userRole))) {
       hasFetched.current = true;
       const timer = setTimeout(() => {
         fetchApplications();
       }, 100);
       return () => clearTimeout(timer);
     }
-  }, [opportunityId]);
+  }, [opportunityId, userRole]);
 
   // Remove the aggressive polling - only poll if explicitly needed
   // useEffect(() => {

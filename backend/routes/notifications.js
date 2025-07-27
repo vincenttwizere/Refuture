@@ -9,12 +9,24 @@ const router = express.Router();
 // @access  Private
 router.get('/', protect, async (req, res) => {
   try {
-    const notifications = await Notification.find({
-      recipient: req.user._id,
-      isDeleted: false
-    })
-    .sort({ createdAt: -1 })
-    .limit(50); // Limit to last 50 notifications
+    let notifications;
+    
+    // Admin users can see all notifications, other users see only their own
+    if (req.user.role === 'admin') {
+      notifications = await Notification.find({
+        isDeleted: false
+      })
+      .populate('recipient', 'firstName lastName email role')
+      .sort({ createdAt: -1 })
+      .limit(100); // More notifications for admin
+    } else {
+      notifications = await Notification.find({
+        recipient: req.user._id,
+        isDeleted: false
+      })
+      .sort({ createdAt: -1 })
+      .limit(50); // Limit to last 50 notifications
+    }
 
     res.json({
       success: true,
@@ -43,8 +55,8 @@ router.put('/:id/read', protect, async (req, res) => {
       });
     }
 
-    // Check if user is the recipient
-    if (notification.recipient.toString() !== req.user._id.toString()) {
+    // Admin users can mark any notification as read, other users can only mark their own
+    if (req.user.role !== 'admin' && notification.recipient.toString() !== req.user._id.toString()) {
       return res.status(403).json({
         success: false,
         message: 'Not authorized to mark this notification as read'
@@ -71,12 +83,13 @@ router.put('/:id/read', protect, async (req, res) => {
 // @access  Private
 router.put('/read-all', protect, async (req, res) => {
   try {
-    await Notification.updateMany(
-      {
-        recipient: req.user._id,
-        isRead: false,
-        isDeleted: false
-      },
+    // Admin users can mark all notifications as read, other users can only mark their own
+    const filter = req.user.role === 'admin' 
+      ? { isRead: false, isDeleted: false }
+      : { recipient: req.user._id, isRead: false, isDeleted: false };
+
+    const result = await Notification.updateMany(
+      filter,
       {
         isRead: true,
         readAt: new Date()
@@ -85,13 +98,82 @@ router.put('/read-all', protect, async (req, res) => {
 
     res.json({
       success: true,
-      message: 'All notifications marked as read'
+      message: `All notifications marked as read (${result.modifiedCount} notifications updated)`
     });
   } catch (error) {
     console.error('Mark all notifications as read error:', error);
     res.status(500).json({
       success: false,
       message: 'Server error while marking notifications as read'
+    });
+  }
+});
+
+// @desc    Create system notification (Admin only)
+// @route   POST /api/notifications/system
+// @access  Private (Admin only)
+router.post('/system', protect, async (req, res) => {
+  try {
+    // Check if user is admin
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        message: 'Access denied. Admin only.'
+      });
+    }
+
+    const { title, message, type, priority = 'medium', recipients = 'all' } = req.body;
+
+    if (!title || !message) {
+      return res.status(400).json({
+        success: false,
+        message: 'Title and message are required'
+      });
+    }
+
+    let notificationData = {
+      title,
+      message,
+      type: type || 'system',
+      priority,
+      isSystemNotification: true,
+      createdBy: req.user._id
+    };
+
+    // If recipients is 'all', send to all users
+    if (recipients === 'all') {
+      const User = require('../models/User');
+      const allUsers = await User.find({ isActive: true });
+      
+      const notifications = allUsers.map(user => ({
+        ...notificationData,
+        recipient: user._id
+      }));
+
+      await Notification.insertMany(notifications);
+
+      res.json({
+        success: true,
+        message: `System notification sent to ${allUsers.length} users`,
+        notificationsCreated: allUsers.length
+      });
+    } else {
+      // Send to specific recipients
+      notificationData.recipient = recipients;
+      const notification = new Notification(notificationData);
+      await notification.save();
+
+      res.json({
+        success: true,
+        message: 'System notification created',
+        notification
+      });
+    }
+  } catch (error) {
+    console.error('Create system notification error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while creating system notification'
     });
   }
 });

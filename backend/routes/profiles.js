@@ -743,17 +743,21 @@ router.post('/', protect, authorize('refugee', 'provider'), [
     };
 
     // Handle file uploads if present
+    const path = require('path');
+    
     if (req.files && req.files.profileImage) {
       const profileImage = req.files.profileImage;
       const fileName = `profileImage-${Date.now()}-${Math.random().toString(36).substring(7)}.${profileImage.name.split('.').pop()}`;
-      await profileImage.mv(`./uploads/${fileName}`);
+      const uploadPath = path.join(__dirname, '..', 'uploads', fileName);
+      await profileImage.mv(uploadPath);
       profileData.photoUrl = fileName;
     }
 
     if (req.files && req.files.document) {
       const document = req.files.document;
       const fileName = `document-${Date.now()}-${Math.random().toString(36).substring(7)}.${document.name.split('.').pop()}`;
-      await document.mv(`./uploads/${fileName}`);
+      const uploadPath = path.join(__dirname, '..', 'uploads', fileName);
+      await document.mv(uploadPath);
       profileData.resumeUrl = fileName;
     }
 
@@ -778,7 +782,8 @@ router.post('/', protect, authorize('refugee', 'provider'), [
       
       for (const file of files) {
         const fileName = `supporting-${Date.now()}-${Math.random().toString(36).substring(7)}.${file.name.split('.').pop()}`;
-        await file.mv(`./uploads/${fileName}`);
+        const uploadPath = path.join(__dirname, '..', 'uploads', fileName);
+        await file.mv(uploadPath);
         supportingDocuments.push({
           path: fileName,
           originalname: file.name
@@ -1014,15 +1019,19 @@ router.put('/:id', protect, [
       const fileName = `profileImage-${Date.now()}-${Math.random().toString(36).substring(7)}.${profileImage.name.split('.').pop()}`;
       
       console.log('Backend - Generated filename:', fileName);
-      console.log('Backend - Upload path:', `./uploads/${fileName}`);
+      
+      // Use absolute path to ensure file is saved in the correct location
+      const path = require('path');
+      const uploadPath = path.join(__dirname, '..', 'uploads', fileName);
+      console.log('Backend - Upload path:', uploadPath);
       
       try {
-        await profileImage.mv(`./uploads/${fileName}`);
+        await profileImage.mv(uploadPath);
         console.log('Backend - File saved to uploads directory successfully');
         
         // Check if file actually exists
         const fs = require('fs');
-        const fileExists = fs.existsSync(`./uploads/${fileName}`);
+        const fileExists = fs.existsSync(uploadPath);
         console.log('Backend - File exists check:', fileExists);
         
         profile.photoUrl = fileName;

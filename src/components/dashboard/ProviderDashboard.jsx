@@ -42,7 +42,11 @@ import {
   User,
   Shield,
   Wrench,
-  Bell
+  Bell,
+  TrendingUp,
+  Activity,
+  Database,
+  Menu
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
@@ -52,9 +56,10 @@ import { useNotifications } from '../../hooks/useNotifications';
 import { useMessages } from '../../hooks/useMessages';
 import { useApplications } from '../../hooks/useApplications';
 import { useProfiles } from '../../hooks/useProfiles';
+import { useSettings } from '../../hooks/useSettings';
 import MessageCenter from '../messaging/MessageCenter';
 import { messagesAPI, notificationsAPI, interviewsAPI, usersAPI } from '../../services/api';
-import { Line, Bar } from 'react-chartjs-2';
+import { Line, Bar, Doughnut } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -62,9 +67,11 @@ import {
   PointElement,
   LineElement,
   BarElement,
+  ArcElement,
   Title,
   Tooltip,
-  Legend
+  Legend,
+  Filler
 } from 'chart.js';
 import ProfileView from '../profiles/ProfileView';
 
@@ -74,9 +81,11 @@ ChartJS.register(
   PointElement,
   LineElement,
   BarElement,
+  ArcElement,
   Title,
   Tooltip,
-  Legend
+  Legend,
+  Filler
 );
 
 const ProviderDashboard = () => {
@@ -86,6 +95,7 @@ const ProviderDashboard = () => {
     opportunities: true,
     applications: true
   });
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   const { logout, user, loading } = useAuth();
   const navigate = useNavigate();
@@ -304,17 +314,42 @@ const ProviderDashboard = () => {
     }
   };
 
+  // Function to mark all notifications as read
+  const markAllNotificationsAsRead = async () => {
+    try {
+      await notificationsAPI.markAllAsRead();
+      // Refetch notifications to update the UI
+      refetchNotifications();
+    } catch (error) {
+      console.error('Error marking all notifications as read:', error);
+    }
+  };
+
   // Function to mark all messages in a conversation as read
   const markConversationAsRead = async (conversation) => {
     try {
+      console.log('Marking conversation as read:', conversation.userName);
+      
       // Mark all unread messages in this conversation as read
-      const unreadMessages = conversation.messages.filter(message => 
-        !message.isRead && message.recipient === user?._id
-      );
+      const unreadMessages = conversation.messages.filter(message => {
+        const recipientId = typeof message.recipient === 'object' ? message.recipient._id : message.recipient;
+        const currentUserId = typeof user._id === 'object' ? user._id.toString() : user._id;
+        return !message.isRead && recipientId === currentUserId;
+      });
+      
+      console.log(`Found ${unreadMessages.length} unread messages to mark as read`);
       
       for (const message of unreadMessages) {
         await markMessageAsRead(message._id);
       }
+      
+      // Update the conversation's unread count locally
+      conversation.unreadCount = 0;
+      
+      // Refetch messages to ensure UI is updated
+      await refetchMessages();
+      
+      console.log('Conversation marked as read successfully');
     } catch (error) {
       console.error('Error marking conversation as read:', error);
     }
@@ -322,6 +357,9 @@ const ProviderDashboard = () => {
 
   // Helper functions for avatar and initials
   const getAvatarColor = (name) => {
+    if (!name || typeof name !== 'string') {
+      return 'bg-gray-500'; // Default color for undefined/null names
+    }
     const colors = [
       'bg-blue-500', 'bg-green-500', 'bg-purple-500', 'bg-pink-500', 
       'bg-indigo-500', 'bg-yellow-500', 'bg-red-500', 'bg-teal-500'
@@ -331,7 +369,7 @@ const ProviderDashboard = () => {
   };
 
   const getInitials = (name) => {
-    if (!name) return '';
+    if (!name || typeof name !== 'string') return '?';
     const names = name.split(' ');
     if (names.length === 1) return names[0].charAt(0).toUpperCase();
     return names[0].charAt(0).toUpperCase() + names[names.length - 1].charAt(0).toUpperCase();
@@ -508,12 +546,12 @@ const ProviderDashboard = () => {
       badge: unreadMessagesCount > 0 ? unreadMessagesCount : null
     },
     { 
-      id: 'communications', 
-      label: 'Communications', 
-      icon: MessageCircle,
+      id: 'notifications', 
+      label: 'Notifications', 
+      icon: Bell,
       badge: unreadNotificationsCount > 0 ? unreadNotificationsCount : null
     },
-    { id: 'analytics', label: 'Analytics', icon: BarChart3 },
+    { id: 'analytics', label: 'Analytics', icon: TrendingUp },
     { id: 'interviews', label: 'Interview Manager', icon: Calendar },
     { id: 'settings', label: 'Settings', icon: Settings },
     { id: 'support', label: 'Help & Support', icon: HelpCircle }
@@ -532,19 +570,20 @@ const ProviderDashboard = () => {
             } else {
               setActiveItem(item.id);
             }
+            setMobileNavOpen(false); // Close mobile nav when item is clicked
           }}
-          className={`w-full flex items-center justify-between px-3 py-2 text-left text-sm rounded-lg transition-colors ${
+          className={`w-full flex items-center justify-between px-3 sm:px-4 py-2 sm:py-3 text-left text-sm rounded-lg transition-colors ${
             isActive 
               ? 'bg-blue-50 text-blue-700 border-r-2 border-blue-500' 
               : 'text-gray-700 hover:bg-gray-50'
           }`}
         >
-          <div className="flex items-center">
-            <Icon className={`h-5 w-5 mr-3 ${isActive ? 'text-blue-600' : 'text-gray-500'}`} />
-            <div className="font-medium">{item.label}</div>
+          <div className="flex items-center min-w-0 flex-1">
+            <Icon className={`h-4 w-4 sm:h-5 sm:w-5 mr-2 sm:mr-3 flex-shrink-0 ${isActive ? 'text-blue-600' : 'text-gray-500'}`} />
+            <div className="font-medium truncate">{item.label}</div>
           </div>
           {item.badge && (
-            <span className="bg-red-100 text-red-800 text-xs font-medium px-2 py-1 rounded-full">
+            <span className="bg-red-100 text-red-800 text-xs font-medium px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-full min-w-[18px] sm:min-w-[20px] text-center flex-shrink-0">
               {item.badge}
             </span>
           )}
@@ -912,31 +951,50 @@ const ProviderDashboard = () => {
           )}
 
           {/* Key Metrics */}
-          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-            <div className="bg-blue-50 p-4 rounded-lg">
-              <h3 className="font-medium text-blue-900">Active Opportunities</h3>
-              <p className="text-2xl font-bold text-blue-600 mt-2">{stats.activeOpportunities}</p>
-              <p className="text-sm text-blue-600 mt-1">Currently posted</p>
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+            <div className="bg-white p-6 rounded-lg border border-gray-200 shadow-sm">
+              <div className="flex items-center">
+                <div className="p-2 bg-blue-100 rounded-lg">
+                  <Briefcase className="h-6 w-6 text-blue-600" />
             </div>
-            <div className="bg-green-50 p-4 rounded-lg">
-              <h3 className="font-medium text-green-900">Total Applications</h3>
-              <p className="text-2xl font-bold text-green-600 mt-2">{stats.totalApplications}</p>
-              <p className="text-sm text-green-600 mt-1">Across all opportunities</p>
+                <div className="ml-4">
+                  <p className="text-sm font-medium text-gray-600">Active Opportunities</p>
+                  <p className="text-2xl font-bold text-gray-900">{stats.activeOpportunities}</p>
             </div>
-            <div className="bg-purple-50 p-4 rounded-lg">
-              <h3 className="font-medium text-purple-900">Pending Interviews</h3>
-              <p className="text-2xl font-bold text-purple-600 mt-2">{stats.pendingInterviews}</p>
-              <p className="text-sm text-purple-600 mt-1">Requires scheduling</p>
             </div>
-            <div className="bg-orange-50 p-4 rounded-lg">
-              <h3 className="font-medium text-orange-900">Successful Placements</h3>
-              <p className="text-2xl font-bold text-orange-600 mt-2">{stats.successfulPlacements}</p>
-              <p className="text-sm text-orange-600 mt-1">Completed interviews</p>
             </div>
-            <div className="bg-indigo-50 p-4 rounded-lg">
-              <h3 className="font-medium text-indigo-900">Available Talents</h3>
-              <p className="text-2xl font-bold text-indigo-600 mt-2">{profileStats.total}</p>
-              <p className="text-sm text-indigo-600 mt-1">Refugee profiles</p>
+            <div className="bg-white p-6 rounded-lg border border-gray-200 shadow-sm">
+              <div className="flex items-center">
+                <div className="p-2 bg-green-100 rounded-lg">
+                  <FileText className="h-6 w-6 text-green-600" />
+                </div>
+                <div className="ml-4">
+                  <p className="text-sm font-medium text-gray-600">Total Applications</p>
+                  <p className="text-2xl font-bold text-gray-900">{stats.totalApplications}</p>
+                </div>
+              </div>
+            </div>
+            <div className="bg-white p-6 rounded-lg border border-gray-200 shadow-sm">
+              <div className="flex items-center">
+                <div className="p-2 bg-purple-100 rounded-lg">
+                  <Calendar className="h-6 w-6 text-purple-600" />
+                </div>
+                <div className="ml-4">
+                  <p className="text-sm font-medium text-gray-600">Pending Interviews</p>
+                  <p className="text-2xl font-bold text-gray-900">{stats.pendingInterviews}</p>
+                </div>
+              </div>
+            </div>
+            <div className="bg-white p-6 rounded-lg border border-gray-200 shadow-sm">
+              <div className="flex items-center">
+                <div className="p-2 bg-indigo-100 rounded-lg">
+                  <Users className="h-6 w-6 text-indigo-600" />
+                </div>
+                <div className="ml-4">
+                  <p className="text-sm font-medium text-gray-600">Available Talents</p>
+                  <p className="text-2xl font-bold text-gray-900">{profileStats.total}</p>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -1277,7 +1335,7 @@ const ProviderDashboard = () => {
                     >
                       <X className="h-6 w-6" />
                     </button>
-                    <ProfileView profile={selectedProfile} />
+                    <ProfileView profile={selectedProfile} onEdit={null} />
                   </div>
                 </div>
               )}
@@ -1416,7 +1474,6 @@ const ProviderDashboard = () => {
         <div className="space-y-6">
           <div className="flex justify-between items-center">
             <div>
-              <h2 className="text-2xl font-bold text-gray-900">Applications</h2>
               <p className="text-gray-600">Review applications for your opportunities</p>
             </div>
             {applications.length > 0 && (
@@ -1617,14 +1674,14 @@ const ProviderDashboard = () => {
                     >
                       <div className="flex items-start space-x-3">
                         {/* Avatar */}
-                        <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-medium text-sm ${getAvatarColor(conversation.userName)}`}>
-                          {getInitials(conversation.userName)}
+                        <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-medium text-sm ${getAvatarColor(conversation.userName || 'Unknown User')}`}>
+                          {getInitials(conversation.userName || 'Unknown User')}
                         </div>
                         
                         {/* Message Info */}
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center justify-between mb-1">
-                            <h3 className="font-semibold text-gray-900 truncate">{conversation.userName}</h3>
+                            <h3 className="font-semibold text-gray-900 truncate">{conversation.userName || 'Unknown User'}</h3>
                             <span className="text-xs text-gray-500">
                               {new Date(conversation.lastMessage.createdAt).toLocaleDateString()}
                             </span>
@@ -1691,11 +1748,11 @@ const ProviderDashboard = () => {
                 {/* Chat Header */}
                 <div className="bg-white border-b border-gray-200 px-6 py-4">
                   <div className="flex items-center space-x-3">
-                    <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-medium ${getAvatarColor(selectedConversation.userName)}`}>
-                      {getInitials(selectedConversation.userName)}
-              </div>
+                                            <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-medium ${getAvatarColor(selectedConversation.userName || 'Unknown User')}`}>
+                          {getInitials(selectedConversation.userName || 'Unknown User')}
+                        </div>
                         <div>
-                      <h2 className="text-lg font-semibold text-gray-900">{selectedConversation.userName}</h2>
+                                                <h2 className="text-lg font-semibold text-gray-900">{selectedConversation.userName || 'Unknown User'}</h2>
                       <p className="text-sm text-green-500">Open Conversation</p>
                         </div>
                   </div>
@@ -1744,7 +1801,7 @@ const ProviderDashboard = () => {
                       value={newMessage}
                       onChange={(e) => setNewMessage(e.target.value)}
                       onKeyPress={handleKeyPress}
-                      placeholder={`Reply to ${selectedConversation.userName}...`}
+                                              placeholder={`Reply to ${selectedConversation.userName || 'Unknown User'}...`}
                       className="flex-1 px-4 py-2 border border-gray-300 rounded-full focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       disabled={sendingMessage}
                     />
@@ -1772,44 +1829,103 @@ const ProviderDashboard = () => {
       );
     }
 
-    if (activeItem === 'communications') {
+    if (activeItem === 'notifications') {
       return (
         <div className="space-y-6">
           <div className="flex justify-between items-center">
             <div>
-              <h2 className="text-2xl font-bold text-gray-900">Communications</h2>
-              <p className="text-gray-600">Manage notifications</p>
+              <h2 className="text-2xl font-bold text-gray-900">Notifications</h2>
+              <p className="text-gray-600">Stay updated with your platform activity</p>
+            </div>
+            <div className="flex space-x-2">
+              <button
+                onClick={markAllNotificationsAsRead}
+                disabled={!notifications || notifications.length === 0}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+              >
+                Mark All as Read
+              </button>
             </div>
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-1 gap-6">
-            {/* Notifications */}
+            {/* Notifications List */}
             <div className="bg-white p-6 rounded-lg border border-gray-200">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-semibold text-gray-900">Notifications</h3>
-                <span className="bg-red-100 text-red-800 text-xs font-medium px-2 py-1 rounded-full">
-                  {notifications?.length || 0}
-                </span>
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-lg font-semibold text-gray-900">All Notifications</h3>
+                <div className="flex items-center space-x-2">
+                  <span className="text-sm text-gray-500">
+                    {notifications?.filter(n => !n.isRead).length || 0} unread
+                  </span>
+                  <span className="bg-blue-100 text-blue-800 text-xs font-medium px-2 py-1 rounded-full">
+                    {notifications?.length || 0} total
+                  </span>
+                </div>
               </div>
+              
               <div className="space-y-3">
                 {notifications && notifications.length > 0 ? (
-                  notifications.slice(0, 10).map(notification => (
-                    <div key={notification._id} className="p-3 bg-gray-50 rounded-lg">
+                  notifications.map(notification => (
+                    <div 
+                      key={notification._id} 
+                      className={`p-4 rounded-lg border transition-colors ${
+                        notification.isRead 
+                          ? 'bg-gray-50 border-gray-200' 
+                          : 'bg-blue-50 border-blue-200'
+                      }`}
+                    >
                       <div className="flex justify-between items-start">
-                        <div>
-                          <p className="font-medium text-sm">{notification.title}</p>
-                          <p className="text-xs text-gray-500">{notification.message}</p>
+                        <div className="flex-1">
+                          <div className="flex items-center space-x-2 mb-1">
+                            <p className={`font-medium text-sm ${
+                              notification.isRead ? 'text-gray-900' : 'text-blue-900'
+                            }`}>
+                              {notification.title}
+                            </p>
+                            {!notification.isRead && (
+                              <span className="w-2 h-2 bg-blue-500 rounded-full"></span>
+                            )}
+                          </div>
+                          <p className="text-sm text-gray-600 mb-2">{notification.message}</p>
+                          <div className="flex items-center space-x-4 text-xs text-gray-500">
+                            <span>{new Date(notification.createdAt).toLocaleDateString()}</span>
+                            <span>{new Date(notification.createdAt).toLocaleTimeString()}</span>
+                            {notification.type && (
+                              <span className="px-2 py-1 bg-gray-100 rounded-full">
+                                {notification.type}
+                              </span>
+                            )}
+                          </div>
                         </div>
-                        <span className="text-xs text-gray-400">
-                          {new Date(notification.createdAt).toLocaleDateString()}
-                        </span>
+                        <div className="flex space-x-2 ml-4">
+                          {!notification.isRead && (
+                            <button
+                              onClick={() => markNotificationAsRead(notification._id)}
+                              className="text-blue-600 hover:text-blue-800 text-sm font-medium"
+                            >
+                              Mark as Read
+                            </button>
+                          )}
+                        </div>
                       </div>
                     </div>
                   ))
                 ) : (
-                  <p className="text-gray-500 text-sm text-center py-4">No notifications yet</p>
+                  <div className="text-center py-12">
+                    <Bell className="h-16 w-16 mx-auto mb-4 text-gray-300" />
+                    <h3 className="text-lg font-medium text-gray-900 mb-2">No notifications yet</h3>
+                    <p className="text-gray-600 mb-6">You'll see notifications here when you receive new applications, interview updates, and other important updates.</p>
+                  </div>
                 )}
               </div>
+              
+              {notifications && notifications.length > 10 && (
+                <div className="mt-6 pt-4 border-t border-gray-200">
+                  <p className="text-sm text-gray-500 text-center">
+                    Showing {notifications.length} notifications
+                  </p>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -1819,93 +1935,349 @@ const ProviderDashboard = () => {
 
 
     if (activeItem === 'analytics') {
-      // --- Chart Data Preparation ---
-      // Use applicationsByMonth and opportunityPerformance from top-level hooks
+      // Calculate real-time analytics data
+      const totalApplications = applications.length;
+      const pendingApplications = applications.filter(app => app.status === 'pending').length;
+      const acceptedApplications = applications.filter(app => app.status === 'accepted').length;
+      const rejectedApplications = applications.filter(app => app.status === 'rejected').length;
+
+      // Calculate average applications per opportunity
+      let totalAppCount = 0;
+      let countedOpportunities = 0;
+      myOpportunities.forEach(opp => {
+        if (typeof opp.currentApplicants === 'number') {
+          totalAppCount += opp.currentApplicants;
+          countedOpportunities++;
+        }
+      });
+      const avgApplications = countedOpportunities > 0 ? (totalAppCount / countedOpportunities).toFixed(1) : 0;
+
+      // Calculate profile completion rate
+      const completedProfiles = allRefugeeProfiles.filter(p => {
+        let filled = 0;
+        if (p.fullName || (p.firstName && p.lastName)) filled++;
+        if (p.age) filled++;
+        if (p.gender) filled++;
+        if (p.currentLocation) filled++;
+        if (p.skills && p.skills.length > 0) filled++;
+        return filled >= 5;
+      }).length;
+      const completionRate = allRefugeeProfiles.length > 0 ? Math.round((completedProfiles / allRefugeeProfiles.length) * 100) : 0;
+
+      // Chart configurations
+      const userGrowthChartData = {
+        labels: applicationsByMonth.labels || [],
+        datasets: [
+          {
+            label: 'Applications',
+            data: applicationsByMonth.labels ? applicationsByMonth.labels.map(l => applicationsByMonth.datasets[0].data[applicationsByMonth.labels.indexOf(l)] || 0) : [],
+            borderColor: 'rgb(59, 130, 246)',
+            backgroundColor: 'rgba(59, 130, 246, 0.1)',
+            fill: true,
+            tension: 0.4
+          }
+        ]
+      };
+
+      const userGrowthChartOptions = {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            position: 'top',
+            labels: {
+              boxWidth: 12,
+              padding: 8,
+              font: {
+                size: 11
+              }
+            }
+          },
+          title: {
+            display: false
+          }
+        },
+        scales: {
+          y: {
+            beginAtZero: true,
+            ticks: {
+              font: {
+                size: 10
+              }
+            }
+          },
+          x: {
+            ticks: {
+              font: {
+                size: 10
+              }
+            }
+          }
+        }
+      };
+
+      const userDistributionData = {
+        labels: ['Students', 'Job Seekers', 'Non-documented'],
+        datasets: [{
+          data: [
+            categorizedTalents.students.length,
+            categorizedTalents.jobSeekers.length,
+            categorizedTalents.nonDocumented.length
+          ],
+          backgroundColor: [
+            'rgba(59, 130, 246, 0.8)',
+            'rgba(34, 197, 94, 0.8)',
+            'rgba(168, 85, 247, 0.8)'
+          ],
+          borderColor: [
+            'rgb(59, 130, 246)',
+            'rgb(34, 197, 94)',
+            'rgb(168, 85, 247)'
+          ],
+          borderWidth: 2
+        }]
+      };
+
+      const applicationStatusData = {
+        labels: ['Pending', 'Accepted', 'Rejected'],
+        datasets: [{
+          data: [pendingApplications, acceptedApplications, rejectedApplications],
+          backgroundColor: [
+            'rgba(251, 191, 36, 0.8)',
+            'rgba(34, 197, 94, 0.8)',
+            'rgba(239, 68, 68, 0.8)'
+          ],
+          borderColor: [
+            'rgb(251, 191, 36)',
+            'rgb(34, 197, 94)',
+            'rgb(239, 68, 68)'
+          ],
+          borderWidth: 2
+        }]
+      };
+
+      const opportunityMetricsData = {
+        labels: ['Total', 'Active', 'Inactive'],
+        datasets: [{
+          label: 'Opportunities',
+          data: [
+            myOpportunities.length,
+            myOpportunities.filter(opp => opp.isActive).length,
+            myOpportunities.filter(opp => !opp.isActive).length
+          ],
+          backgroundColor: [
+            'rgba(59, 130, 246, 0.8)',
+            'rgba(34, 197, 94, 0.8)',
+            'rgba(156, 163, 175, 0.8)'
+          ],
+          borderColor: [
+            'rgb(59, 130, 246)',
+            'rgb(34, 197, 94)',
+            'rgb(156, 163, 175)'
+          ],
+          borderWidth: 2
+        }]
+      };
+
       return (
         <div className="space-y-6">
-          <div className="flex justify-between items-center">
+          {/* Description */}
             <div>
-              <h2 className="text-2xl font-bold text-gray-900">Analytics</h2>
-              <p className="text-gray-600">Track your platform performance</p>
-            </div>
+            <p className="text-gray-600">Real-time platform analytics and performance metrics</p>
           </div>
 
-          {/* Key Metrics */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div className="bg-blue-50 p-4 rounded-lg">
-              <h3 className="font-medium text-blue-900">Total Opportunities</h3>
-              <p className="text-2xl font-bold text-blue-600 mt-2">{myOpportunities.length}</p>
-              <p className="text-sm text-blue-600 mt-1">Created</p>
-            </div>
-            <div className="bg-green-50 p-4 rounded-lg">
-              <h3 className="font-medium text-green-900">Active Opportunities</h3>
-              <p className="text-2xl font-bold text-green-600 mt-2">
-                {myOpportunities.filter(opp => opp.isActive).length}
-              </p>
-              <p className="text-sm text-green-600 mt-1">Currently posted</p>
-            </div>
-            <div className="bg-purple-50 p-4 rounded-lg">
-              <h3 className="font-medium text-purple-900">Total Applications</h3>
-              <p className="text-2xl font-bold text-purple-600 mt-2">
-                {myOpportunities.reduce((sum, opp) => sum + (opp.currentApplicants || 0), 0)}
-              </p>
-              <p className="text-sm text-purple-600 mt-1">Received</p>
-            </div>
-            <div className="bg-orange-50 p-4 rounded-lg">
-              <h3 className="font-medium text-orange-900">Interviews Scheduled</h3>
-              <p className="text-2xl font-bold text-orange-600 mt-2">
-                {interviews.filter(int => int.status === 'scheduled').length}
-              </p>
-              <p className="text-sm text-orange-600 mt-1">This month</p>
-            </div>
-          </div>
-
-          {/* Charts Placeholder */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Key Metrics Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            {/* Total Opportunities */}
             <div className="bg-white p-6 rounded-lg border border-gray-200">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">Applications Over Time</h3>
-              <div className="h-64 bg-gray-50 rounded-lg flex items-center justify-center">
-                {applicationsByMonth.labels && applicationsByMonth.labels.length > 0 ? (
-                  <Line
-                    data={applicationsByMonth}
-                    options={{
-                      responsive: true,
-                      plugins: {
-                        legend: { display: false },
-                        title: { display: false },
-                      },
-                      scales: {
-                        x: { title: { display: true, text: 'Month' } },
-                        y: { title: { display: true, text: 'Applications' }, beginAtZero: true }
-                      }
-                    }}
-                  />
-                ) : (
-                  <p className="text-gray-500">No application data yet</p>
-                )}
+              <div className="flex items-center">
+                <div className="p-2 bg-blue-100 rounded-lg">
+                  <Briefcase className="h-6 w-6 text-blue-600" />
+                </div>
+                <div className="ml-3">
+                  <p className="text-sm font-medium text-gray-600">Total Opportunities</p>
+                  <p className="text-2xl font-bold text-gray-900">{myOpportunities.length}</p>
+                </div>
+              </div>
+              <div className="mt-4">
+                <span className="text-sm text-green-600">{myOpportunities.filter(opp => opp.isActive).length} active</span>
+            </div>
+          </div>
+
+            {/* Total Applications */}
+            <div className="bg-white p-6 rounded-lg border border-gray-200">
+              <div className="flex items-center">
+                <div className="p-2 bg-green-100 rounded-lg">
+                  <FileText className="h-6 w-6 text-green-600" />
+            </div>
+                <div className="ml-3">
+                  <p className="text-sm font-medium text-gray-600">Applications</p>
+                  <p className="text-2xl font-bold text-gray-900">{totalApplications}</p>
+            </div>
+            </div>
+              <div className="mt-4">
+                <span className="text-sm text-blue-600">Avg. {avgApplications} per opportunity</span>
+            </div>
+          </div>
+
+            {/* Available Talents */}
+            <div className="bg-white p-6 rounded-lg border border-gray-200">
+              <div className="flex items-center">
+                <div className="p-2 bg-purple-100 rounded-lg">
+                  <Users className="h-6 w-6 text-purple-600" />
+                </div>
+                <div className="ml-3">
+                  <p className="text-sm font-medium text-gray-600">Available Talents</p>
+                  <p className="text-2xl font-bold text-gray-900">{allRefugeeProfiles.length}</p>
+                </div>
+              </div>
+              <div className="mt-4">
+                <span className="text-sm text-gray-600">{completionRate}% completion rate</span>
               </div>
             </div>
+
+            {/* Interviews */}
             <div className="bg-white p-6 rounded-lg border border-gray-200">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">Opportunity Performance</h3>
-              <div className="h-64 bg-gray-50 rounded-lg flex items-center justify-center">
-                {opportunityPerformance.labels && opportunityPerformance.labels.length > 0 ? (
-                  <Bar
-                    data={opportunityPerformance}
+              <div className="flex items-center">
+                <div className="p-2 bg-yellow-100 rounded-lg">
+                  <Calendar className="h-6 w-6 text-yellow-600" />
+                </div>
+                <div className="ml-3">
+                  <p className="text-sm font-medium text-gray-600">Interviews</p>
+                  <p className="text-2xl font-bold text-gray-900">{interviews.length}</p>
+                </div>
+              </div>
+              <div className="mt-4">
+                <span className="text-sm text-orange-600">{interviews.filter(int => int.status === 'scheduled').length} scheduled</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Charts Grid */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            {/* Applications Growth Chart */}
+            <div className="bg-white p-4 rounded-lg border border-gray-200">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="font-medium text-gray-900 text-sm">Applications Growth</h3>
+                <button 
+                  onClick={() => refetchApplications()}
+                  className="text-blue-600 hover:text-blue-700 text-xs"
+                >
+                  <RefreshCw className="h-3 w-3" />
+                </button>
+              </div>
+              <div className="h-48">
+                <Line data={userGrowthChartData} options={userGrowthChartOptions} />
+              </div>
+            </div>
+
+            {/* Talent Distribution */}
+            <div className="bg-white p-4 rounded-lg border border-gray-200">
+              <h3 className="font-medium text-gray-900 mb-3 text-sm">Talent Distribution</h3>
+              <div className="h-48">
+                <Doughnut 
+                  data={userDistributionData}
                     options={{
                       responsive: true,
+                    maintainAspectRatio: false,
                       plugins: {
-                        legend: { display: false },
-                        title: { display: false },
-                      },
-                      scales: {
-                        x: { title: { display: true, text: 'Opportunity' } },
-                        y: { title: { display: true, text: 'Applications' }, beginAtZero: true }
+                      legend: {
+                        position: 'bottom',
+                        labels: {
+                          boxWidth: 10,
+                          padding: 6,
+                          font: {
+                            size: 10
+                          }
+                        }
+                      }
                       }
                     }}
                   />
-                ) : (
-                  <p className="text-gray-500">No opportunity data yet</p>
-                )}
+              </div>
+            </div>
+
+            {/* Application Status */}
+            <div className="bg-white p-4 rounded-lg border border-gray-200">
+              <h3 className="font-medium text-gray-900 mb-3 text-sm">Application Status</h3>
+              <div className="h-48">
+                <Doughnut 
+                  data={applicationStatusData}
+                  options={{
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                      legend: {
+                        position: 'bottom',
+                        labels: {
+                          boxWidth: 10,
+                          padding: 6,
+                          font: {
+                            size: 10
+                          }
+                        }
+                      }
+                    }
+                  }}
+                />
+              </div>
+            </div>
+
+            {/* Opportunity Metrics */}
+            <div className="bg-white p-4 rounded-lg border border-gray-200">
+              <h3 className="font-medium text-gray-900 mb-3 text-sm">Opportunity Metrics</h3>
+              <div className="h-48">
+                <Bar 
+                  data={opportunityMetricsData}
+                    options={{
+                      responsive: true,
+                    maintainAspectRatio: false,
+                      plugins: {
+                      legend: {
+                        display: false
+                      }
+                      },
+                      scales: {
+                      y: {
+                        beginAtZero: true,
+                        ticks: {
+                          font: {
+                            size: 10
+                          }
+                        }
+                      },
+                      x: {
+                        ticks: {
+                          font: {
+                            size: 10
+                          }
+                        }
+                      }
+                      }
+                    }}
+                  />
+              </div>
+            </div>
+          </div>
+
+          {/* Real-time Activity */}
+          <div className="bg-white p-4 rounded-lg border border-gray-200">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="font-medium text-gray-900 text-sm">Real-time Activity</h3>
+              <span className="text-xs text-gray-500">Last updated: {new Date().toLocaleTimeString()}</span>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div className="text-center p-3 bg-blue-50 rounded-lg">
+                <div className="text-xl font-bold text-blue-600">{pendingApplications}</div>
+                <div className="text-xs text-gray-600">Pending Applications</div>
+              </div>
+              <div className="text-center p-3 bg-green-50 rounded-lg">
+                <div className="text-xl font-bold text-green-600">{interviews.filter(int => int.status === 'scheduled').length}</div>
+                <div className="text-xs text-gray-600">Scheduled Interviews</div>
+              </div>
+              <div className="text-center p-3 bg-purple-50 rounded-lg">
+                <div className="text-xl font-bold text-purple-600">{allRefugeeProfiles.filter(p => p.isPublic).length}</div>
+                <div className="text-xs text-gray-600">Public Profiles</div>
               </div>
             </div>
           </div>
@@ -1918,7 +2290,6 @@ const ProviderDashboard = () => {
         <div className="space-y-6">
           <div className="flex justify-between items-center">
             <div>
-              <h2 className="text-2xl font-bold text-gray-900">Interview Manager</h2>
               <p className="text-gray-600">Schedule and manage interviews</p>
             </div>
             <button
@@ -2050,127 +2421,7 @@ const ProviderDashboard = () => {
     }
 
     if (activeItem === 'settings') {
-      return (
-        <div className="space-y-6">
-          <div className="flex justify-between items-center">
-            <div>
-              <h2 className="text-2xl font-bold text-gray-900">Settings</h2>
-              <p className="text-gray-600">Manage your account and preferences</p>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Profile Settings */}
-            <div className="bg-white p-6 rounded-lg border border-gray-200">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">Profile Settings</h3>
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Provider Name</label>
-                  <input
-                    type="text"
-                    value={`${user?.firstName || ''} ${user?.lastName || ''}`}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    placeholder="Your name"
-                    disabled
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Email</label>
-                  <input
-                    type="email"
-                    value={user?.email || ''}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    placeholder="your@email.com"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Phone</label>
-                  <input
-                    type="tel"
-                    value=""
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    placeholder="+1 (555) 123-4567"
-                    disabled
-                  />
-                </div>
-                <button 
-                  onClick={() => {
-                    setIsUpdatingProfile(true);
-                    navigate('/create-profile');
-                  }}
-                  disabled={isUpdatingProfile}
-                  className="w-full bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
-                >
-                  {isUpdatingProfile ? (
-                    <>
-                      <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                      Updating...
-                    </>
-                  ) : (
-                    'Update Profile'
-                  )}
-                </button>
-              </div>
-            </div>
-
-            {/* Notification Settings */}
-            <div className="bg-white p-6 rounded-lg border border-gray-200">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">Notification Settings</h3>
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="font-medium text-sm">New Applications</p>
-                    <p className="text-xs text-gray-500">Get notified when someone applies</p>
-                  </div>
-                  <input
-                    type="checkbox"
-                    defaultChecked
-                    className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                  />
-                </div>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="font-medium text-sm">Interview Reminders</p>
-                    <p className="text-xs text-gray-500">Remind me before interviews</p>
-                  </div>
-                  <input
-                    type="checkbox"
-                    defaultChecked
-                    className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                  />
-                </div>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="font-medium text-sm">Platform Updates</p>
-                    <p className="text-xs text-gray-500">Receive platform news and updates</p>
-                  </div>
-                  <input
-                    type="checkbox"
-                    className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                  />
-                </div>
-                <button className="w-full bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700">
-                  Save Preferences
-                </button>
-              </div>
-            </div>
-          </div>
-
-          {/* Account Actions */}
-          <div className="bg-white p-6 rounded-lg border border-gray-200">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Account Actions</h3>
-            <div className="flex space-x-4">
-              <button className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 flex items-center">
-                <LogOut className="h-4 w-4 mr-2" />
-                Logout
-              </button>
-              <button className="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700">
-                Delete Account
-              </button>
-            </div>
-          </div>
-        </div>
-      );
+      return <SettingsSection user={user} navigate={navigate} />;
     }
 
     if (activeItem === 'support') {
@@ -2178,7 +2429,6 @@ const ProviderDashboard = () => {
         <div className="space-y-6">
           <div className="flex justify-between items-center">
             <div>
-              <h2 className="text-2xl font-bold text-gray-900">Help & Support</h2>
               <p className="text-gray-600">Get help and contact support</p>
             </div>
           </div>
@@ -2898,7 +3148,7 @@ const ProviderDashboard = () => {
     setInterviewTime('');
     setInterviewMessage('');
     setInterviewError(null);
-    setInterviewType('job');
+    setInterviewType('video');
     setInterviewTitle('');
     setInterviewDuration('60');
     setInterviewLocation('');
@@ -2914,6 +3164,8 @@ const ProviderDashboard = () => {
     setNewSlotTime('');
     setNewSlotDuration('60');
     setCustomGoogleMeetLink('');
+    setRescheduleMode(false);
+    setRescheduleInterviewId(null);
     setShowInterviewModal(true);
   };
 
@@ -2924,7 +3176,7 @@ const ProviderDashboard = () => {
     setInterviewTime('');
     setInterviewMessage('');
     setInterviewError(null);
-    setInterviewType('job');
+    setInterviewType('video');
     setInterviewTitle('');
     setInterviewDuration('60');
     setInterviewLocation('');
@@ -2940,6 +3192,8 @@ const ProviderDashboard = () => {
     setNewSlotTime('');
     setNewSlotDuration('60');
     setCustomGoogleMeetLink('');
+    setRescheduleMode(false);
+    setRescheduleInterviewId(null);
   };
 
   // Availability slot functions
@@ -2949,31 +3203,67 @@ const ProviderDashboard = () => {
       return;
     }
     
+    // Calculate end time based on duration
+    const startTime = new Date(`2000-01-01T${newSlotTime}`);
+    const endTime = new Date(startTime.getTime() + parseInt(newSlotDuration) * 60000);
+    const endTimeString = endTime.toTimeString().slice(0, 5);
+    
     const newSlot = {
       date: newSlotDate,
-      time: newSlotTime,
-      duration: newSlotDuration
+      timeSlots: [{
+        startTime: newSlotTime,
+        endTime: endTimeString
+      }]
     };
     
-    // Check if slot already exists
-    const slotExists = availabilitySlots.some(slot => 
-      slot.date === newSlotDate && slot.time === newSlotTime
-    );
+    // Check if slot already exists for this date
+    const existingSlotIndex = availabilitySlots.findIndex(slot => slot.date === newSlotDate);
     
-    if (slotExists) {
-      setInterviewError('This time slot already exists.');
-      return;
+    if (existingSlotIndex !== -1) {
+      // Check if this time slot already exists
+      const existingTimeSlot = availabilitySlots[existingSlotIndex].timeSlots.find(
+        timeSlot => timeSlot.startTime === newSlotTime
+      );
+      
+      if (existingTimeSlot) {
+        setInterviewError('This time slot already exists for this date.');
+        return;
+      }
+      
+      // Add to existing date's timeSlots
+      const updatedSlots = [...availabilitySlots];
+      updatedSlots[existingSlotIndex].timeSlots.push({
+        startTime: newSlotTime,
+        endTime: endTimeString
+      });
+      setAvailabilitySlots(updatedSlots);
+    } else {
+      // Create new date slot
+      setAvailabilitySlots([...availabilitySlots, newSlot]);
     }
     
-    setAvailabilitySlots([...availabilitySlots, newSlot]);
     setNewSlotDate('');
     setNewSlotTime('');
     setNewSlotDuration('60');
     setInterviewError(null);
   };
 
-  const removeAvailabilitySlot = (index) => {
-    const updatedSlots = availabilitySlots.filter((_, i) => i !== index);
+  const removeAvailabilitySlot = (dateIndex, timeIndex) => {
+    const updatedSlots = [...availabilitySlots];
+    
+    if (timeIndex !== undefined) {
+      // Remove specific time slot from a date
+      updatedSlots[dateIndex].timeSlots.splice(timeIndex, 1);
+      
+      // If no more time slots for this date, remove the entire date slot
+      if (updatedSlots[dateIndex].timeSlots.length === 0) {
+        updatedSlots.splice(dateIndex, 1);
+      }
+    } else {
+      // Remove entire date slot
+      updatedSlots.splice(dateIndex, 1);
+    }
+    
     setAvailabilitySlots(updatedSlots);
   };
 
@@ -2991,15 +3281,17 @@ const ProviderDashboard = () => {
       return;
     }
     
-    if (interviewFormat === 'in-person' && !interviewLocation.trim()) {
-      setInterviewError('Please enter a location for in-person interviews.');
+    // Check if each slot has at least one time slot
+    const hasValidSlots = availabilitySlots.every(slot => 
+      slot.timeSlots && slot.timeSlots.length > 0
+    );
+    
+    if (!hasValidSlots) {
+      setInterviewError('Each date must have at least one time slot.');
       return;
     }
     
-    if (interviewFormat === 'video' && !meetingPlatform) {
-      setInterviewError('Please select a meeting platform for video interviews.');
-      return;
-    }
+
     
     setInterviewLoading(true);
     setInterviewError(null);
@@ -3008,33 +3300,28 @@ const ProviderDashboard = () => {
       // Use the profile ID directly since we have the profile data
       console.log('Interview profile:', interviewProfile);
       
-      // For now, let's use a mock talent ID since the user lookup is failing
-      // In a real implementation, you would get this from the user database
-      const talentId = interviewProfile._id || interviewProfile.id;
-      console.log('Using profile ID as talent ID:', talentId);
+      // Get the talent ID from the profile
+      const talentId = interviewProfile.user?._id || interviewProfile.user || interviewProfile.userId || interviewProfile._id || interviewProfile.id;
+      console.log('Using talent ID:', talentId);
+      
+      if (!talentId) {
+        setInterviewError('Unable to identify the talent. Please try again.');
+        return;
+      }
       
       // Create interview invitation with availability slots
       const inviteData = {
         talentId: talentId,
         type: interviewType,
         title: interviewTitle.trim(),
-        description: interviewMessage || `${interviewType.charAt(0).toUpperCase() + interviewType.slice(1)} interview invitation`,
-        organization: `${user.firstName} ${user.lastName}`,
-        position: '',
+        description: interviewMessage || `${interviewType.replace('_', ' ').charAt(0).toUpperCase() + interviewType.replace('_', ' ').slice(1)} interview invitation`,
         location: interviewFormat === 'in-person' ? 'onsite' : 'remote',
-        address: interviewFormat === 'in-person' ? interviewLocation : '',
-        availabilitySlots: availabilitySlots,
+        availabilitySlots: availabilitySlots.map(slot => ({
+          date: slot.date,
+          timeSlots: slot.timeSlots
+        })),
         providerNotes: interviewMessage || '',
-        format: interviewFormat,
-        meetingPlatform: interviewFormat === 'video' ? meetingPlatform : undefined,
-        customGoogleMeetLink: interviewFormat === 'video' && meetingPlatform === 'google-meet' ? customGoogleMeetLink : undefined,
-        materials: interviewMaterials || '',
-        instructions: interviewInstructions || '',
-        reminderSettings: {
-          sendReminder24h,
-          sendReminder1h,
-          sendReminder15min
-        }
+        meetingLink: customGoogleMeetLink || (meetingPlatform === 'google-meet' ? 'https://meet.google.com/new' : '')
       };
       
       console.log('Sending interview invite with data:', inviteData);
@@ -3058,7 +3345,7 @@ const ProviderDashboard = () => {
       setInterviewTime('');
       setInterviewMessage('');
       setInterviewError(null);
-      setInterviewType('job');
+      setInterviewType('video');
       setInterviewTitle('');
       setInterviewDuration('60');
       setInterviewLocation('');
@@ -3308,7 +3595,15 @@ const ProviderDashboard = () => {
       messages.forEach(message => {
         const isReceived = message.recipient === user._id;
         const otherUserId = isReceived ? message.sender : message.recipient;
-        const otherUserName = isReceived ? message.senderName : message.recipientName;
+        const otherUserName = isReceived ? 
+      (message.senderName || 
+        (message.sender && typeof message.sender === 'object' ? 
+          `${message.sender.firstName || ''} ${message.sender.lastName || ''}`.trim() : 'Unknown User') ||
+        'Unknown User') :
+      (message.recipientName || 
+        (message.recipient && typeof message.recipient === 'object' ? 
+          `${message.recipient.firstName || ''} ${message.recipient.lastName || ''}`.trim() : 'Unknown User') ||
+        'Unknown User');
         
         console.log('Processing message:', {
           messageId: message._id,
@@ -3345,10 +3640,16 @@ const ProviderDashboard = () => {
         let normalizedOtherUserName;
         if (normalizedIsReceived) {
           // Message was received by current user, so show sender's name
-          normalizedOtherUserName = message.senderName;
+          normalizedOtherUserName = message.senderName || 
+            (message.sender && typeof message.sender === 'object' ? 
+              `${message.sender.firstName || ''} ${message.sender.lastName || ''}`.trim() : 'Unknown User') ||
+            'Unknown User';
         } else {
           // Message was sent by current user, so show recipient's name
-          normalizedOtherUserName = message.recipientName;
+          normalizedOtherUserName = message.recipientName || 
+            (message.recipient && typeof message.recipient === 'object' ? 
+              `${message.recipient.firstName || ''} ${message.recipient.lastName || ''}`.trim() : 'Unknown User') ||
+            'Unknown User';
         }
         
         console.log('Conversation partner determination:', {
@@ -3363,7 +3664,7 @@ const ProviderDashboard = () => {
         if (!conversationMap.has(normalizedOtherUserId)) {
           conversationMap.set(normalizedOtherUserId, {
             userId: normalizedOtherUserId,
-            userName: normalizedOtherUserName,
+            userName: normalizedOtherUserName || 'Unknown User',
             messages: [],
             messageCount: 0,
             unreadCount: 0,
@@ -3385,7 +3686,11 @@ const ProviderDashboard = () => {
         
         // Count unread messages
         if (normalizedIsReceived && !message.isRead) {
-          conversation.unreadCount++;
+          const recipientId = typeof message.recipient === 'object' ? message.recipient._id : message.recipient;
+          const currentUserId = typeof user._id === 'object' ? user._id.toString() : user._id;
+          if (recipientId === currentUserId) {
+            conversation.unreadCount++;
+          }
         }
       });
       
@@ -3447,11 +3752,62 @@ const ProviderDashboard = () => {
 
 
   return (
-    <div>
+    <div className="min-h-screen bg-gray-50">
       {/* Main Dashboard */}
-      <div className="flex h-screen bg-gray-50">
-        {/* Sidebar */}
-        <div className="w-80 bg-white shadow-lg flex flex-col">
+      <div className="flex flex-col lg:flex-row h-screen bg-gray-50">
+        {/* Mobile Header */}
+        <div className="lg:hidden bg-white shadow-sm border-b border-gray-200 px-4 py-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-lg font-bold text-gray-900">Provider Dashboard</h1>
+              <p className="text-xs text-gray-600">Post opportunities, manage applications</p>
+            </div>
+            <button
+              onClick={() => setMobileNavOpen(!mobileNavOpen)}
+              className="p-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <Menu className="h-6 w-6 text-gray-700" />
+            </button>
+          </div>
+        </div>
+
+        {/* Mobile Navigation Overlay */}
+        {mobileNavOpen && (
+          <div className="lg:hidden fixed inset-0 bg-black bg-opacity-50 z-50">
+            <div className="fixed inset-y-0 left-0 w-80 bg-white shadow-xl transform transition-transform duration-300 ease-in-out">
+              <div className="flex flex-col h-full">
+                <div className="p-4 border-b border-gray-200">
+                  <div className="flex items-center justify-between">
+                    <h1 className="text-lg font-bold text-gray-900">Menu</h1>
+                    <button
+                      onClick={() => setMobileNavOpen(false)}
+                      className="p-2 rounded-lg hover:bg-gray-100"
+                    >
+                      <X className="h-5 w-5 text-gray-700" />
+                    </button>
+                  </div>
+                </div>
+                <nav className="flex-1 p-4 overflow-y-auto">
+                  {navigationItems.map(renderMenuItem)}
+                </nav>
+                <div className="p-4 border-t border-gray-200">
+                  <button
+                    onClick={() => { logout(); navigate('/'); }}
+                    className="w-full flex items-center justify-between px-3 py-2 text-left text-sm rounded-lg transition-colors text-gray-700 hover:bg-gray-100"
+                  >
+                    <span className="flex items-center">
+                      <LogOut className="h-5 w-5 mr-3 text-gray-500" />
+                      Logout
+                    </span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Desktop Sidebar */}
+        <div className="hidden lg:flex lg:w-80 bg-white shadow-lg flex-col">
           <div className="p-6 border-b border-gray-200">
             <h1 className="text-xl font-bold text-gray-900">Provider Dashboard</h1>
             <p className="text-sm text-gray-600 mt-1">Post opportunities, manage applications</p>
@@ -3477,10 +3833,10 @@ const ProviderDashboard = () => {
 
         {/* Main Content */}
         <div className="flex-1 overflow-y-auto">
-          <div className="p-6">
+          <div className="p-3 sm:p-4 lg:p-6">
             <div className="max-w-6xl mx-auto">
-              <div className="bg-white rounded-lg shadow-sm p-6">
-                <h2 className="text-2xl font-bold text-gray-900 mb-6">
+              <div className="bg-white rounded-lg shadow-sm p-4 sm:p-6">
+                <h2 className="text-xl sm:text-2xl font-bold text-gray-900 mb-4 sm:mb-6">
                   {navigationItems.find(item => item.id === activeItem)?.label || 'Dashboard Overview'}
                 </h2>
                 <div className="text-gray-600">
@@ -3848,7 +4204,7 @@ const ProviderDashboard = () => {
                 >
                   <X className="h-6 w-6" />
                 </button>
-            <ProfileView profile={selectedProfile} />
+            <ProfileView profile={selectedProfile} onEdit={null} />
               </div>
             </div>
       )}
@@ -4033,16 +4389,16 @@ const ProviderDashboard = () => {
                       Interview Type <span className="text-red-500">*</span>
                     </label>
                     <select 
-                      value={interviewType || 'job'} 
+                      value={interviewType || 'video'} 
                       onChange={e => setInterviewType(e.target.value)} 
                       className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                       required
                     >
-                      <option value="job">Job Interview</option>
-                      <option value="internship">Internship Interview</option>
-                      <option value="scholarship">Scholarship Interview</option>
-                      <option value="mentorship">Mentorship Session</option>
-                      <option value="other">Other</option>
+                      <option value="video">Video Interview</option>
+                      <option value="phone">Phone Interview</option>
+                      <option value="in_person">In-Person Interview</option>
+                      <option value="technical">Technical Interview</option>
+                      <option value="behavioral">Behavioral Interview</option>
                     </select>
                   </div>
                   <div>
@@ -4073,21 +4429,42 @@ const ProviderDashboard = () => {
                 
                 {/* Available Slots List */}
                 <div className="space-y-3 mb-4">
-                  {availabilitySlots.map((slot, index) => (
-                    <div key={index} className="flex items-center justify-between p-3 bg-white rounded-lg border border-gray-200">
-                      <div className="flex items-center space-x-3">
-                        <Calendar className="h-4 w-4 text-blue-500" />
-                        <span className="text-sm font-medium text-gray-900">
-                          {new Date(slot.date).toLocaleDateString()} at {slot.time} ({slot.duration} min)
-                        </span>
+                  {availabilitySlots.map((slot, dateIndex) => (
+                    <div key={dateIndex} className="bg-white rounded-lg border border-gray-200 p-4">
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center space-x-3">
+                          <Calendar className="h-4 w-4 text-blue-500" />
+                          <span className="text-sm font-medium text-gray-900">
+                            {new Date(slot.date).toLocaleDateString()}
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => removeAvailabilitySlot(dateIndex)}
+                          className="text-red-600 hover:text-red-800 p-1 rounded-full hover:bg-red-50 transition-colors"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => removeAvailabilitySlot(index)}
-                        className="text-red-600 hover:text-red-800 p-1 rounded-full hover:bg-red-50 transition-colors"
-                      >
-                        <X className="h-4 w-4" />
-                      </button>
+                      <div className="space-y-2">
+                        {slot.timeSlots.map((timeSlot, timeIndex) => (
+                          <div key={timeIndex} className="flex items-center justify-between p-2 bg-gray-50 rounded">
+                            <div className="flex items-center space-x-2">
+                              <Clock className="h-3 w-3 text-gray-500" />
+                              <span className="text-sm text-gray-700">
+                                {timeSlot.startTime} - {timeSlot.endTime}
+                              </span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => removeAvailabilitySlot(dateIndex, timeIndex)}
+                              className="text-red-500 hover:text-red-700 p-1 rounded-full hover:bg-red-100 transition-colors"
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   ))}
                   
@@ -4210,8 +4587,8 @@ const ProviderDashboard = () => {
 
               {/* Custom Google Meet Link */}
               {interviewFormat === 'video' && meetingPlatform === 'google-meet' && (
-                <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
-                  <label className="block text-sm font-medium text-blue-800 mb-2">
+                <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
                     Google Meet Link (Optional)
                   </label>
                   <input 
@@ -4219,10 +4596,34 @@ const ProviderDashboard = () => {
                     value={customGoogleMeetLink || ''} 
                     onChange={e => setCustomGoogleMeetLink(e.target.value)}
                     placeholder="https://meet.google.com/xxx-yyyy-zzz"
-                    className="w-full border border-blue-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   />
-                  <p className="text-xs text-blue-600 mt-1">
+                  <p className="text-xs text-gray-500 mt-1">
                     If you have a specific Google Meet link, enter it here. Otherwise, one will be generated automatically.
+                  </p>
+                </div>
+              )}
+
+              {/* General Meeting Link for other platforms */}
+              {interviewFormat === 'video' && meetingPlatform !== 'google-meet' && (
+                <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Meeting Link (Optional)
+                  </label>
+                  <input 
+                    type="url" 
+                    value={customGoogleMeetLink || ''} 
+                    onChange={e => setCustomGoogleMeetLink(e.target.value)}
+                    placeholder={`https://${meetingPlatform === 'zoom' ? 'zoom.us/j/' : 
+                                   meetingPlatform === 'teams' ? 'teams.microsoft.com/l/meetup-join/' : 
+                                   meetingPlatform === 'skype' ? 'join.skype.com/invite/' : 
+                                   'meeting-link'}`}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Enter your {meetingPlatform === 'zoom' ? 'Zoom' : 
+                               meetingPlatform === 'teams' ? 'Microsoft Teams' : 
+                               meetingPlatform === 'skype' ? 'Skype' : 'meeting'} link here.
                   </p>
                 </div>
               )}
@@ -4577,6 +4978,353 @@ const ProviderDashboard = () => {
       />
 
 
+    </div>
+  );
+};
+
+// Settings Section Component
+const SettingsSection = ({ user, navigate }) => {
+  const { settings, loading, updating, updateSettings } = useSettings();
+  const [settingsActiveTab, setSettingsActiveTab] = useState('account');
+  const [localSettings, setLocalSettings] = useState(null);
+  const [saveStatus, setSaveStatus] = useState('');
+
+  // Initialize local settings when settings are loaded
+  useEffect(() => {
+    if (settings) {
+      setLocalSettings(settings);
+    }
+  }, [settings]);
+
+  const handleSettingChange = (path, value) => {
+    setLocalSettings(prev => {
+      const newSettings = { ...prev };
+      const keys = path.split('.');
+      let current = newSettings;
+      
+      for (let i = 0; i < keys.length - 1; i++) {
+        current = current[keys[i]];
+      }
+      
+      current[keys[keys.length - 1]] = value;
+      return newSettings;
+    });
+  };
+
+  const handleSaveSettings = async () => {
+    if (!localSettings) return;
+    
+    setSaveStatus('saving');
+    const result = await updateSettings(localSettings);
+    
+    if (result.success) {
+      setSaveStatus('saved');
+      setTimeout(() => setSaveStatus(''), 2000);
+    } else {
+      setSaveStatus('error');
+      setTimeout(() => setSaveStatus(''), 3000);
+    }
+  };
+
+  const tabs = [
+    { id: 'account', label: 'Account Settings', icon: User },
+    { id: 'notifications', label: 'Notifications', icon: Bell },
+    { id: 'privacy', label: 'Privacy & Security', icon: Shield },
+    { id: 'preferences', label: 'Preferences', icon: Settings }
+  ];
+
+  const renderAccountSettings = () => (
+    <div className="space-y-6">
+      <div className="bg-white p-6 rounded-lg border border-gray-200">
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">Account Information</h3>
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Provider Name</label>
+            <input
+              type="text"
+              value={`${user?.firstName || ''} ${user?.lastName || ''}`}
+              disabled
+              className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-50 text-gray-500"
+            />
+            <p className="text-xs text-gray-500 mt-1">Name cannot be changed here</p>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Email Address</label>
+            <input
+              type="email"
+              value={user?.email || ''}
+              disabled
+              className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-50 text-gray-500"
+            />
+            <p className="text-xs text-gray-500 mt-1">Email cannot be changed</p>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Account Type</label>
+            <div className="flex items-center space-x-4">
+              <span className="px-3 py-2 bg-blue-100 text-blue-800 rounded-md text-sm font-medium">
+                Provider
+              </span>
+              <span className="text-sm text-gray-500">Active since July 2025</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="bg-white p-6 rounded-lg border border-gray-200">
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">Password & Security</h3>
+        <div className="space-y-4">
+          <button className="w-full px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors">
+            Change Password
+          </button>
+          <button className="w-full px-4 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 transition-colors">
+            Enable Two-Factor Authentication
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderNotificationSettings = () => (
+    <div className="space-y-6">
+      <div className="bg-white p-6 rounded-lg border border-gray-200">
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">Notification Preferences</h3>
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h4 className="font-medium text-gray-900">Email Notifications</h4>
+              <p className="text-sm text-gray-500">Receive notifications via email</p>
+            </div>
+            <input
+              type="checkbox"
+              checked={localSettings?.preferences?.notifications?.email ?? true}
+              onChange={(e) => handleSettingChange('preferences.notifications.email', e.target.checked)}
+              className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+            />
+          </div>
+          <div className="flex items-center justify-between">
+            <div>
+              <h4 className="font-medium text-gray-900">Push Notifications</h4>
+              <p className="text-sm text-gray-500">Receive notifications in browser</p>
+            </div>
+            <input
+              type="checkbox"
+              checked={localSettings?.preferences?.notifications?.push ?? true}
+              onChange={(e) => handleSettingChange('preferences.notifications.push', e.target.checked)}
+              className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+            />
+          </div>
+          <div className="flex items-center justify-between">
+            <div>
+              <h4 className="font-medium text-gray-900">New Applications</h4>
+              <p className="text-sm text-gray-500">Get notified when someone applies</p>
+            </div>
+            <input
+              type="checkbox"
+              checked={localSettings?.preferences?.notifications?.applications ?? true}
+              onChange={(e) => handleSettingChange('preferences.notifications.applications', e.target.checked)}
+              className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+            />
+          </div>
+          <div className="flex items-center justify-between">
+            <div>
+              <h4 className="font-medium text-gray-900">Interview Reminders</h4>
+              <p className="text-sm text-gray-500">Remind me before interviews</p>
+            </div>
+            <input
+              type="checkbox"
+              checked={localSettings?.preferences?.notifications?.interviews ?? true}
+              onChange={(e) => handleSettingChange('preferences.notifications.interviews', e.target.checked)}
+              className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+            />
+          </div>
+          <div className="flex items-center justify-between">
+            <div>
+              <h4 className="font-medium text-gray-900">Platform Updates</h4>
+              <p className="text-sm text-gray-500">Receive platform news and updates</p>
+            </div>
+            <input
+              type="checkbox"
+              checked={localSettings?.preferences?.notifications?.updates ?? false}
+              onChange={(e) => handleSettingChange('preferences.notifications.updates', e.target.checked)}
+              className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+            />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderPrivacySettings = () => (
+    <div className="space-y-6">
+      <div className="bg-white p-6 rounded-lg border border-gray-200">
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">Privacy Settings</h3>
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h4 className="font-medium text-gray-900">Profile Visibility</h4>
+              <p className="text-sm text-gray-500">Make your profile visible to refugees</p>
+            </div>
+            <input
+              type="checkbox"
+              checked={localSettings?.privacy?.profileVisible ?? true}
+              onChange={(e) => handleSettingChange('privacy.profileVisible', e.target.checked)}
+              className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+            />
+          </div>
+          <div className="flex items-center justify-between">
+            <div>
+              <h4 className="font-medium text-gray-900">Contact Information</h4>
+              <p className="text-sm text-gray-500">Show contact information to applicants</p>
+            </div>
+            <input
+              type="checkbox"
+              checked={localSettings?.privacy?.showContact ?? true}
+              onChange={(e) => handleSettingChange('privacy.showContact', e.target.checked)}
+              className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+            />
+          </div>
+        </div>
+      </div>
+
+      <div className="bg-white p-6 rounded-lg border border-gray-200">
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">Data & Security</h3>
+        <div className="space-y-4">
+          <button className="w-full px-4 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 transition-colors">
+            Download My Data
+          </button>
+          <button className="w-full px-4 py-2 bg-red-100 text-red-700 rounded-md hover:bg-red-200 transition-colors">
+            Delete Account
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderPreferences = () => (
+    <div className="space-y-6">
+      <div className="bg-white p-6 rounded-lg border border-gray-200">
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">Display Preferences</h3>
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Theme</label>
+            <select
+              value={localSettings?.preferences?.theme ?? 'light'}
+              onChange={(e) => handleSettingChange('preferences.theme', e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            >
+              <option value="light">Light</option>
+              <option value="dark">Dark</option>
+              <option value="auto">Auto</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Language</label>
+            <select
+              value={localSettings?.preferences?.language ?? 'en'}
+              onChange={(e) => handleSettingChange('preferences.language', e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            >
+              <option value="en">English</option>
+              <option value="es">Spanish</option>
+              <option value="fr">French</option>
+              <option value="ar">Arabic</option>
+            </select>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <div className="flex justify-between items-center">
+          <div>
+            <p className="text-gray-600">Manage your account and preferences</p>
+          </div>
+        </div>
+        <div className="animate-pulse space-y-6">
+          <div className="bg-white p-6 rounded-lg border border-gray-200">
+            <div className="h-6 bg-gray-200 rounded w-1/4 mb-4"></div>
+            <div className="space-y-4">
+              <div className="h-4 bg-gray-200 rounded w-3/4"></div>
+              <div className="h-4 bg-gray-200 rounded w-1/2"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex justify-between items-center">
+        <div>
+          <p className="text-gray-600">Manage your account and preferences</p>
+        </div>
+        {saveStatus && (
+          <div className={`px-3 py-1 rounded-full text-sm font-medium ${
+            saveStatus === 'saved' ? 'bg-green-100 text-green-800' :
+            saveStatus === 'saving' ? 'bg-blue-100 text-blue-800' :
+            'bg-red-100 text-red-800'
+          }`}>
+            {saveStatus === 'saved' ? 'Settings saved!' :
+             saveStatus === 'saving' ? 'Saving...' :
+             'Error saving settings'}
+          </div>
+        )}
+      </div>
+
+      {/* Tab Navigation */}
+      <div className="bg-white rounded-lg border border-gray-200">
+        <div className="border-b border-gray-200">
+          <nav className="flex space-x-8 px-6">
+            {tabs.map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setSettingsActiveTab(tab.id)}
+                className={`py-4 px-1 border-b-2 font-medium text-sm ${
+                  settingsActiveTab === tab.id
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                <div className="flex items-center">
+                  <tab.icon className="h-4 w-4 mr-2" />
+                  {tab.label}
+                </div>
+              </button>
+            ))}
+          </nav>
+        </div>
+
+        <div className="p-6">
+          {settingsActiveTab === 'account' && renderAccountSettings()}
+          {settingsActiveTab === 'notifications' && renderNotificationSettings()}
+          {settingsActiveTab === 'privacy' && renderPrivacySettings()}
+          {settingsActiveTab === 'preferences' && renderPreferences()}
+        </div>
+
+        {/* Save Button */}
+        <div className="px-6 py-4 border-t border-gray-200 bg-gray-50">
+          <div className="flex justify-end">
+            <button
+              onClick={handleSaveSettings}
+              disabled={updating}
+              className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 transition-colors flex items-center"
+            >
+              {updating ? (
+                <>
+                  <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                'Save Settings'
+              )}
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 };

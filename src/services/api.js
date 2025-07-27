@@ -108,6 +108,7 @@ export const interviewsAPI = {
   update: (id, data) => api.put(`/interviews/${id}`, data),
   updateInterview: (id, data) => api.put(`/interviews/${id}`, data),
   delete: (id) => api.delete(`/interviews/${id}`),
+  selectSlot: (id, data) => api.put(`/interviews/${id}/select-slot`, data),
 };
 
 // Health check
@@ -118,6 +119,7 @@ export const healthAPI = {
 export const notificationsAPI = {
   getAll: () => api.get('/notifications'),
   create: (data) => api.post('/notifications', data),
+  createSystem: (data) => api.post('/notifications/system', data),
   markAsRead: (id) => api.put(`/notifications/${id}/read`),
   markAllAsRead: () => api.put('/notifications/read-all'),
   delete: (id) => api.delete(`/notifications/${id}`)
@@ -142,6 +144,7 @@ export const applicationsAPI = {
   getOpportunityApplications: (opportunityId) => api.get(`/applications/opportunity/${opportunityId}`),
   getProviderApplications: () => api.get('/applications/provider'),
   getUserApplications: () => api.get('/applications/user'),
+  getAllApplications: () => api.get('/applications/all'),
   updateStatus: (applicationId, data) => api.put(`/applications/${applicationId}/status`, data),
   getById: (applicationId) => api.get(`/applications/${applicationId}`)
 };

@@ -22,7 +22,7 @@ const notificationSchema = new mongoose.Schema({
       'application_received', 'application_status_change', 'interview_invitation',
       'interview_reminder', 'interview_confirmed', 'interview_cancelled',
       'message_received', 'opportunity_posted', 'profile_viewed',
-      'system_announcement', 'welcome', 'reminder'
+      'system_announcement', 'system', 'welcome', 'reminder'
     ],
     required: true
   },

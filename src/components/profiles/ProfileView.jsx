@@ -47,6 +47,8 @@ const ProfileView = ({ profile, onEdit }) => {
     _id: profile?._id
   });
 
+
+
   // Function to expand common degree abbreviations
   const expandDegreeAbbreviation = (degree) => {
     if (!degree) return degree;
@@ -78,8 +80,8 @@ const ProfileView = ({ profile, onEdit }) => {
   // Construct full URL for profile image
   const getProfileImageUrl = (photoUrl) => {
     if (!photoUrl) {
-      console.log('ProfileView - No photoUrl provided, using default avatar');
-      return '/default-avatar.png';
+      console.log('ProfileView - No photoUrl provided, will show placeholder');
+      return null;
     }
     
     if (photoUrl.startsWith('http')) {
@@ -87,12 +89,12 @@ const ProfileView = ({ profile, onEdit }) => {
       return photoUrl;
     }
     
-    // Use direct backend URL with cache busting (proven solution)
+    // Use static route directly (more reliable)
     const cacheBuster = Date.now();
-    const apiUrl = `http://localhost:5001/api/images/${photoUrl}?t=${cacheBuster}`;
-    console.log('ProfileView - Using direct backend URL:', apiUrl);
+    const imageUrl = `http://localhost:5001/uploads/${photoUrl}?t=${cacheBuster}`;
+    console.log('ProfileView - Using static URL:', imageUrl);
     
-    return apiUrl;
+    return imageUrl;
   };
 
   // Handle image loading errors
@@ -100,27 +102,21 @@ const ProfileView = ({ profile, onEdit }) => {
     console.log('ProfileView - Image failed to load:', e.target.src);
     console.log('ProfileView - Original photoUrl:', profile.photoUrl);
     
-    // Try the static uploads route as fallback
-    if (profile.photoUrl && !profile.photoUrl.startsWith('http')) {
-      const fallbackUrl = `http://localhost:5001/uploads/${profile.photoUrl}?t=${Date.now()}`;
-      console.log('ProfileView - Trying static uploads fallback URL:', fallbackUrl);
-      
-      // Only try fallback if we haven't already tried this URL
-      if (e.target.src !== fallbackUrl) {
-        e.target.src = fallbackUrl;
-        return;
-      }
+    // Show placeholder when image fails to load
+    console.log('ProfileView - Showing placeholder due to image load failure');
+    e.target.style.display = 'none';
+    if (e.target.nextElementSibling) {
+      e.target.nextElementSibling.style.display = 'flex';
     }
-    
-    // Use default avatar as final fallback
-    console.log('ProfileView - Using default avatar as final fallback');
-    e.target.src = '/default-avatar.png';
-    e.target.onerror = null; // Prevent infinite loop
   };
 
   // Handle image load success
   const handleImageLoad = (e) => {
     console.log('ProfileView - Image loaded successfully:', e.target.src);
+    // Hide placeholder when image loads successfully
+    if (e.target.nextElementSibling) {
+      e.target.nextElementSibling.style.display = 'none';
+    }
   };
 
   return (
@@ -134,14 +130,25 @@ const ProfileView = ({ profile, onEdit }) => {
       
       {/* Profile Header */}
       <div className="flex flex-col md:flex-row items-center md:items-end mb-6">
-        <img 
-          src={getProfileImageUrl(profile.photoUrl)} 
-          alt="Profile" 
-          className="w-28 h-28 rounded-full border-4 border-white shadow-md object-cover -mt-16 md:mt-0" 
-          onError={handleImageError}
-          onLoad={handleImageLoad}
-          loading="lazy"
-        />
+        <div className="relative -mt-16 md:mt-0">
+          
+          <img 
+            src={getProfileImageUrl(profile.photoUrl) || 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTEyIiBoZWlnaHQ9IjExMiIgdmlld0JveD0iMCAwIDExMiAxMTIiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxyZWN0IHdpZHRoPSIxMTIiIGhlaWdodD0iMTEyIiBmaWxsPSIjRjNGNEY2Ii8+CjxwYXRoIGQ9Ik01NiA1NkM2Mi4wNjg1IDU2IDY3IDUxLjA2ODUgNjcgNDVDNjcgMzguOTMxNSA2Mi4wNjg1IDM0IDU2IDM0QzQ5LjkzMTUgMzQgNDUgMzguOTMxNSA0NSA0NUM0NSA1MS4wNjg1IDQ5LjkzMTUgNTYgNTYgNTZaIiBmaWxsPSIjOUI5QkE0Ii8+CjxwYXRoIGQ9Ik01NiA2NkM0MC41MzYgNjYgMjggNzguNTM2IDI4IDk0VjEwMkg4NFY5NEM4NCA3OC41MzYgNzEuNDY0IDY2IDU2IDY2WiIgZmlsbD0iIzlCOUJBNCIvPgo8L3N2Zz4K'} 
+            alt="Profile" 
+            className="w-28 h-28 rounded-full border-4 border-white shadow-md object-cover" 
+            onError={handleImageError}
+            onLoad={handleImageLoad}
+            loading="lazy"
+            style={{ display: getProfileImageUrl(profile.photoUrl) ? 'block' : 'none' }}
+          />
+          {/* Placeholder when no image or image fails to load */}
+          <div 
+            className="w-28 h-28 rounded-full border-4 border-white shadow-md bg-gray-200 flex items-center justify-center"
+            style={{ display: getProfileImageUrl(profile.photoUrl) ? 'none' : 'flex' }}
+          >
+            <User className="w-12 h-12 text-gray-400" />
+          </div>
+        </div>
         <div className="ml-0 md:ml-6 mt-4 md:mt-0 text-center md:text-left flex-1">
           <div className="flex items-center justify-center md:justify-start">
             <h1 className="text-2xl font-bold mr-2">{getDisplayName(profile)}</h1>
@@ -163,15 +170,17 @@ const ProfileView = ({ profile, onEdit }) => {
             </span>
           </div>
         </div>
-        <button 
-          className="ml-auto bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors font-medium flex items-center" 
-          onClick={onEdit}
-        >
-          <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-          </svg>
-          Edit Profile
-        </button>
+        {onEdit && (
+          <button 
+            className="ml-auto bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors font-medium flex items-center" 
+            onClick={onEdit}
+          >
+            <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+            </svg>
+            Edit Profile
+          </button>
+        )}
       </div>
       
       {/* Main Content */}

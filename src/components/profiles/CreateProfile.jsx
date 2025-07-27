@@ -483,26 +483,42 @@ const CreateProfile = ({ existingProfile = null, isEditing = false, onProfileUpd
           <div className="mb-8">
             <h2 className="text-xl font-semibold text-gray-900 mb-4">Profile Image</h2>
             <div className="flex items-center space-x-4">
-              <div className="w-24 h-24 bg-gray-200 rounded-full flex items-center justify-center overflow-hidden">
+              <div className="w-24 h-24 bg-gray-200 rounded-full flex items-center justify-center overflow-hidden relative">
                 {profileImage ? (
                   <img
                     src={URL.createObjectURL(profileImage)}
                     alt="Profile"
                     className="w-24 h-24 rounded-full object-cover"
+                    onError={(e) => {
+                      console.log('CreateProfile - New image failed to load');
+                      e.target.style.display = 'none';
+                      e.target.nextElementSibling.style.display = 'flex';
+                    }}
                   />
                 ) : existingProfile?.photoUrl ? (
                   <img 
                     src={`http://localhost:5001/api/images/${existingProfile.photoUrl}?t=${Date.now()}`}
                     alt="Profile" 
-                    className="w-20 h-20 rounded-full object-cover border-2 border-gray-200"
+                    className="w-24 h-24 rounded-full object-cover"
                     onError={(e) => {
                       console.log('CreateProfile - Image failed to load, trying static route');
-                      e.target.src = `http://localhost:5001/uploads/${existingProfile.photoUrl}?t=${Date.now()}`;
+                      const fallbackUrl = `http://localhost:5001/uploads/${existingProfile.photoUrl}?t=${Date.now()}`;
+                      if (e.target.src !== fallbackUrl) {
+                        e.target.src = fallbackUrl;
+                      } else {
+                        e.target.style.display = 'none';
+                        e.target.nextElementSibling.style.display = 'flex';
+                      }
                     }}
                   />
-                ) : (
+                ) : null}
+                {/* Placeholder when no image or image fails to load */}
+                <div 
+                  className={`w-24 h-24 rounded-full flex items-center justify-center ${(profileImage || existingProfile?.photoUrl) ? 'hidden' : ''}`}
+                  style={{ display: (profileImage || existingProfile?.photoUrl) ? 'none' : 'flex' }}
+                >
                   <Camera className="w-8 h-8 text-gray-400" />
-                )}
+                </div>
               </div>
               <div>
                 <input

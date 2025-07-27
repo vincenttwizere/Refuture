@@ -1,6 +1,7 @@
 const express = require('express');
 const { body, validationResult } = require('express-validator');
 const Message = require('../models/Message');
+const User = require('../models/User');
 const { protect } = require('../middleware/auth');
 
 const router = express.Router();
@@ -66,9 +67,25 @@ router.post('/', protect, [
       });
     }
 
+    // Get sender and recipient user info for names
+    const sender = await User.findById(req.user._id).select('firstName lastName');
+    const recipientUser = await User.findById(recipient).select('firstName lastName');
+    
+    if (!sender || !recipientUser) {
+      return res.status(404).json({
+        success: false,
+        message: 'Sender or recipient not found'
+      });
+    }
+
+    const senderName = `${sender.firstName} ${sender.lastName}`.trim();
+    const recipientName = `${recipientUser.firstName} ${recipientUser.lastName}`.trim();
+
     const message = await Message.create({
       sender: req.user._id,
       recipient,
+      senderName,
+      recipientName,
       content,
       subject
     });
