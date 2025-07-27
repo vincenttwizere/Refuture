@@ -58,7 +58,7 @@ export const useInterviews = (userRole = 'provider') => {
 
   const sendInterviewInvite = async (inviteData) => {
     try {
-      const response = await interviewsAPI.sendInvite(inviteData);
+      const response = await interviewsAPI.sendInterviewInvite(inviteData);
       // Refresh the list after sending invite
       await fetchInterviews();
       return response.data;
@@ -88,7 +88,7 @@ export const useInterviews = (userRole = 'provider') => {
 
   const updateInterview = async (interviewId, updateData) => {
     try {
-      const response = await interviewsAPI.update(interviewId, updateData);
+      const response = await interviewsAPI.updateInterview(interviewId, updateData);
       // Update the local state
       setInterviews(prev => 
         prev.map(interview => 

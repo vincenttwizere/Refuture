@@ -91,6 +91,7 @@ export const profilesAPI = {
 export const interviewsAPI = {
   // Provider endpoints
   sendInvite: (data) => api.post('/interviews/invite', data),
+  sendInterviewInvite: (data) => api.post('/interviews/profile-invite', data),
   getProviderInterviews: (params = {}) => api.get('/interviews/provider', { params }),
   
   // Talent endpoints
@@ -105,6 +106,7 @@ export const interviewsAPI = {
   // Common endpoints
   getById: (id) => api.get(`/interviews/${id}`),
   update: (id, data) => api.put(`/interviews/${id}`, data),
+  updateInterview: (id, data) => api.put(`/interviews/${id}`, data),
   delete: (id) => api.delete(`/interviews/${id}`),
 };
 
@@ -131,6 +133,7 @@ export const messagesAPI = {
 export const usersAPI = {
   getAll: (params = {}) => api.get('/users', { params }),
   getById: (id) => api.get(`/users/${id}`),
+  getByEmail: (email) => api.get(`/users/by-email/${encodeURIComponent(email)}`),
   search: (query) => api.get('/users', { params: { search: query } })
 };
 

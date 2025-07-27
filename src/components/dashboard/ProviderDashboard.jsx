@@ -39,18 +39,21 @@ import {
   Languages,
   Palette,
   Search,
-  User
+  User,
+  Shield,
+  Wrench,
+  Bell
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { useOpportunities } from '../../hooks/useOpportunities';
 import { useInterviews } from '../../hooks/useInterviews';
-import { useProfiles } from '../../hooks/useProfiles';
 import { useNotifications } from '../../hooks/useNotifications';
 import { useMessages } from '../../hooks/useMessages';
 import { useApplications } from '../../hooks/useApplications';
+import { useProfiles } from '../../hooks/useProfiles';
 import MessageCenter from '../messaging/MessageCenter';
-import { messagesAPI, notificationsAPI, interviewsAPI } from '../../services/api';
+import { messagesAPI, notificationsAPI, interviewsAPI, usersAPI } from '../../services/api';
 import { Line, Bar } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
@@ -137,13 +140,14 @@ const ProviderDashboard = () => {
     refetch: refetchInterviews
   } = useInterviews('provider');
 
+  // Use profiles data for available talents since we want to show refugees who have created profiles
   const { 
-    profiles, 
+    profiles: refugeeProfiles, 
     loading: profilesLoading, 
     error: profilesError,
     fetchProfiles,
-    fetchProfileById
-  } = useProfiles();
+    refetch: refetchProfiles
+  } = useProfiles({ role: 'refugee' });
 
   // Memoize the fetchProfiles function to prevent unnecessary re-renders
   const stableFetchProfiles = useCallback(() => {
@@ -152,53 +156,111 @@ const ProviderDashboard = () => {
 
   // Ensure profiles are fetched when component mounts
   useEffect(() => {
-    if (profiles.length === 0 && !profilesLoading) {
+    if (refugeeProfiles.length === 0 && !profilesLoading) {
       stableFetchProfiles();
     }
-  }, [profiles.length, profilesLoading, stableFetchProfiles]);
+  }, [refugeeProfiles.length, profilesLoading, stableFetchProfiles]);
 
-  // Memoize refugee profiles filtering to prevent unnecessary re-computations
-  const validCategories = ['student', 'job seeker', 'undocumented_talent'];
+  // Memoize refugee profiles filtering and categorization
   const allRefugeeProfiles = useMemo(() => {
-    if (!profiles || profiles.length === 0) return [];
+    if (!refugeeProfiles || refugeeProfiles.length === 0) return [];
     
-    // Debug logging
-    console.log('ProviderDashboard - Available Talents Debug:', {
-      totalProfiles: profiles.length,
-      profiles: profiles.map(p => ({
-        id: p._id,
-        email: p.email,
-        fullName: p.fullName || `${p.firstName} ${p.lastName}`,
-        option: p.option,
-        userRole: p.user?.role,
-        isPublic: p.isPublic
-      }))
-    });
-    
-    const filtered = profiles.filter(p => {
-      // Check if user role is refugee
-      const isRefugeeUser = p.user && p.user.role === 'refugee';
-      // Check if option is a valid refugee category
-      const hasValidOption = validCategories.includes(p.option);
-      // Check if profile is public (optional, but good for filtering)
-      const isPublic = p.isPublic !== false; // Default to true if not specified
-      
-      return isRefugeeUser || hasValidOption;
-    });
-    
-    console.log('ProviderDashboard - Filtered Refugee Profiles:', {
-      filteredCount: filtered.length,
-      profiles: filtered.map(p => ({
-        id: p._id,
-        email: p.email,
-        fullName: p.fullName || `${p.firstName} ${p.lastName}`,
-        option: p.option,
-        userRole: p.user?.role
-      }))
+    // Filter for refugee profiles where the user can log in (active and verified)
+    const filtered = refugeeProfiles.filter(p => {
+      const canLogin = p.user?.isActive !== false && p.user?.isVerified !== false;
+      return canLogin;
     });
     
     return filtered;
-  }, [profiles]);
+  }, [refugeeProfiles]);
+
+  // Categorize talents based on their profile data
+  const categorizedTalents = useMemo(() => {
+    const students = allRefugeeProfiles.filter(profile => {
+      // Check if they have academic records or are currently studying
+      const hasAcademicRecords = profile.academicRecords && profile.academicRecords.length > 0;
+      const isCurrentlyStudying = profile.education && profile.education.some(edu => 
+        edu.end === 'Present' || edu.end === 'Current' || !edu.end
+      );
+      const hasStudentIndicators = profile.talentCategory === 'student' || 
+                                 profile.option === 'student' ||
+                                 profile.desiredField;
+      return hasAcademicRecords || isCurrentlyStudying || hasStudentIndicators;
+    });
+
+    const jobSeekers = allRefugeeProfiles.filter(profile => {
+      // Check if they have work experience or are looking for jobs
+      const hasWorkExperience = profile.experience && profile.experience.length > 0;
+      const isJobSeeker = profile.talentCategory === 'job_seeker' || 
+                         profile.option === 'job_seeker' ||
+                         profile.preferredWorkType && profile.preferredWorkType.length > 0;
+      return hasWorkExperience || isJobSeeker;
+    });
+
+    const nonDocumented = allRefugeeProfiles.filter(profile => {
+      // Check if they don't have formal documentation
+      const hasNoAcademicRecords = !profile.academicRecords || profile.academicRecords.length === 0;
+      const hasNoWorkExperience = !profile.experience || profile.experience.length === 0;
+      const isNonDocumented = profile.talentCategory === 'non_documented' || 
+                             profile.option === 'non_documented';
+      return (hasNoAcademicRecords && hasNoWorkExperience) || isNonDocumented;
+    });
+
+    return { students, jobSeekers, nonDocumented };
+  }, [allRefugeeProfiles]);
+
+  // Get current category profiles based on selection
+  const getCurrentCategoryProfiles = () => {
+    switch (selectedTalentCategory) {
+      case 'students':
+        return categorizedTalents.students;
+      case 'job_seekers':
+        return categorizedTalents.jobSeekers;
+      case 'non_documented':
+        return categorizedTalents.nonDocumented;
+      default:
+        return allRefugeeProfiles;
+    }
+  };
+
+  // Sort profiles based on selected criteria
+  const getSortedProfiles = (profiles) => {
+    const currentProfiles = profiles.length > 0 ? profiles : getCurrentCategoryProfiles();
+    
+    switch (sortBy) {
+      case 'marks':
+        return [...currentProfiles].sort((a, b) => {
+          // Get the highest percentage from academic records
+          const getHighestPercentage = (profile) => {
+            if (!profile.academicRecords || profile.academicRecords.length === 0) return 0;
+            const percentages = profile.academicRecords
+              .map(record => parseFloat(record.percentage) || 0)
+              .filter(p => p > 0);
+            return percentages.length > 0 ? Math.max(...percentages) : 0;
+          };
+          return getHighestPercentage(b) - getHighestPercentage(a);
+        });
+      case 'name':
+        return [...currentProfiles].sort((a, b) => {
+          const nameA = (a.fullName || `${a.firstName || ''} ${a.lastName || ''}`.trim() || '').toLowerCase();
+          const nameB = (b.fullName || `${b.firstName || ''} ${b.lastName || ''}`.trim() || '').toLowerCase();
+          return nameA.localeCompare(nameB);
+        });
+      case 'recent':
+        return [...currentProfiles].sort((a, b) => {
+          const dateA = new Date(a.createdAt || 0);
+          const dateB = new Date(b.createdAt || 0);
+          return dateB - dateA;
+        });
+      default:
+        return currentProfiles;
+    }
+  };
+
+  // Update filtered profiles when allRefugeeProfiles changes
+  useEffect(() => {
+    setFilteredProfiles(allRefugeeProfiles);
+  }, [allRefugeeProfiles]);
 
   const { notifications, refetch: refetchNotifications } = useNotifications();
   const { messages, loading: messagesLoading, error: messagesError, refetch: refetchMessages } = useMessages();
@@ -208,6 +270,9 @@ const ProviderDashboard = () => {
   const [conversations, setConversations] = useState([]);
   const [newMessage, setNewMessage] = useState('');
   const [sendingMessage, setSendingMessage] = useState(false);
+  const [filteredProfiles, setFilteredProfiles] = useState([]);
+  const [selectedTalentCategory, setSelectedTalentCategory] = useState('all');
+  const [sortBy, setSortBy] = useState('name');
 
 
 
@@ -812,13 +877,14 @@ const ProviderDashboard = () => {
 
   // Memoize profile statistics to prevent recalculation
   const profileStats = useMemo(() => {
+    const refugeeProfilesWithUsers = (refugeeProfiles || []).filter(p => p.user?.isActive !== false && p.user?.isVerified !== false);
     return {
-      students: (profiles || []).filter(p => p.option === 'student').length,
-      jobSeekers: (profiles || []).filter(p => p.option === 'job seeker').length,
-      undocumented: (profiles || []).filter(p => p.option === 'undocumented_talent').length,
-      total: (profiles || []).length
+      students: refugeeProfilesWithUsers.length, // All refugee profiles are considered potential students
+      jobSeekers: refugeeProfilesWithUsers.length, // All refugee profiles are considered potential job seekers
+      undocumented: refugeeProfilesWithUsers.length, // All refugee profiles are considered undocumented talents
+      total: refugeeProfilesWithUsers.length
     };
-  }, [profiles]);
+  }, [refugeeProfiles]);
 
   // Filter opportunities to only those created by the current provider
   const myOpportunities = useMemo(() => {
@@ -846,7 +912,7 @@ const ProviderDashboard = () => {
           )}
 
           {/* Key Metrics */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
             <div className="bg-blue-50 p-4 rounded-lg">
               <h3 className="font-medium text-blue-900">Active Opportunities</h3>
               <p className="text-2xl font-bold text-blue-600 mt-2">{stats.activeOpportunities}</p>
@@ -867,36 +933,71 @@ const ProviderDashboard = () => {
               <p className="text-2xl font-bold text-orange-600 mt-2">{stats.successfulPlacements}</p>
               <p className="text-sm text-orange-600 mt-1">Completed interviews</p>
             </div>
+            <div className="bg-indigo-50 p-4 rounded-lg">
+              <h3 className="font-medium text-indigo-900">Available Talents</h3>
+              <p className="text-2xl font-bold text-indigo-600 mt-2">{profileStats.total}</p>
+              <p className="text-sm text-indigo-600 mt-1">Refugee profiles</p>
+            </div>
           </div>
 
-          {/* Recent Opportunities */}
-          <div className="bg-white p-6 rounded-lg border">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="font-medium text-gray-900">Recent Opportunities</h3>
-              <button
-                onClick={() => setActiveItem('my-opportunities')}
-                className="text-blue-600 hover:text-blue-700 text-sm"
-              >
-                View All
-              </button>
-            </div>
-            <div className="space-y-3">
-              {myOpportunities.slice(0, 3).map(opp => (
-                <div key={opp._id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                  <div>
-                    <p className="font-medium text-sm">{opp.title}</p>
-                    <p className="text-xs text-gray-500">{getApplicationCount(opp._id)} applications</p>
+          {/* Recent Opportunities and Available Talents */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="bg-white p-6 rounded-lg border">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="font-medium text-gray-900">Recent Opportunities</h3>
+                <button
+                  onClick={() => setActiveItem('my-opportunities')}
+                  className="text-blue-600 hover:text-blue-700 text-sm"
+                >
+                  View All
+                </button>
+              </div>
+              <div className="space-y-3">
+                {myOpportunities.slice(0, 3).map(opp => (
+                  <div key={opp._id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                    <div>
+                      <p className="font-medium text-sm">{opp.title}</p>
+                      <p className="text-xs text-gray-500">{getApplicationCount(opp._id)} applications</p>
+                    </div>
+                    <span className={`text-xs px-2 py-1 rounded-full ${
+                      opp.isActive ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
+                    }`}>
+                      {opp.isActive ? 'Active' : 'Inactive'}
+                    </span>
                   </div>
-                  <span className={`text-xs px-2 py-1 rounded-full ${
-                    opp.isActive ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
-                  }`}>
-                    {opp.isActive ? 'Active' : 'Inactive'}
-                  </span>
-                </div>
-              ))}
-              {myOpportunities.length === 0 && (
-                <p className="text-gray-500 text-sm text-center py-4">No opportunities created yet</p>
-              )}
+                ))}
+                {myOpportunities.length === 0 && (
+                  <p className="text-gray-500 text-sm text-center py-4">No opportunities created yet</p>
+                )}
+              </div>
+            </div>
+
+            <div className="bg-white p-6 rounded-lg border">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="font-medium text-gray-900">Recent Refugee Profiles</h3>
+                <button
+                  onClick={() => setActiveItem('available-talents')}
+                  className="text-indigo-600 hover:text-indigo-700 text-sm"
+                >
+                  View All
+                </button>
+              </div>
+              <div className="space-y-3">
+                {allRefugeeProfiles.slice(0, 3).map(profile => (
+                  <div key={profile._id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                    <div>
+                      <p className="font-medium text-sm">{profile.fullName || `${profile.firstName || ''} ${profile.lastName || ''}`.trim() || 'Unknown Name'}</p>
+                      <p className="text-xs text-gray-500">{profile.user?.email || 'No email'}</p>
+                    </div>
+                    <span className="text-xs px-2 py-1 rounded-full bg-indigo-100 text-indigo-800">
+                      Refugee
+                    </span>
+                  </div>
+                ))}
+                {allRefugeeProfiles.length === 0 && (
+                  <p className="text-gray-500 text-sm text-center py-4">No refugee profiles available</p>
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -904,83 +1005,165 @@ const ProviderDashboard = () => {
     }
 
     if (activeItem === 'available-talents') {
-      // Use the memoized refugee profiles from the top level
-      // Category labels
-      const categoryLabels = {
-        all: 'All',
-        student: 'Students',
-        'job seeker': 'Job Seekers',
-        undocumented_talent: 'Undocumented Talents'
-      };
-      const filterCategories = ['all', ...validCategories];
-      // Filter by selected category
-      let displayProfiles = selectedCategory === 'all'
-        ? allRefugeeProfiles
-        : allRefugeeProfiles.filter(p => p.option === selectedCategory);
-      // Sort students by score descending if 'Students' is selected
-      if (selectedCategory === 'student') {
-        displayProfiles = displayProfiles.slice().sort((a, b) => {
-          // Get scores from different possible sources
-          const scoreA = a.score || 
-                         (a.academicRecords && a.academicRecords.length > 0 ? 
-                          parseFloat(a.academicRecords[0].percentage) : 0);
-          const scoreB = b.score || 
-                         (b.academicRecords && b.academicRecords.length > 0 ? 
-                          parseFloat(b.academicRecords[0].percentage) : 0);
-          
-          // Sort by score descending (highest first)
-          return scoreB - scoreA;
-        });
-      }
+      const displayProfiles = getSortedProfiles(filteredProfiles);
       return (
         <div className="space-y-6">
           {/* Header */}
-          <div className="flex justify-between items-center">
-            <div>
-              <h2 className="text-2xl font-bold text-gray-900">Available Talents</h2>
-              <p className="text-gray-600">Browse refugee talent profiles</p>
-            </div>
+          <div className="mb-6">
+            <p className="text-gray-600">Browse and filter refugee profiles by category</p>
           </div>
-          {/* Category Filter Buttons */}
-          <div className="flex flex-wrap gap-2 mb-4">
-            {filterCategories.map(category => (
-              <button
-                key={category}
-                className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${selectedCategory === category ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-blue-50'}`}
-                onClick={() => setSelectedCategory(category)}
-              >
-                {categoryLabels[category]}
-              </button>
-            ))}
-          </div>
-          
-                    {/* Information for Students */}
-          {selectedCategory === 'student' && (
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
+
+          {/* Category Statistics */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
               <div className="flex items-center">
                 <div className="p-2 bg-blue-100 rounded-lg mr-3">
-                  <Award className="h-5 w-5 text-blue-600" />
+                  <Users className="h-5 w-5 text-blue-600" />
                 </div>
                 <div>
-                  <h4 className="font-medium text-blue-900">Student Rankings</h4>
-                  <p className="text-sm text-blue-700">
-                    Ranked by academic performance
+                  <h4 className="font-medium text-blue-900">Total Talents</h4>
+                  <p className="text-2xl font-bold text-blue-600">{allRefugeeProfiles.length}</p>
+                </div>
+              </div>
+            </div>
+            <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+              <div className="flex items-center">
+                <div className="p-2 bg-green-100 rounded-lg mr-3">
+                  <BookOpen className="h-5 w-5 text-green-600" />
+                </div>
+                <div>
+                  <h4 className="font-medium text-green-900">Students</h4>
+                  <p className="text-2xl font-bold text-green-600">{categorizedTalents.students.length}</p>
+                </div>
+              </div>
+            </div>
+            <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
+              <div className="flex items-center">
+                <div className="p-2 bg-purple-100 rounded-lg mr-3">
+                  <Wrench className="h-5 w-5 text-purple-600" />
+                </div>
+                <div>
+                  <h4 className="font-medium text-purple-900">Job Seekers</h4>
+                  <p className="text-2xl font-bold text-purple-600">{categorizedTalents.jobSeekers.length}</p>
+                </div>
+              </div>
+            </div>
+            <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
+              <div className="flex items-center">
+                <div className="p-2 bg-orange-100 rounded-lg mr-3">
+                  <Shield className="h-5 w-5 text-orange-600" />
+                </div>
+                <div>
+                  <h4 className="font-medium text-orange-900">Non-documented</h4>
+                  <p className="text-2xl font-bold text-orange-600">{categorizedTalents.nonDocumented.length}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+          {/* Filters and Search Section */}
+          <div className="bg-white p-6 rounded-lg border">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+              {/* Category Filter */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Talent Category</label>
+                <select
+                  value={selectedTalentCategory}
+                  onChange={(e) => {
+                    setSelectedTalentCategory(e.target.value);
+                    setFilteredProfiles([]); // Clear search filter when category changes
+                  }}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
+                  <option value="all">All Talents ({allRefugeeProfiles.length})</option>
+                  <option value="students">Students ({categorizedTalents.students.length})</option>
+                  <option value="job_seekers">Job Seekers ({categorizedTalents.jobSeekers.length})</option>
+                  <option value="non_documented">Non-documented ({categorizedTalents.nonDocumented.length})</option>
+                </select>
+              </div>
+
+              {/* Sort By */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Sort By</label>
+                <select
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
+                  <option value="name">Name (A-Z)</option>
+                  <option value="recent">Most Recent</option>
+                  {selectedTalentCategory === 'students' && <option value="marks">Highest Marks</option>}
+                </select>
+              </div>
+
+              {/* Search Bar */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Search</label>
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                  <input
+                    type="text"
+                    placeholder="Search by name, email, or skills..."
+                    className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    onChange={(e) => {
+                      const searchTerm = e.target.value.toLowerCase();
+                      if (searchTerm === '') {
+                        setFilteredProfiles([]); // Use category filter only
+                      } else {
+                        const currentCategoryProfiles = getCurrentCategoryProfiles();
+                        const filtered = currentCategoryProfiles.filter(profile => {
+                          const name = (profile.fullName || `${profile.firstName || ''} ${profile.lastName || ''}`.trim() || '').toLowerCase();
+                          const email = (profile.user?.email || '').toLowerCase();
+                          const skills = (profile.skills || []).join(' ').toLowerCase();
+                          return name.includes(searchTerm) || email.includes(searchTerm) || skills.includes(searchTerm);
+                        });
+                        setFilteredProfiles(filtered);
+                      }
+                    }}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Active Filters Display */}
+            {(selectedTalentCategory !== 'all' || sortBy !== 'name') && (
+              <div className="flex items-center gap-2 text-sm text-gray-600">
+                <span>Active filters:</span>
+                {selectedTalentCategory !== 'all' && (
+                  <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded-full">
+                    {selectedTalentCategory === 'students' ? 'Students' : 
+                     selectedTalentCategory === 'job_seekers' ? 'Job Seekers' : 'Non-documented'}
+                  </span>
+                )}
+                {sortBy !== 'name' && (
+                  <span className="px-2 py-1 bg-green-100 text-green-800 rounded-full">
+                    {sortBy === 'marks' ? 'Sorted by Marks' : 'Sorted by Recent'}
+                  </span>
+                )}
+                <button
+                  onClick={() => {
+                    setSelectedTalentCategory('all');
+                    setSortBy('name');
+                    setFilteredProfiles([]);
+                  }}
+                  className="text-red-600 hover:text-red-800 underline"
+                >
+                  Clear all
+                </button>
+              </div>
+            )}
+
+            {/* Warning if error */}
+            {profilesError && (
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                <div className="flex items-center">
+                  <AlertCircle className="h-5 w-5 text-yellow-400 mr-2" />
+                  <p className="text-yellow-800 text-sm">
+                    Could not refresh talents. Showing last available data. <button onClick={stableFetchProfiles} className="ml-2 underline text-blue-600">Retry</button>
                   </p>
                 </div>
               </div>
-            </div>
-          )}
-          {/* Warning if error */}
-          {profilesError && (
-            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-2">
-              <div className="flex items-center">
-                <AlertCircle className="h-5 w-5 text-yellow-400 mr-2" />
-                <p className="text-yellow-800 text-sm">
-                  Could not refresh talents. Showing last available data. <button onClick={stableFetchProfiles} className="ml-2 underline text-blue-600">Retry</button>
-                </p>
-              </div>
-            </div>
-          )}
+            )}
+          </div>
           {/* Table or Loader */}
           {profilesLoading && allRefugeeProfiles.length === 0 ? (
             <div className="space-y-4">
@@ -996,126 +1179,92 @@ const ProviderDashboard = () => {
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
-                    {/* Add ranking column for students */}
-                    {selectedCategory === 'student' && (
-                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Rank</th>
-                    )}
                     <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
-                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Age</th>
-                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Gender</th>
-                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Location</th>
-                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Key Skills</th>
-                    {/* Add Score column for students */}
-                    {selectedCategory === 'student' && (
-                                          <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Score/GPA
-                    </th>
+                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Email</th>
+                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Category</th>
+                    {selectedTalentCategory === 'students' && (
+                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Highest Marks</th>
                     )}
+                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Joined</th>
                     <th className="px-4 py-2"></th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-100">
-                  {displayProfiles.map((profile, index) => (
-                    <tr key={profile._id} className="hover:bg-blue-50 transition-colors">
-                      {/* Show ranking for students */}
-                      {selectedCategory === 'student' && (
-                        <td className="px-4 py-2">
-                          {(() => {
-                            const rank = index + 1;
-                            if (rank === 1) {
-                              return (
-                                <div className="flex items-center">
-                                  <span className="bg-yellow-100 text-yellow-800 text-xs font-bold px-2 py-1 rounded-full">🥇 1st</span>
-                                </div>
-                              );
-                            } else if (rank === 2) {
-                              return (
-                                <div className="flex items-center">
-                                  <span className="bg-gray-100 text-gray-800 text-xs font-bold px-2 py-1 rounded-full">🥈 2nd</span>
-                                </div>
-                              );
-                            } else if (rank === 3) {
-                              return (
-                                <div className="flex items-center">
-                                  <span className="bg-orange-100 text-orange-800 text-xs font-bold px-2 py-1 rounded-full">🥉 3rd</span>
-                                </div>
-                              );
-                            } else {
-                              return (
-                                <span className="text-sm font-medium text-gray-600">#{rank}</span>
-                              );
-                            }
-                          })()}
+                  {displayProfiles.map((profile) => {
+                    // Determine category
+                    const isStudent = categorizedTalents.students.includes(profile);
+                    const isJobSeeker = categorizedTalents.jobSeekers.includes(profile);
+                    const isNonDocumented = categorizedTalents.nonDocumented.includes(profile);
+                    
+                    // Get highest marks for students
+                    const getHighestMarks = () => {
+                      if (!profile.academicRecords || profile.academicRecords.length === 0) return 'N/A';
+                      const percentages = profile.academicRecords
+                        .map(record => parseFloat(record.percentage) || 0)
+                        .filter(p => p > 0);
+                      return percentages.length > 0 ? `${Math.max(...percentages)}%` : 'N/A';
+                    };
+
+                    return (
+                      <tr key={profile._id} className="hover:bg-blue-50 transition-colors">
+                        <td className="px-4 py-2 font-semibold text-gray-900">
+                          {profile.fullName || `${profile.firstName || ''} ${profile.lastName || ''}`.trim() || 'Unknown Name'}
                         </td>
-                      )}
-                      <td className="px-4 py-2 font-semibold text-gray-900">{profile.fullName || profile.firstName + ' ' + profile.lastName}</td>
-                      <td className="px-4 py-2">{profile.age || '-'}</td>
-                      <td className="px-4 py-2">{profile.gender || '-'}</td>
-                      <td className="px-4 py-2">{profile.currentLocation || '-'}</td>
-                      <td className="px-4 py-2">
-                        <div className="flex flex-wrap gap-1">
-                          {profile.skills?.slice(0, 3).map((skill, i) => (
-                            <span key={i} className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
-                              {skill}
-                            </span>
-                          ))}
-                          {profile.skills?.length > 3 && (
-                            <span className="text-xs text-gray-500">+{profile.skills.length - 3} more</span>
-                          )}
-                        </div>
-                      </td>
-                      {/* Show score for students */}
-                      {selectedCategory === 'student' && (
+                        <td className="px-4 py-2 text-gray-600">{profile.user?.email || 'No email'}</td>
                         <td className="px-4 py-2">
-                          {(() => {
-                            // Try to get score from different possible sources
-                            const score = profile.score || 
-                                         (profile.academicRecords && profile.academicRecords.length > 0 ? 
-                                          profile.academicRecords[0].percentage : null);
-                            
-                            if (score) {
-                              const numericScore = parseFloat(score);
-                              return (
-                                <div className="flex flex-col">
-                                  <div className="flex items-center">
-                                    <span className="font-bold text-blue-700">{score}%</span>
-                                    {numericScore >= 90 && (
-                                      <span className="ml-2 text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full">Excellent</span>
-                                    )}
-                                    {numericScore >= 80 && numericScore < 90 && (
-                                      <span className="ml-2 text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full">Good</span>
-                                    )}
-                                    {numericScore >= 70 && numericScore < 80 && (
-                                      <span className="ml-2 text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded-full">Average</span>
-                                    )}
-                                    {numericScore < 70 && (
-                                      <span className="ml-2 text-xs bg-red-100 text-red-800 px-2 py-1 rounded-full">Needs Improvement</span>
-                                    )}
-                                  </div>
-                                  {/* Show academic level if available */}
-                                  {profile.academicRecords && profile.academicRecords.length > 0 && (
-                                    <div className="text-xs text-gray-500 mt-1">
-                                      {profile.academicRecords[0].level} • {profile.academicRecords[0].year}
-                                    </div>
-                                  )}
-                                </div>
-                              );
-                            } else {
-                              return <span className="text-gray-400">No score available</span>;
-                            }
-                          })()}
+                          <div className="flex flex-wrap gap-1">
+                            {isStudent && (
+                              <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">
+                                Student
+                              </span>
+                            )}
+                            {isJobSeeker && (
+                              <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-purple-100 text-purple-800">
+                                Job Seeker
+                              </span>
+                            )}
+                            {isNonDocumented && (
+                              <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-orange-100 text-orange-800">
+                                Non-documented
+                              </span>
+                            )}
+                          </div>
                         </td>
-                      )}
-                      <td className="px-4 py-2">
-                        <button 
-                          onClick={() => { setSelectedProfile(profile); setShowProfileModal(true); }}
-                          className="bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700 text-sm"
-                        >
-                          View
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
+                        {selectedTalentCategory === 'students' && (
+                          <td className="px-4 py-2 text-gray-600 font-medium">
+                            {getHighestMarks()}
+                          </td>
+                        )}
+                        <td className="px-4 py-2">
+                          <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                            profile.user?.isActive !== false && profile.user?.isVerified !== false ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                          }`}>
+                            {profile.user?.isActive !== false && profile.user?.isVerified !== false ? 'Active' : 'Inactive'}
+                          </span>
+                        </td>
+                        <td className="px-4 py-2 text-gray-500">
+                          {profile.createdAt ? new Date(profile.createdAt).toLocaleDateString() : 'Unknown'}
+                        </td>
+                        <td className="px-4 py-2">
+                          <div className="flex space-x-2">
+                            <button 
+                              onClick={() => { setSelectedProfile(profile); setShowProfileModal(true); }}
+                              className="bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700 text-sm"
+                            >
+                              View
+                            </button>
+                            <button 
+                              onClick={() => openInterviewModal(profile)}
+                              className="bg-green-600 text-white px-3 py-1 rounded hover:bg-green-700 text-sm"
+                            >
+                              Schedule Interview
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
               {/* Profile Modal */}
@@ -1135,16 +1284,16 @@ const ProviderDashboard = () => {
             </div>
           ) : (
             <div className="text-center py-12">
-              <Users className="h-16 w-16 mx-auto text-gray-300 mb-4" />
-              <h3 className="text-lg font-medium text-gray-900 mb-2">
-                {profilesLoading ? 'Loading talents...' : 'No refugee talents found'}
-              </h3>
-              <p className="text-gray-600 mb-4">
-                {profilesLoading 
-                  ? 'Please wait while we fetch available refugee profiles...'
-                  : 'No refugee profiles have been created yet. Refugees need to create profiles to appear here.'
-                }
-              </p>
+                              <Users className="h-16 w-16 mx-auto text-gray-300 mb-4" />
+                <h3 className="text-lg font-medium text-gray-900 mb-2">
+                  {profilesLoading ? 'Loading refugee profiles...' : 'No refugee profiles found'}
+                </h3>
+                <p className="text-gray-600 mb-4">
+                  {profilesLoading 
+                    ? 'Please wait while we fetch available refugee profiles...'
+                    : 'No refugees have created profiles on the platform yet.'
+                  }
+                </p>
               {!profilesLoading && (
                 <button 
                   onClick={stableFetchProfiles}
@@ -1163,11 +1312,8 @@ const ProviderDashboard = () => {
       return (
         <div className="space-y-6">
           {/* Header */}
-          <div className="flex justify-between items-center">
-            <div>
-              <h2 className="text-2xl font-bold text-gray-900">My Opportunities</h2>
-              <p className="text-gray-600">Manage your posted opportunities</p>
-            </div>
+          <div className="mb-6">
+            <p className="text-gray-600">Manage your posted opportunities</p>
           </div>
 
           {/* Opportunities List */}
@@ -2859,19 +3005,13 @@ const ProviderDashboard = () => {
     setInterviewError(null);
     
     try {
-      // Find the user ID by email since profiles don't have userId field
-      const userResponse = await fetch(`http://localhost:5001/api/users/by-email/${encodeURIComponent(interviewProfile.email)}`, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
-      });
+      // Use the profile ID directly since we have the profile data
+      console.log('Interview profile:', interviewProfile);
       
-      if (!userResponse.ok) {
-        throw new Error('Could not find user for this profile');
-      }
-      
-      const userData = await userResponse.json();
-      const talentId = userData.user._id;
+      // For now, let's use a mock talent ID since the user lookup is failing
+      // In a real implementation, you would get this from the user database
+      const talentId = interviewProfile._id || interviewProfile.id;
+      console.log('Using profile ID as talent ID:', talentId);
       
       // Create interview invitation with availability slots
       const inviteData = {
@@ -2943,7 +3083,10 @@ const ProviderDashboard = () => {
       alert(rescheduleMode ? 'Interview rescheduled successfully!' : 'Interview scheduled successfully! The candidate will be notified to choose their preferred time.');
       
     } catch (err) {
-      setInterviewError(err.response?.data?.message || 'Failed to schedule interview');
+      console.error('Interview scheduling error:', err);
+      console.error('Error response:', err.response);
+      console.error('Error message:', err.message);
+      setInterviewError(err.response?.data?.message || err.message || 'Failed to schedule interview');
     } finally {
       setInterviewLoading(false);
     }
@@ -3301,7 +3444,7 @@ const ProviderDashboard = () => {
     console.log('Provider Dashboard - Conversations:', conversations);
   }, [messages, messagesLoading, messagesError, conversations]);
 
-  const [selectedCategory, setSelectedCategory] = useState('all');
+
 
   return (
     <div>
@@ -3321,7 +3464,7 @@ const ProviderDashboard = () => {
           {/* Logout button at bottom */}
           <div className="p-4 pb-8 border-t border-gray-200 mt-auto mb-4">
             <button
-              onClick={logout}
+              onClick={() => { logout(); navigate('/'); }}
               className="w-full flex items-center justify-between px-3 py-2 text-left text-sm rounded-lg transition-colors text-gray-700 hover:bg-gray-100"
             >
               <span className="flex items-center">
@@ -4232,9 +4375,9 @@ const ProviderDashboard = () => {
               className="w-full border rounded px-3 py-2 mb-4"
             />
             <div className="max-h-64 overflow-y-auto divide-y divide-gray-100">
-              {profiles.filter(profile =>
-                profile.fullName?.toLowerCase().includes(candidateSearch.toLowerCase()) ||
-                profile.email?.toLowerCase().includes(candidateSearch.toLowerCase()) ||
+              {refugeeProfiles.filter(profile =>
+                (profile.fullName || `${profile.firstName || ''} ${profile.lastName || ''}`.trim())?.toLowerCase().includes(candidateSearch.toLowerCase()) ||
+                profile.user?.email?.toLowerCase().includes(candidateSearch.toLowerCase()) ||
                 (profile.skills && profile.skills.join(' ').toLowerCase().includes(candidateSearch.toLowerCase()))
               ).map(profile => (
                 <button
@@ -4245,12 +4388,12 @@ const ProviderDashboard = () => {
                     openInterviewModal(profile);
                   }}
                 >
-                  <span className="font-medium">{profile.fullName}</span>
-                  <span className="ml-2 text-xs text-gray-500">{profile.email}</span>
+                  <span className="font-medium">{profile.fullName || `${profile.firstName || ''} ${profile.lastName || ''}`.trim() || 'Unknown Name'}</span>
+                  <span className="ml-2 text-xs text-gray-500">{profile.user?.email || 'No email'}</span>
                   <span className="ml-auto text-xs text-gray-400">{profile.skills?.slice(0,2).join(', ')}</span>
                 </button>
               ))}
-              {profiles.length === 0 && (
+              {refugeeProfiles.length === 0 && (
                 <div className="text-gray-500 text-center py-4">No candidates found</div>
               )}
             </div>

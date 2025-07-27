@@ -4,12 +4,21 @@ const interviewSchema = new mongoose.Schema({
   opportunity: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Opportunity',
-    required: true
+    required: function() {
+      return this.interviewType !== 'profile';
+    }
   },
   application: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Application',
-    required: true
+    required: function() {
+      return this.interviewType !== 'profile';
+    }
+  },
+  interviewType: {
+    type: String,
+    enum: ['application', 'profile'],
+    default: 'application'
   },
   provider: {
     type: mongoose.Schema.Types.ObjectId,

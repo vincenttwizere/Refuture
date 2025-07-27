@@ -40,7 +40,7 @@ export const useUsers = () => {
     }
   }, []);
 
-  const updateUserStatus = useCallback(async (userId, status, reason = '') => {
+  const updateUserStatus = useCallback(async (userId, statusData, reason = '') => {
     // Check rate limit before making request
     if (!apiRateLimiters.users.canMakeRequest()) {
       console.log('Rate limit exceeded for users API, skipping request');
@@ -51,18 +51,20 @@ export const useUsers = () => {
       const token = localStorage.getItem('token');
       const response = await axios.put(
         `http://localhost:5001/api/users/${userId}/status`,
-        { status, reason },
+        statusData, // Send the status data directly (isActive, isVerified)
         { headers: { Authorization: `Bearer ${token}` } }
       );
       
-      // Update the user in the local state
-      setUsers(prevUsers => 
-        prevUsers.map(user => 
-          user._id === userId 
-            ? { ...user, status, statusReason: reason }
-            : user
-        )
-      );
+      // Update the user in the local state with the returned user data
+      if (response.data.user) {
+        setUsers(prevUsers => 
+          prevUsers.map(user => 
+            user._id === userId 
+              ? { ...user, ...response.data.user }
+              : user
+          )
+        );
+      }
       
       return response.data;
     } catch (err) {

@@ -91,10 +91,26 @@ const AdminDashboard = () => {
   const navigate = useNavigate();
   const { notifications } = useNotifications();
   const { users, loading: usersLoading, error: usersError, fetchUsers, updateUserStatus, deleteUser, refetchUsers } = useUsers();
-  const { profiles, loading: profilesLoading, error: profilesError, fetchProfiles, deleteProfile, refetch: refetchProfiles } = useProfiles({});
+  // Use profiles data for profiles section to show refugees who have created profiles
+  const { profiles: refugeeProfiles, loading: profilesLoading, error: profilesError, fetchProfiles, deleteProfile, refetchProfiles } = useProfiles();
   const { opportunities, loading: opportunitiesLoading, error: opportunitiesError, fetchOpportunities, deleteOpportunity, updateOpportunityStatus, refetch: refetchOpportunities } = useOpportunities({});
   const { stats, loading: statsLoading, error: statsError, refetchStats } = usePlatformStats();
   const { applications, loading: applicationsLoading, error: applicationsError, refetch: refetchApplications } = useApplications();
+
+  // Auto-refresh data every 30 seconds when on overview
+  useEffect(() => {
+    if (activeItem === 'overview') {
+      const interval = setInterval(() => {
+        fetchUsers();
+        fetchOpportunities();
+        fetchProfiles();
+        refetchStats();
+        refetchApplications();
+      }, 30000); // Refresh every 30 seconds
+
+      return () => clearInterval(interval);
+    }
+  }, [activeItem, fetchUsers, fetchOpportunities, fetchProfiles, refetchStats, refetchApplications]);
 
   // Calculate unread notifications count
   const unreadNotificationsCount = useMemo(() => {
@@ -106,7 +122,6 @@ const AdminDashboard = () => {
   const [userModalOpen, setUserModalOpen] = useState(false);
   const [filters, setFilters] = useState({
     role: '',
-    status: '',
     search: ''
   });
 
@@ -117,7 +132,8 @@ const AdminDashboard = () => {
     search: ''
   });
   const [editingOpportunity, setEditingOpportunity] = useState(null); // Placeholder for edit modal
-
+  const [profilesLoaded, setProfilesLoaded] = useState(false);
+  
   // Get display name from profile data
   const getDisplayName = useCallback((profile) => {
     if (profile.fullName) {
@@ -134,6 +150,20 @@ const AdminDashboard = () => {
     }
     return 'Unknown User';
   }, []);
+  
+  // Memoize profile statistics to prevent unnecessary recalculations
+  const profileStats = useMemo(() => {
+    // Count refugee profiles that have been created
+    const total = refugeeProfiles.length;
+    const refugees = refugeeProfiles.filter(p => p.user?.role === 'refugee').length;
+    const providers = refugeeProfiles.filter(p => p.user?.role === 'provider').length;
+    const admins = refugeeProfiles.filter(p => p.user?.role === 'admin').length;
+    
+    return { total, refugees, providers, admins };
+  }, [refugeeProfiles]);
+
+  // Memoize profiles array to prevent unnecessary re-renders
+  const memoizedProfiles = useMemo(() => refugeeProfiles, [refugeeProfiles]);
 
   // Defensive loading state (must be after all hooks)
   if (loading) return <div className="min-h-screen flex items-center justify-center">Loading user...</div>;
@@ -151,7 +181,7 @@ const AdminDashboard = () => {
 
   // Sidebar main categories only
   const navigationItems = useMemo(() => [
-    { id: 'overview', label: 'Dashboard Overview', icon: BarChart3 },
+    { id: 'overview', label: 'Dashboard Overview', icon: Home },
     { id: 'users', label: 'User Management', icon: Users },
     { id: 'opportunities', label: 'Opportunities', icon: Briefcase },
     { id: 'profiles', label: 'Profiles', icon: User },
@@ -266,27 +296,45 @@ const AdminDashboard = () => {
 
   // Load profiles and opportunities once when component mounts
   useEffect(() => {
-    fetchProfiles();
-    fetchOpportunities();
-  }, [fetchProfiles, fetchOpportunities]);
+    const loadData = async () => {
+      try {
+        await fetchProfiles();
+        setProfilesLoaded(true);
+      } catch (error) {
+        console.error('Error loading profiles:', error);
+        setProfilesLoaded(true); // Set to true even on error to prevent infinite loading
+      }
+      fetchOpportunities();
+    };
+    loadData();
+  }, []); // Remove dependencies to prevent re-fetching on every render
 
   // Main content area
   const renderMainContent = () => {
     if (activeItem === 'overview') {
-      // Calculate real stats from loaded arrays
+      // Calculate real-time stats from loaded data
       const totalUsers = users.length;
-      const activeOpportunities = opportunities.filter(opp => opp.isActive).length;
-      const refugeeProfiles = profiles.filter(p => p.option === 'refugee').length;
-      const pendingApprovals = users.filter(u => u.status === 'pending').length;
-      const numRefugees = users.filter(u => u.role === 'refugee').length;
-      const numProviders = users.filter(u => u.role === 'provider').length;
-      const numAdmins = users.filter(u => u.role === 'admin').length;
-      const recentUsers = users.slice(0, 5);
+      const activeOpportunities = opportunities.filter(opp => opp.status === 'active' || opp.isActive === true).length;
+      const refugeeProfilesCount = refugeeProfiles.filter(p => p.user?.role === 'refugee').length;
+      const pendingApprovals = users.filter(u => u.isActive === true && u.isVerified === false).length;
+      const numRefugees = users.filter(u => u.role === 'refugee' && u.isActive === true).length;
+      const numProviders = users.filter(u => u.role === 'provider' && u.isActive === true).length;
+      const numAdmins = users.filter(u => u.role === 'admin' && u.isActive === true).length;
+      const recentUsers = users.filter(u => u.isActive === true).slice(0, 5);
+      
+      // Additional real-time metrics
+      const totalApplications = applications.length;
+      const pendingApplications = applications.filter(app => app.status === 'pending').length;
+      const acceptedApplications = applications.filter(app => app.status === 'accepted').length;
+      const rejectedApplications = applications.filter(app => app.status === 'rejected').length;
+      const totalOpportunities = opportunities.length;
+      const draftOpportunities = opportunities.filter(opp => opp.status === 'draft').length;
+      const closedOpportunities = opportunities.filter(opp => opp.status === 'closed').length;
 
       return (
         <div className="space-y-6">
           {/* Stats Cards */}
-          {statsLoading ? (
+          {statsLoading || usersLoading || opportunitiesLoading || profilesLoading ? (
             <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
               {[1, 2, 3, 4].map(i => (
                 <div key={i} className="bg-white p-6 rounded-lg border">
@@ -303,53 +351,121 @@ const AdminDashboard = () => {
               ))}
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+            <div>
+              {/* Refresh Button */}
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-xl font-semibold text-gray-900">Dashboard Overview</h2>
+                <button
+                  onClick={() => {
+                    fetchUsers();
+                    fetchOpportunities();
+                    fetchProfiles();
+                    refetchStats();
+                    refetchApplications();
+                  }}
+                  className="flex items-center px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                >
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                  Refresh Data
+                </button>
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                <div className="bg-white p-6 rounded-lg border border-gray-200 shadow-sm">
+                  <div className="flex items-center">
+                    <div className="p-2 bg-blue-100 rounded-lg">
+                      <Users className="h-6 w-6 text-blue-600" />
+                    </div>
+                    <div className="ml-4">
+                      <p className="text-sm font-medium text-gray-600">Total Users</p>
+                      <p className="text-2xl font-bold text-gray-900">{totalUsers}</p>
+                    </div>
+                  </div>
+                </div>
+                <div className="bg-white p-6 rounded-lg border border-gray-200 shadow-sm">
+                  <div className="flex items-center">
+                    <div className="p-2 bg-green-100 rounded-lg">
+                      <Briefcase className="h-6 w-6 text-green-600" />
+                    </div>
+                    <div className="ml-4">
+                      <p className="text-sm font-medium text-gray-600">Active Opportunities</p>
+                      <p className="text-2xl font-bold text-gray-900">{activeOpportunities}</p>
+                    </div>
+                  </div>
+                </div>
+                <div className="bg-white p-6 rounded-lg border border-gray-200 shadow-sm">
+                  <div className="flex items-center">
+                    <div className="p-2 bg-purple-100 rounded-lg">
+                      <User className="h-6 w-6 text-purple-600" />
+                    </div>
+                    <div className="ml-4">
+                      <p className="text-sm font-medium text-gray-600">Refugee Profiles</p>
+                      <p className="text-2xl font-bold text-gray-900">{refugeeProfilesCount}</p>
+                    </div>
+                  </div>
+                </div>
+                <div className="bg-white p-6 rounded-lg border border-gray-200 shadow-sm">
+                  <div className="flex items-center">
+                    <div className="p-2 bg-orange-100 rounded-lg">
+                      <Activity className="h-6 w-6 text-orange-600" />
+                    </div>
+                    <div className="ml-4">
+                      <p className="text-sm font-medium text-gray-600">Pending Approvals</p>
+                      <p className="text-2xl font-bold text-gray-900">{pendingApprovals}</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Additional Stats Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
             <div className="bg-white p-6 rounded-lg border border-gray-200 shadow-sm">
               <div className="flex items-center">
-                <div className="p-2 bg-blue-100 rounded-lg">
-                  <Users className="h-6 w-6 text-blue-600" />
+                <div className="p-2 bg-indigo-100 rounded-lg">
+                  <FileText className="h-6 w-6 text-indigo-600" />
                 </div>
                 <div className="ml-4">
-                  <p className="text-sm font-medium text-gray-600">Total Users</p>
-                  <p className="text-2xl font-bold text-gray-900">{totalUsers}</p>
+                  <p className="text-sm font-medium text-gray-600">Total Applications</p>
+                  <p className="text-2xl font-bold text-gray-900">{totalApplications}</p>
                 </div>
               </div>
             </div>
             <div className="bg-white p-6 rounded-lg border border-gray-200 shadow-sm">
               <div className="flex items-center">
-                <div className="p-2 bg-green-100 rounded-lg">
-                  <Briefcase className="h-6 w-6 text-green-600" />
+                <div className="p-2 bg-yellow-100 rounded-lg">
+                  <Clock className="h-6 w-6 text-yellow-600" />
                 </div>
                 <div className="ml-4">
-                  <p className="text-sm font-medium text-gray-600">Active Opportunities</p>
-                  <p className="text-2xl font-bold text-gray-900">{activeOpportunities}</p>
+                  <p className="text-sm font-medium text-gray-600">Pending Applications</p>
+                  <p className="text-2xl font-bold text-gray-900">{pendingApplications}</p>
                 </div>
               </div>
             </div>
             <div className="bg-white p-6 rounded-lg border border-gray-200 shadow-sm">
               <div className="flex items-center">
-                <div className="p-2 bg-purple-100 rounded-lg">
-                  <User className="h-6 w-6 text-purple-600" />
+                <div className="p-2 bg-emerald-100 rounded-lg">
+                  <CheckCircle className="h-6 w-6 text-emerald-600" />
                 </div>
                 <div className="ml-4">
-                  <p className="text-sm font-medium text-gray-600">Refugee Profiles</p>
-                  <p className="text-2xl font-bold text-gray-900">{refugeeProfiles}</p>
+                  <p className="text-sm font-medium text-gray-600">Accepted Applications</p>
+                  <p className="text-2xl font-bold text-gray-900">{acceptedApplications}</p>
                 </div>
               </div>
             </div>
             <div className="bg-white p-6 rounded-lg border border-gray-200 shadow-sm">
               <div className="flex items-center">
-                <div className="p-2 bg-orange-100 rounded-lg">
-                  <Activity className="h-6 w-6 text-orange-600" />
+                <div className="p-2 bg-red-100 rounded-lg">
+                  <XCircle className="h-6 w-6 text-red-600" />
                 </div>
                 <div className="ml-4">
-                  <p className="text-sm font-medium text-gray-600">Pending Approvals</p>
-                  <p className="text-2xl font-bold text-gray-900">{stats?.pendingApprovals || 0}</p>
+                  <p className="text-sm font-medium text-gray-600">Rejected Applications</p>
+                  <p className="text-2xl font-bold text-gray-900">{rejectedApplications}</p>
                 </div>
               </div>
             </div>
           </div>
-        )}
 
           {/* User Distribution Chart */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -382,20 +498,98 @@ const AdminDashboard = () => {
             <div className="bg-white rounded-lg border p-6">
               <h3 className="text-lg font-medium text-gray-900 mb-4">Recent Activity</h3>
               <div className="space-y-4">
-                {recentUsers.map(user => (
-                  <div key={user._id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                    <div className="flex items-center">
-                      <div className="w-8 h-8 bg-gray-300 rounded-full flex items-center justify-center mr-3">
-                        <span className="text-sm font-medium text-gray-700">{user.firstName?.[0]}{user.lastName?.[0]}</span>
+                {/* Recent Users */}
+                <div className="mb-4">
+                  <h4 className="text-sm font-medium text-gray-700 mb-2">Recent Users</h4>
+                  {recentUsers.length > 0 ? (
+                    recentUsers.map(user => (
+                      <div key={user._id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg mb-2">
+                        <div className="flex items-center">
+                          <div className="w-8 h-8 bg-gray-300 rounded-full flex items-center justify-center mr-3">
+                            <span className="text-sm font-medium text-gray-700">{user.firstName?.[0]}{user.lastName?.[0]}</span>
+                          </div>
+                          <div>
+                            <p className="font-medium text-gray-900">{user.firstName} {user.lastName}</p>
+                            <p className="text-sm text-gray-500">{user.role}</p>
+                          </div>
+                        </div>
+                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                          user.isActive === true && user.isVerified === true ? 'bg-green-100 text-green-800' :
+                          user.isActive === true && user.isVerified === false ? 'bg-yellow-100 text-yellow-800' :
+                          user.isActive === false ? 'bg-red-100 text-red-800' :
+                          'bg-gray-100 text-gray-800'
+                        }`}>
+                          {user.isActive === true && user.isVerified === true ? 'Active' :
+                           user.isActive === true && user.isVerified === false ? 'Pending' :
+                           user.isActive === false ? 'Disabled' :
+                           'Unknown'}
+                        </span>
                       </div>
-                      <div>
-                        <p className="font-medium text-gray-900">{user.firstName} {user.lastName}</p>
-                        <p className="text-sm text-gray-500">{user.role}</p>
+                    ))
+                  ) : (
+                    <p className="text-gray-500 text-sm">No recent user activity</p>
+                  )}
+                </div>
+
+                {/* Recent Opportunities */}
+                <div className="mb-4">
+                  <h4 className="text-sm font-medium text-gray-700 mb-2">Recent Opportunities</h4>
+                  {opportunities.slice(0, 3).length > 0 ? (
+                    opportunities.slice(0, 3).map(opportunity => (
+                      <div key={opportunity._id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg mb-2">
+                        <div className="flex items-center">
+                          <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center mr-3">
+                            <Briefcase className="h-4 w-4 text-blue-600" />
+                          </div>
+                          <div>
+                            <p className="font-medium text-gray-900">{opportunity.title}</p>
+                            <p className="text-sm text-gray-500">{opportunity.company}</p>
+                          </div>
+                        </div>
+                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                          opportunity.status === 'active' ? 'bg-green-100 text-green-800' :
+                          opportunity.status === 'draft' ? 'bg-yellow-100 text-yellow-800' :
+                          opportunity.status === 'closed' ? 'bg-red-100 text-red-800' :
+                          'bg-gray-100 text-gray-800'
+                        }`}>
+                          {opportunity.status}
+                        </span>
                       </div>
-                    </div>
-                    <span className={`text-xs px-2 py-1 rounded-full ${user.status === 'active' ? 'bg-green-100 text-green-800' : user.status === 'pending' ? 'bg-yellow-100 text-yellow-800' : 'bg-red-100 text-red-800'}`}>{user.status}</span>
-                  </div>
-                ))}
+                    ))
+                  ) : (
+                    <p className="text-gray-500 text-sm">No recent opportunities</p>
+                  )}
+                </div>
+
+                {/* Recent Applications */}
+                <div>
+                  <h4 className="text-sm font-medium text-gray-700 mb-2">Recent Applications</h4>
+                  {applications.slice(0, 3).length > 0 ? (
+                    applications.slice(0, 3).map(application => (
+                      <div key={application._id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg mb-2">
+                        <div className="flex items-center">
+                          <div className="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center mr-3">
+                            <FileText className="h-4 w-4 text-purple-600" />
+                          </div>
+                          <div>
+                            <p className="font-medium text-gray-900">{application.opportunity?.title || 'Unknown Opportunity'}</p>
+                            <p className="text-sm text-gray-500">{application.applicant?.firstName} {application.applicant?.lastName}</p>
+                          </div>
+                        </div>
+                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                          application.status === 'accepted' ? 'bg-green-100 text-green-800' :
+                          application.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
+                          application.status === 'rejected' ? 'bg-red-100 text-red-800' :
+                          'bg-gray-100 text-gray-800'
+                        }`}>
+                          {application.status}
+                        </span>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-gray-500 text-sm">No recent applications</p>
+                  )}
+                </div>
               </div>
             </div>
           </div>
@@ -407,57 +601,62 @@ const AdminDashboard = () => {
       return (
         <div className="space-y-6">
           {/* Description */}
-              <p className="text-gray-600">Manage platform users and their permissions</p>
+              <p className="text-gray-600">Manage users who can login to the platform</p>
 
           {/* Filters */}
           <div className="bg-white p-6 rounded-lg border border-gray-200 shadow-sm">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">User Management</h3>
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Search</label>
-                                  <input
-                    type="text"
-                    placeholder="Search users..."
-                    value={filters.search}
-                    onChange={(e) => setFilters(prev => ({ ...prev, search: e.target.value }))}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
-                  />
+                <input
+                  type="text"
+                  placeholder="Search users..."
+                  value={filters.search}
+                  onChange={(e) => setFilters(prev => ({ ...prev, search: e.target.value }))}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                />
               </div>
-                  <div>
+              <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
-                                  <select
-                    value={filters.role}
-                    onChange={(e) => setFilters(prev => ({ ...prev, role: e.target.value }))}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
-                  >
+                <select
+                  value={filters.role}
+                  onChange={(e) => setFilters(prev => ({ ...prev, role: e.target.value }))}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                >
                   <option value="">All Roles</option>
                   <option value="refugee">Refugee</option>
                   <option value="provider">Provider</option>
                   <option value="admin">Admin</option>
                 </select>
               </div>
-                  <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
-                                  <select
-                    value={filters.status}
-                    onChange={(e) => setFilters(prev => ({ ...prev, status: e.target.value }))}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
-                  >
-                  <option value="">All Status</option>
-                  <option value="active">Active</option>
-                  <option value="pending">Pending</option>
-                  <option value="suspended">Suspended</option>
-                </select>
-                  </div>
               <div className="flex items-end">
-                                  <button
-                    onClick={() => setFilters({ role: '', status: '', search: '' })}
-                    className="w-full bg-gray-100 text-gray-700 px-4 py-2 rounded-lg text-sm hover:bg-gray-200"
-                  >
+                <button
+                  onClick={() => setFilters({ role: '', search: '' })}
+                  className="w-full bg-gray-100 text-gray-700 px-4 py-2 rounded-lg text-sm hover:bg-gray-200"
+                >
                   Clear Filters
                 </button>
               </div>
             </div>
+            
+            {/* Filter Summary */}
+            {(filters.search || filters.role) && (
+              <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                <div className="flex items-center justify-between">
+                  <div className="text-sm text-blue-800">
+                    <strong>Active Filters:</strong>
+                    {filters.search && <span className="ml-2 px-2 py-1 bg-blue-100 rounded text-xs">Search: "{filters.search}"</span>}
+                    {filters.role && <span className="ml-2 px-2 py-1 bg-blue-100 rounded text-xs">Role: {filters.role}</span>}
+                  </div>
+                  <button
+                    onClick={() => setFilters({ role: '', search: '' })}
+                    className="text-blue-600 hover:text-blue-800 text-sm underline"
+                  >
+                    Clear All
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Users Table */}
@@ -477,195 +676,453 @@ const AdminDashboard = () => {
             </div>
           ) : usersError ? (
             <ErrorAlert message={usersError} onRetry={refetchUsers} />
-          ) : (
-          <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      User
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Role
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Status
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Joined
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Actions
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {users.map((user) => (
-                    <tr key={user._id}>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex items-center">
-                          <div className="flex-shrink-0 h-10 w-10">
-                            <div className="h-10 w-10 rounded-full bg-gray-300 flex items-center justify-center">
-                              <span className="text-sm font-medium text-gray-700">
-                                {user.firstName?.[0]}{user.lastName?.[0]}
-                              </span>
-                            </div>
-                          </div>
-                          <div className="ml-4">
-                            <div className="text-sm font-medium text-gray-900">
-                              {user.firstName} {user.lastName}
-                            </div>
-                            <div className="text-sm text-gray-500">{user.email}</div>
-          </div>
-        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                          user.role === 'admin' ? 'bg-purple-100 text-purple-800' :
-                          user.role === 'provider' ? 'bg-blue-100 text-blue-800' :
-                          'bg-green-100 text-green-800'
-                        }`}>
-                          {user.role}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                          user.status === 'active' ? 'bg-green-100 text-green-800' :
-                          user.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
-                          'bg-red-100 text-red-800'
-                        }`}>
-                          {user.status}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {new Date(user.createdAt).toLocaleDateString()}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                        <div className="flex space-x-2">
-                          {user.status === 'pending' && (
-                            <>
-                              <button
-                                onClick={() => handleUserStatusUpdate(user._id, 'active')}
-                                  className="text-green-600 hover:text-green-900 flex items-center"
-                              >
-                                  <UserCheck className="h-4 w-4 mr-1" />
-                                Approve
-                              </button>
-                              <button
-                                onClick={() => handleUserStatusUpdate(user._id, 'suspended')}
-                                  className="text-red-600 hover:text-red-900 flex items-center"
-                              >
-                                  <UserX className="h-4 w-4 mr-1" />
-                                Reject
-                              </button>
-                            </>
-                          )}
-                          {user.status === 'active' && (
-                            <button
-                              onClick={() => handleUserStatusUpdate(user._id, 'suspended')}
-                                className="text-yellow-600 hover:text-yellow-900 flex items-center"
-                            >
-                                <UserX className="h-4 w-4 mr-1" />
-                              Suspend
-                            </button>
-                          )}
-                          {user.status === 'suspended' && (
-                            <button
-                              onClick={() => handleUserStatusUpdate(user._id, 'active')}
-                                className="text-green-600 hover:text-green-900 flex items-center"
-                            >
-                                <UserCheck className="h-4 w-4 mr-1" />
-                              Activate
-                            </button>
-                          )}
-                          <button
-                            onClick={() => handleUserDelete(user._id)}
-                              className="text-red-600 hover:text-red-900 flex items-center"
-                          >
-                              <Trash2 className="h-4 w-4 mr-1" />
-                            Delete
-                          </button>
+          ) : (() => {
+            // Debug logging to understand the user data
+            console.log('AdminDashboard - User Management Debug:', {
+              totalUsers: users.length,
+              users: users.map(u => ({
+                id: u._id,
+                email: u.email,
+                firstName: u.firstName,
+                lastName: u.lastName,
+                role: u.role,
+                isActive: u.isActive,
+                isVerified: u.isVerified,
+                canLogin: u.isActive !== false && u.isVerified !== false
+              }))
+            });
+
+            const loginableUsers = users.filter(user => {
+              // Debug each user's login capability
+              // Based on auth.js login route, users can log in if isActive: true
+              const canLogin = user.isActive === true;
+              console.log(`User ${user.email} (${user.role}): isActive=${user.isActive}, isVerified=${user.isVerified}, canLogin=${canLogin}`);
+              return canLogin;
+            });
+            
+            console.log('AdminDashboard - Loginable Users:', {
+              loginableCount: loginableUsers.length,
+              users: loginableUsers.map(u => ({
+                id: u._id,
+                email: u.email,
+                role: u.role
+              }))
+            });
+
+            const filteredUsers = loginableUsers.filter(user => {
+              // Debug logging for filters
+              console.log('Filtering user:', user.email, 'with filters:', filters);
+              
+              // Apply search filter
+              if (filters.search) {
+                const searchTerm = filters.search.toLowerCase();
+                const fullName = `${user.firstName || ''} ${user.lastName || ''}`.toLowerCase();
+                const email = (user.email || '').toLowerCase();
+                const matchesSearch = fullName.includes(searchTerm) || email.includes(searchTerm);
+                console.log(`Search filter: "${searchTerm}" matches "${fullName}" or "${email}": ${matchesSearch}`);
+                if (!matchesSearch) {
+                  return false;
+                }
+              }
+              
+              // Apply role filter
+              if (filters.role && user.role !== filters.role) {
+                console.log(`Role filter: user role "${user.role}" doesn't match filter "${filters.role}"`);
+                return false;
+              }
+              
+              // Note: Login status filter removed since we only show loginable users
+              // All users in loginableUsers can login by definition
+              
+              console.log(`User ${user.email} passed all filters`);
+              return true;
+            });
+
+            console.log('AdminDashboard - Filter Summary:', {
+              activeFilters: filters,
+              loginableUsersCount: loginableUsers.length,
+              filteredUsersCount: filteredUsers.length,
+              searchTerm: filters.search,
+              roleFilter: filters.role
+            });
+
+            console.log('AdminDashboard - Final Results:', {
+              totalUsers: users.length,
+              loginableUsers: loginableUsers.length,
+              filteredUsers: filteredUsers.length,
+              activeFilters: Object.keys(filters).filter(key => filters[key]).length
+            });
+
+            if (filteredUsers.length === 0) {
+              return (
+                <div className="space-y-6">
+                  <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-12 text-center">
+                    <Users className="h-16 w-16 mx-auto mb-4 text-gray-300" />
+                    <h3 className="text-lg font-medium text-gray-900 mb-2">No users found</h3>
+                    <p className="text-gray-600">
+                      {loginableUsers.length === 0 
+                        ? 'No users can currently login to the platform.'
+                        : 'No users match the current filters.'
+                      }
+                    </p>
+                  </div>
+                  
+                  {/* Debug section - show all users */}
+                  <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6">
+                    <h4 className="text-lg font-medium text-yellow-900 mb-4">Debug: All Users ({users.length})</h4>
+                    <p className="text-sm text-yellow-700 mb-4">
+                      <strong>Note:</strong> Users can login if <code>isActive: true</code>. 
+                      <code>isVerified</code> is for additional verification but doesn't prevent login.
+                    </p>
+                    
+                    {/* Comparison with profiles */}
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+                      <h5 className="font-medium text-blue-900 mb-2">Data Comparison:</h5>
+                      <div className="grid grid-cols-2 gap-4 text-sm">
+                        <div>
+                          <strong>User Accounts:</strong> {users.length}
+                          <br />
+                          <strong>Active Users:</strong> {users.filter(u => u.isActive === true).length}
+                          <br />
+                          <strong>Refugee Users:</strong> {users.filter(u => u.role === 'refugee' && u.isActive === true).length}
                         </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-          )}
+                        <div>
+                          <strong>Created Profiles:</strong> {refugeeProfiles.length}
+                          <br />
+                          <strong>Refugee Profiles:</strong> {refugeeProfiles.filter(p => p.user?.role === 'refugee').length}
+                          <br />
+                          <strong>Provider Profiles:</strong> {refugeeProfiles.filter(p => p.user?.role === 'provider').length}
+                        </div>
+                      </div>
+                      
+                      {/* Profile creation status */}
+                      <div className="mt-4 p-3 bg-white rounded border">
+                        <h6 className="font-medium text-blue-900 mb-2">Profile Creation Status:</h6>
+                        <div className="space-y-2">
+                          {users.filter(u => u.isActive === true).map(user => {
+                            const hasProfile = refugeeProfiles.some(p => p.user?._id === user._id);
+                            return (
+                              <div key={user._id} className="flex items-center justify-between text-sm">
+                                <span>{user.firstName} {user.lastName} ({user.email})</span>
+                                <span className={`px-2 py-1 rounded text-xs ${
+                                  hasProfile ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                                }`}>
+                                  {hasProfile ? 'Has Profile' : 'No Profile'}
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            }
+
+            return (
+              <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
+                {/* Results Summary */}
+                <div className="px-6 py-3 bg-gray-50 border-b border-gray-200">
+                  <div className="flex items-center justify-between">
+                    <div className="text-sm text-gray-600">
+                      Showing <strong>{filteredUsers.length}</strong> of <strong>{loginableUsers.length}</strong> users who can login
+                      {Object.keys(filters).filter(key => filters[key]).length > 0 && (
+                        <span className="ml-2 text-gray-500">(filtered)</span>
+                      )}
+                    </div>
+                    <div className="text-sm text-gray-500">
+                      Total users: {users.length}
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          User
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Role
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Status
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Joined
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Actions
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {filteredUsers.map((user) => (
+                        <tr key={user._id}>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="flex items-center">
+                              <div className="flex-shrink-0 h-10 w-10">
+                                <div className="h-10 w-10 rounded-full bg-gray-300 flex items-center justify-center">
+                                  <span className="text-sm font-medium text-gray-700">
+                                    {user.firstName?.[0]}{user.lastName?.[0]}
+                                  </span>
+                                </div>
+                              </div>
+                              <div className="ml-4">
+                                <div className="text-sm font-medium text-gray-900">
+                                  {user.firstName} {user.lastName}
+                                </div>
+                                <div className="text-sm text-gray-500">{user.email}</div>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                              user.role === 'admin' ? 'bg-purple-100 text-purple-800' :
+                              user.role === 'provider' ? 'bg-blue-100 text-blue-800' :
+                              'bg-green-100 text-green-800'
+                            }`}>
+                              {user.role}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                              user.isActive === true ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                            }`}>
+                              {user.isActive === true ? 'Can Login' : 'Cannot Login'}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {new Date(user.createdAt).toLocaleDateString()}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                            <div className="flex space-x-2">
+                              <button
+                                onClick={() => {
+                                  if (window.confirm(`Are you sure you want to disable ${user.firstName} ${user.lastName}? They will not be able to login.`)) {
+                                    handleUserStatusUpdate(user._id, { isActive: false });
+                                  }
+                                }}
+                                className="text-yellow-600 hover:text-yellow-900 flex items-center"
+                                title="Disable user login access"
+                              >
+                                <UserX className="h-4 w-4 mr-1" />
+                                Disable
+                              </button>
+                              <button
+                                onClick={() => {
+                                  if (window.confirm(`Are you sure you want to suspend ${user.firstName} ${user.lastName}? They will be disabled and unverified.`)) {
+                                    handleUserStatusUpdate(user._id, { isActive: false, isVerified: false });
+                                  }
+                                }}
+                                className="text-orange-600 hover:text-orange-900 flex items-center"
+                                title="Suspend user (disable and unverify)"
+                              >
+                                <Shield className="h-4 w-4 mr-1" />
+                                Suspend
+                              </button>
+                              <button
+                                onClick={() => {
+                                  if (window.confirm(`Are you sure you want to permanently delete ${user.firstName} ${user.lastName}? This action cannot be undone.`)) {
+                                    handleUserDelete(user._id);
+                                  }
+                                }}
+                                className="text-red-600 hover:text-red-900 flex items-center"
+                                title="Permanently delete user"
+                              >
+                                <Trash2 className="h-4 w-4 mr-1" />
+                                Delete
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            );
+          })()
+          }
         </div>
       );
     }
 
     if (activeItem === 'profiles') {
-    return (
-      <div className="space-y-6">
+      return (
+        <div className="space-y-6">
           {/* Description */}
-          <p className="text-gray-600">Review and manage user profiles</p>
+          <p className="text-gray-600">Review and manage refugee profiles that have been created</p>
 
-          {/* Profiles Grid */}
-          {profilesLoading ? (
+          {/* Stats Summary */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+            <div className="bg-white p-4 rounded-lg border border-gray-200 shadow-sm">
+              <div className="flex items-center">
+                <div className="p-2 bg-blue-100 rounded-lg">
+                  <User className="h-5 w-5 text-blue-600" />
+                </div>
+                                 <div className="ml-3">
+                   <p className="text-sm font-medium text-gray-600">Total Profiles</p>
+                   <p className="text-xl font-bold text-gray-900">{profileStats.total}</p>
+                 </div>
+              </div>
+            </div>
+            <div className="bg-white p-4 rounded-lg border border-gray-200 shadow-sm">
+              <div className="flex items-center">
+                <div className="p-2 bg-green-100 rounded-lg">
+                  <UserCheck className="h-5 w-5 text-green-600" />
+                </div>
+                                 <div className="ml-3">
+                   <p className="text-sm font-medium text-gray-600">Refugee Users</p>
+                   <p className="text-xl font-bold text-gray-900">{profileStats.refugees}</p>
+                 </div>
+              </div>
+            </div>
+            <div className="bg-white p-4 rounded-lg border border-gray-200 shadow-sm">
+              <div className="flex items-center">
+                <div className="p-2 bg-purple-100 rounded-lg">
+                  <Briefcase className="h-5 w-5 text-purple-600" />
+                </div>
+                                 <div className="ml-3">
+                   <p className="text-sm font-medium text-gray-600">Provider Users</p>
+                   <p className="text-xl font-bold text-gray-900">{profileStats.providers}</p>
+                 </div>
+              </div>
+            </div>
+            <div className="bg-white p-4 rounded-lg border border-gray-200 shadow-sm">
+              <div className="flex items-center">
+                <div className="p-2 bg-orange-100 rounded-lg">
+                  <Shield className="h-5 w-5 text-orange-600" />
+                </div>
+                                 <div className="ml-3">
+                   <p className="text-sm font-medium text-gray-600">Admin Users</p>
+                   <p className="text-xl font-bold text-gray-900">{profileStats.admins}</p>
+                 </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Profiles Table */}
+          {profilesLoading && !profilesLoaded ? (
             <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-6">
               <div className="animate-pulse space-y-4">
-                {[1, 2, 3].map(i => (
-                  <div key={i} className="bg-gray-200 h-32 rounded-lg"></div>
+                {[1, 2, 3, 4, 5].map(i => (
+                  <div key={i} className="flex items-center space-x-4">
+                    <div className="w-10 h-10 bg-gray-200 rounded-full"></div>
+                    <div className="flex-1 space-y-2">
+                      <div className="h-4 bg-gray-200 rounded w-1/4"></div>
+                      <div className="h-3 bg-gray-200 rounded w-1/3"></div>
+                    </div>
+                    <div className="h-6 bg-gray-200 rounded w-20"></div>
+                    <div className="h-6 bg-gray-200 rounded w-16"></div>
+                    <div className="h-6 bg-gray-200 rounded w-24"></div>
+                  </div>
                 ))}
               </div>
             </div>
           ) : profilesError ? (
-            <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-              <div className="flex items-center">
-                <AlertCircle className="h-5 w-5 text-red-400 mr-2" />
-                <p className="text-red-800">{profilesError}</p>
-              </div>
+            <ErrorAlert message={profilesError} onRetry={refetchProfiles} />
+          ) : refugeeProfiles.length === 0 ? (
+            <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-12 text-center">
+              <User className="h-16 w-16 mx-auto mb-4 text-gray-300" />
+              <h3 className="text-lg font-medium text-gray-900 mb-2">No refugee profiles found</h3>
+              <p className="text-gray-600">No refugee profiles have been created yet.</p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {profiles.map((profile) => (
-                <div key={profile._id} className="bg-white rounded-lg p-6 border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
-                  <div className="flex items-center space-x-3 mb-4">
-                    <div className="w-12 h-12 rounded-full bg-gray-300 flex items-center justify-center">
-                      {profile.photoUrl ? (
-                        <img 
-                          src={profile.photoUrl.startsWith('http') ? profile.photoUrl : `http://localhost:5001/api/images/${profile.photoUrl}`} 
-                          alt="Profile" 
-                          className="w-12 h-12 rounded-full object-cover"
-                          onError={(e) => {
-                            e.target.style.display = 'none';
-                            e.target.nextSibling.style.display = 'flex';
-                          }}
-                        />
-                      ) : null}
-                      <div className="w-12 h-12 rounded-full bg-gray-300 flex items-center justify-center text-gray-600 font-medium">
-                        {getDisplayName(profile)?.[0] || 'U'}
-                      </div>
-                    </div>
-                    <div className="flex-1">
-                      <h3 className="font-medium text-gray-900">{getDisplayName(profile)}</h3>
-                      <p className="text-sm text-gray-500">{profile.email}</p>
-                    </div>
-                  </div>
-                  <div className="text-gray-700 mb-2">Age: {profile.age}</div>
-                  <div className="text-gray-700 mb-2">Gender: {profile.gender}</div>
-                  <div className="text-gray-700 mb-2">Location: {profile.currentLocation}</div>
-                  <div className="flex flex-wrap gap-1 mb-2">
-                    {profile.skills?.slice(0, 3).map((skill, i) => (
-                      <span key={i} className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">{skill}</span>
+            <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Profile
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        User Role
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Profile Type
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Created
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Actions
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {memoizedProfiles.map((profile) => (
+                      <tr key={profile._id} className="hover:bg-gray-50">
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="flex items-center">
+                            <div className="flex-shrink-0 h-10 w-10">
+                              <div className="h-10 w-10 rounded-full bg-gray-300 flex items-center justify-center">
+                                <span className="text-sm font-medium text-gray-700">
+                                  {getDisplayName(profile).charAt(0)}
+                                </span>
+                              </div>
+                            </div>
+                            <div className="ml-4">
+                              <div className="text-sm font-medium text-gray-900">
+                                {getDisplayName(profile)}
+                              </div>
+                              <div className="text-sm text-gray-500">{profile.user?.email || 'No email'}</div>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                            profile.user?.role === 'admin' ? 'bg-purple-100 text-purple-800' :
+                            profile.user?.role === 'provider' ? 'bg-blue-100 text-blue-800' :
+                            'bg-green-100 text-green-800'
+                          }`}>
+                            {profile.user?.role || 'Unknown'}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                            profile.option === 'student' ? 'bg-blue-100 text-blue-800' :
+                            profile.option === 'job seeker' ? 'bg-green-100 text-green-800' :
+                            profile.option === 'undocumented_talent' ? 'bg-orange-100 text-orange-800' :
+                            'bg-gray-100 text-gray-800'
+                          }`}>
+                            {profile.option ? profile.option.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase()) : 'General'}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {profile.createdAt ? new Date(profile.createdAt).toLocaleDateString() : 'Unknown'}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                          <div className="flex space-x-2">
+                            <button
+                              onClick={() => navigate(`/profile/${profile._id}`)}
+                              className="text-blue-600 hover:text-blue-900 flex items-center"
+                            >
+                              <Eye className="h-4 w-4 mr-1" />
+                              View
+                            </button>
+                            <button
+                              onClick={() => handleProfileDelete(profile._id)}
+                              className="text-red-600 hover:text-red-900 flex items-center"
+                            >
+                              <Trash2 className="h-4 w-4 mr-1" />
+                              Delete
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
                     ))}
-                    {profile.skills?.length > 3 && (
-                      <span className="text-xs text-gray-500">+{profile.skills.length - 3} more</span>
-                    )}
-                  </div>
-                  <button onClick={() => navigate(`/profile/${profile._id}`)} className="bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700 text-sm">View</button>
-                </div>
-              ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
-      </div>
-    );
-  }
+        </div>
+      );
+    }
 
     if (activeItem === 'opportunities') {
   return (
@@ -678,13 +1135,13 @@ const AdminDashboard = () => {
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Search</label>
-                                  <input
-                    type="text"
-                    placeholder="Search opportunities..."
-                    value={opportunityFilters.search}
-                    onChange={(e) => setOpportunityFilters(prev => ({ ...prev, search: e.target.value }))}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
-                  />
+                <input
+                  type="text"
+                  placeholder="Search opportunities..."
+                  value={opportunityFilters.search}
+                  onChange={(e) => setOpportunityFilters(prev => ({ ...prev, search: e.target.value }))}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Type</label>
@@ -725,142 +1182,194 @@ const AdminDashboard = () => {
             </div>
           </div>
 
-          {/* Opportunities Grid */}
+          {/* Opportunities Table */}
           {opportunitiesLoading ? (
-            <div className="bg-white rounded-lg border p-6">
+            <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-6">
               <div className="animate-pulse space-y-4">
-                {[1, 2, 3].map(i => (
-                  <div key={i} className="bg-gray-200 h-32 rounded-lg"></div>
+                {[1, 2, 3, 4, 5].map(i => (
+                  <div key={i} className="flex items-center space-x-4">
+                    <div className="w-10 h-10 bg-gray-200 rounded-full"></div>
+                    <div className="flex-1 space-y-2">
+                      <div className="h-4 bg-gray-200 rounded w-1/4"></div>
+                      <div className="h-3 bg-gray-200 rounded w-1/3"></div>
+                    </div>
+                    <div className="h-6 bg-gray-200 rounded w-20"></div>
+                    <div className="h-6 bg-gray-200 rounded w-16"></div>
+                    <div className="h-6 bg-gray-200 rounded w-24"></div>
+                  </div>
                 ))}
               </div>
             </div>
           ) : opportunitiesError ? (
-            <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-            <div className="flex items-center">
-                <AlertCircle className="h-5 w-5 text-red-400 mr-2" />
-                <p className="text-red-800">{opportunitiesError}</p>
-        </div>
-            </div>
+            <ErrorAlert message={opportunitiesError} onRetry={refetchOpportunities} />
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {opportunities
-                .filter(opp =>
+            <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Opportunity
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Type
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Location
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Salary
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Status
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Posted
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Actions
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                                  {opportunities
+                      .filter(opp => {
+                        if (!opp) return false;
+                        return (
+                          (!opportunityFilters.type || opp.type === opportunityFilters.type) &&
+                          (!opportunityFilters.status || opp.status === opportunityFilters.status) &&
+                          (!opportunityFilters.search ||
+                            (opp.title && opp.title.toLowerCase().includes(opportunityFilters.search.toLowerCase())) ||
+                            (opp.company && opp.company.toLowerCase().includes(opportunityFilters.search.toLowerCase()))
+                          )
+                        );
+                      })
+                      .map((opportunity) => (
+                        <tr key={opportunity._id} className="hover:bg-gray-50">
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="flex items-center">
+                              <div className="flex-shrink-0 h-10 w-10">
+                                <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center">
+                                  <Briefcase className="h-5 w-5 text-blue-600" />
+                                </div>
+                              </div>
+                              <div className="ml-4">
+                                <div className="text-sm font-medium text-gray-900">
+                                  {opportunity.title || 'Untitled Opportunity'}
+                                </div>
+                                <div className="text-sm text-gray-500">
+                                  {opportunity.company || 'Unknown Company'}
+                                </div>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                              opportunity.type === 'full-time job' ? 'bg-green-100 text-green-800' :
+                              opportunity.type === 'part-time job' ? 'bg-blue-100 text-blue-800' :
+                              opportunity.type === 'internship' ? 'bg-yellow-100 text-yellow-800' :
+                              opportunity.type === 'scholarship' ? 'bg-purple-100 text-purple-800' :
+                              opportunity.type === 'funds' ? 'bg-pink-100 text-pink-800' :
+                              'bg-gray-100 text-gray-800'
+                            }`}>
+                              {opportunity.type === 'full-time job' ? 'Full-time Job' :
+                                opportunity.type === 'part-time job' ? 'Part-time Job' :
+                                opportunity.type ? opportunity.type.charAt(0).toUpperCase() + opportunity.type.slice(1) : 'Unknown'}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                            {opportunity.location || 'Not specified'}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                            {opportunity.salary && typeof opportunity.salary === 'object'
+                              ? `${opportunity.salary.min} - ${opportunity.salary.max} ${opportunity.salary.currency || ''}`
+                              : opportunity.salary || 'Not specified'}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                              opportunity.status === 'active' ? 'bg-green-100 text-green-800' :
+                              opportunity.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
+                              'bg-red-100 text-red-800'
+                            }`}>
+                              {opportunity.status || 'Unknown'}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {opportunity.createdAt ? new Date(opportunity.createdAt).toLocaleDateString() : 'Unknown'}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                            <div className="flex space-x-2">
+                              <button
+                                onClick={() => navigate(`/opportunity/${opportunity._id}`)}
+                                className="text-blue-600 hover:text-blue-900 flex items-center"
+                              >
+                                <Eye className="h-4 w-4 mr-1" />
+                                View
+                              </button>
+                              {opportunity.status === 'pending' && (
+                                <button
+                                  onClick={() => handleOpportunityStatusUpdate(opportunity._id, 'active')}
+                                  className="text-green-600 hover:text-green-900 flex items-center"
+                                >
+                                  <CheckCircle className="h-4 w-4 mr-1" />
+                                  Approve
+                                </button>
+                              )}
+                              {opportunity.status === 'active' && (
+                                <button
+                                  onClick={() => handleOpportunityStatusUpdate(opportunity._id, 'suspended')}
+                                  className="text-yellow-600 hover:text-yellow-900 flex items-center"
+                                >
+                                  <XCircle className="h-4 w-4 mr-1" />
+                                  Suspend
+                                </button>
+                              )}
+                              {opportunity.status === 'suspended' && (
+                                <button
+                                  onClick={() => handleOpportunityStatusUpdate(opportunity._id, 'active')}
+                                  className="text-green-600 hover:text-green-900 flex items-center"
+                                >
+                                  <CheckCircle className="h-4 w-4 mr-1" />
+                                  Activate
+                                </button>
+                              )}
+                              <button
+                                onClick={() => setEditingOpportunity(opportunity)}
+                                className="text-gray-600 hover:text-gray-900 flex items-center"
+                              >
+                                <Edit className="h-4 w-4 mr-1" />
+                                Edit
+                              </button>
+                              <button
+                                onClick={() => handleOpportunityDelete(opportunity._id)}
+                                className="text-red-600 hover:text-red-900 flex items-center"
+                              >
+                                <Trash2 className="h-4 w-4 mr-1" />
+                                Delete
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
+              </div>
+              {opportunities.filter(opp => {
+                if (!opp) return false;
+                return (
                   (!opportunityFilters.type || opp.type === opportunityFilters.type) &&
                   (!opportunityFilters.status || opp.status === opportunityFilters.status) &&
                   (!opportunityFilters.search ||
-                    opp.title?.toLowerCase().includes(opportunityFilters.search.toLowerCase()) ||
-                    opp.company?.toLowerCase().includes(opportunityFilters.search.toLowerCase())
+                    (opp.title && opp.title.toLowerCase().includes(opportunityFilters.search.toLowerCase())) ||
+                    (opp.company && opp.company.toLowerCase().includes(opportunityFilters.search.toLowerCase()))
                   )
-                )
-                .map((opportunity) => (
-                <div key={opportunity._id} className="bg-gray-50 rounded-lg p-6 border border-gray-200 hover:shadow-md transition-shadow">
-                  <div className="flex items-center space-x-3 mb-4">
-                    <div className="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center">
-                      <Briefcase className="h-6 w-6 text-blue-600" />
-                    </div>
-                    <div className="flex-1">
-                      <h3 className="font-medium text-gray-900">{opportunity.title}</h3>
-                      <p className="text-sm text-gray-500">{opportunity.company}</p>
-                    </div>
-                  </div>
-                  <div className="space-y-2 mb-4">
-                    <div className="flex items-center text-sm">
-                      <span className="text-gray-500 w-20">Type:</span>
-                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                          opportunity.type === 'full-time job' ? 'bg-green-100 text-green-800' :
-                          opportunity.type === 'part-time job' ? 'bg-blue-100 text-blue-800' :
-                          opportunity.type === 'internship' ? 'bg-yellow-100 text-yellow-800' :
-                          opportunity.type === 'scholarship' ? 'bg-purple-100 text-purple-800' :
-                          opportunity.type === 'funds' ? 'bg-pink-100 text-pink-800' :
-                          'bg-gray-100 text-gray-800'
-                      }`}>
-                          {opportunity.type === 'full-time job' ? 'Full-time Job' :
-                            opportunity.type === 'part-time job' ? 'Part-time Job' :
-                            opportunity.type.charAt(0).toUpperCase() + opportunity.type.slice(1)}
-                      </span>
-                    </div>
-                    <div className="flex items-center text-sm">
-                      <span className="text-gray-500 w-20">Location:</span>
-                      <span className="text-gray-900">{opportunity.location}</span>
-                    </div>
-                    <div className="flex items-center text-sm">
-                      <span className="text-gray-500 w-20">Salary:</span>
-                        <span className="text-gray-900">
-                          {opportunity.salary && typeof opportunity.salary === 'object'
-                            ? `${opportunity.salary.min} - ${opportunity.salary.max} ${opportunity.salary.currency || ''}`
-                            : opportunity.salary || 'Not specified'}
-                        </span>
-                    </div>
-                    <div className="flex items-center text-sm">
-                      <span className="text-gray-500 w-20">Status:</span>
-                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                          opportunity.status === 'active' ? 'bg-green-100 text-green-800' :
-                          opportunity.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
-                          'bg-red-100 text-red-800'
-                      }`}>
-                        {opportunity.status}
-                      </span>
-                    </div>
-                  </div>
-                    <div className="flex space-x-2 flex-wrap">
-              <button
-                      onClick={() => navigate(`/opportunity/${opportunity._id}`)}
-                      className="flex-1 bg-blue-600 text-white px-3 py-2 rounded text-sm hover:bg-blue-700 transition-colors flex items-center justify-center"
-              >
-                      <Eye className="h-4 w-4 mr-1" />
-                      View
-              </button>
-                      {/* Status management actions */}
-                      {opportunity.status === 'pending' && (
-                        <button
-                          onClick={() => handleOpportunityStatusUpdate(opportunity._id, 'active')}
-                          className="bg-green-100 text-green-700 px-3 py-2 rounded text-sm hover:bg-green-200 flex items-center"
-                        >
-                          <CheckCircle className="h-4 w-4 mr-1" />
-                          Approve
-                        </button>
-                      )}
-                      {opportunity.status === 'active' && (
-                        <button
-                          onClick={() => handleOpportunityStatusUpdate(opportunity._id, 'suspended')}
-                          className="bg-yellow-100 text-yellow-700 px-3 py-2 rounded text-sm hover:bg-yellow-200 flex items-center"
-                        >
-                          <XCircle className="h-4 w-4 mr-1" />
-                          Suspend
-                        </button>
-                      )}
-                      {opportunity.status === 'suspended' && (
-                        <button
-                          onClick={() => handleOpportunityStatusUpdate(opportunity._id, 'active')}
-                          className="bg-green-100 text-green-700 px-3 py-2 rounded text-sm hover:bg-green-200 flex items-center"
-                        >
-                          <CheckCircle className="h-4 w-4 mr-1" />
-                          Activate
-                        </button>
-                      )}
-                      {/* Edit button (placeholder) */}
-                      <button
-                        onClick={() => setEditingOpportunity(opportunity)}
-                        className="bg-gray-100 text-gray-700 px-3 py-2 rounded text-sm hover:bg-gray-200 flex items-center"
-                      >
-                        <Edit className="h-4 w-4 mr-1" />
-                        Edit
-              </button>
-          <button
-                      onClick={() => handleOpportunityDelete(opportunity._id)}
-                      className="bg-red-50 text-red-700 px-3 py-2 rounded text-sm hover:bg-red-100 transition-colors flex items-center"
-          >
-                      <Trash2 className="h-4 w-4" />
-          </button>
-            </div>
-          </div>
-              ))}
-              {opportunities.length === 0 && (
-                <div className="col-span-full text-center py-12">
+                );
+              }).length === 0 && (
+                <div className="text-center py-12">
                   <Briefcase className="h-16 w-16 mx-auto mb-4 text-gray-300" />
                   <h3 className="text-lg font-medium text-gray-900 mb-2">No opportunities found</h3>
                   <p className="text-gray-600">No opportunities match your current filters</p>
-        </div>
+                </div>
               )}
             </div>
           )}
@@ -881,7 +1390,7 @@ const AdminDashboard = () => {
       const avgApplications = countedOpportunities > 0 ? (totalApplications / countedOpportunities).toFixed(1) : 0;
 
       // Calculate profile completion rate (example: profiles with at least 5 fields filled)
-      const completedProfiles = profiles.filter(p => {
+      const completedProfiles = refugeeProfiles.filter(p => {
         let filled = 0;
         if (getDisplayName(p)) filled++;
         if (p.age) filled++;
@@ -890,7 +1399,7 @@ const AdminDashboard = () => {
         if (p.skills && p.skills.length > 0) filled++;
         return filled >= 5;
       }).length;
-      const completionRate = profiles.length > 0 ? Math.round((completedProfiles / profiles.length) * 100) : 0;
+      const completionRate = refugeeProfiles.length > 0 ? Math.round((completedProfiles / refugeeProfiles.length) * 100) : 0;
 
       return (
         <div className="space-y-6">
@@ -1349,6 +1858,25 @@ const AdminDashboard = () => {
       }, 1000);
     });
   }, []);
+
+  // Debug logging to understand the data
+  console.log('AdminDashboard - Data Summary:', {
+    totalUsers: users.length,
+    totalProfiles: refugeeProfiles.length,
+    users: users.map(u => ({
+      id: u._id,
+      email: u.email,
+      role: u.role,
+      isActive: u.isActive,
+      isVerified: u.isVerified
+    })),
+    profiles: refugeeProfiles.map(p => ({
+      id: p._id,
+      userId: p.user?._id,
+      userEmail: p.user?.email,
+      userRole: p.user?.role
+    }))
+  });
 
   return (
     <div>

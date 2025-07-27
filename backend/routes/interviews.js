@@ -185,6 +185,116 @@ router.put('/:id/respond', protect, authorize('refugee'), [
   }
 });
 
+// @desc    Send interview invitation directly to profile (without application)
+// @route   POST /api/interviews/profile-invite
+// @access  Private (Providers only)
+router.post('/profile-invite', protect, authorize('provider', 'admin'), [
+  body('talentId').isMongoId().withMessage('Valid talent ID is required'),
+  body('title').trim().isLength({ min: 5, max: 200 }).withMessage('Title must be between 5 and 200 characters'),
+  body('description').optional().isLength({ max: 1000 }).withMessage('Description cannot exceed 1000 characters'),
+  body('type').isIn(['job', 'internship', 'volunteer', 'mentorship']).withMessage('Invalid interview type'),
+  body('format').isIn(['video', 'in-person', 'phone']).withMessage('Invalid interview format'),
+  body('availabilitySlots').isArray().withMessage('Availability slots must be an array'),
+  body('availabilitySlots.*.date').notEmpty().withMessage('Date is required for each availability slot'),
+  body('availabilitySlots.*.timeSlots').isArray().withMessage('Time slots must be an array'),
+  body('availabilitySlots.*.timeSlots.*.startTime').notEmpty().withMessage('Start time is required'),
+  body('availabilitySlots.*.timeSlots.*.endTime').notEmpty().withMessage('End time is required'),
+  body('duration').optional().custom((value) => {
+    const parsed = parseInt(value);
+    if (isNaN(parsed) || parsed < 15 || parsed > 480) {
+      throw new Error('Duration must be between 15 and 480 minutes');
+    }
+    return parsed;
+  })
+], async (req, res) => {
+  try {
+    console.log('=== PROFILE INVITE REQUEST ===');
+    console.log('Request body:', JSON.stringify(req.body, null, 2));
+    
+    // Check for validation errors
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      console.log('Validation errors:', errors.array());
+      return res.status(400).json({
+        success: false,
+        message: 'Validation error',
+        errors: errors.array()
+      });
+    }
+
+    const {
+      talentId,
+      type,
+      title,
+      description,
+      organization,
+      position,
+      location,
+      address,
+      availabilitySlots,
+      providerNotes,
+      format,
+      meetingPlatform,
+      customGoogleMeetLink,
+      materials,
+      instructions,
+      reminderSettings,
+      duration = 60
+    } = req.body;
+
+    // Create interview with profile-based data
+    const interview = new Interview({
+      provider: req.user._id,
+      talent: talentId,
+      interviewType: 'profile', // Indicates this is a profile-based interview
+      type: type,
+      title: title.trim(),
+      description: description || `${type.charAt(0).toUpperCase() + type.slice(1)} interview invitation`,
+      status: 'invited',
+      format: format,
+      duration: duration,
+      location: location || 'remote',
+      address: address || '',
+      availabilitySlots: availabilitySlots.map(slot => ({
+        date: new Date(slot.date + 'T00:00:00.000Z'),
+        timeSlots: slot.timeSlots.map(timeSlot => ({
+          startTime: timeSlot.startTime,
+          endTime: timeSlot.endTime
+        }))
+      })),
+      metadata: {
+        organization: organization || `${req.user.firstName} ${req.user.lastName}`,
+        position: position || '',
+        format: format,
+        meetingPlatform: meetingPlatform,
+        customGoogleMeetLink: customGoogleMeetLink,
+        materials: materials,
+        instructions: instructions,
+        reminderSettings: reminderSettings
+      },
+      notes: {
+        provider: providerNotes || ''
+      }
+    });
+
+    await interview.save();
+
+    console.log('Interview created successfully:', interview._id);
+
+    res.status(201).json({
+      success: true,
+      message: 'Interview invitation sent successfully',
+      interview
+    });
+  } catch (error) {
+    console.error('Profile invite error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while sending interview invitation'
+    });
+  }
+});
+
 // @desc    Get interview by ID
 // @route   GET /api/interviews/:id
 // @access  Private
