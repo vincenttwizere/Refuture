@@ -5,11 +5,17 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "build:prod": "node configure-env.js production && vite build",
+    "build:dev": "node configure-env.js development && vite build",
     "lint": "eslint . --ext js,jsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview",
     "server": "node backend/server.js",
     "dev:server": "nodemon backend/server.js",
-    "dev:full": "concurrently \"npm run dev:server\" \"npm run dev\""
+    "dev:full": "concurrently \"npm run dev:server\" \"npm run dev\"",
+    "config:dev": "node configure-env.js development",
+    "config:prod": "node configure-env.js production",
+    "test:api": "node test-api.js",
+    "test:mongodb": "node test-mongodb.js"
   },
   "repository": {
     "type": "git",
