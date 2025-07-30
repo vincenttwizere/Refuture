@@ -6,6 +6,7 @@
     "dev": "vite",
     "build": "vite build",
     "build:prod": "node configure-env.js production && vite build",
+    "build:vercel": "vite build",
     "build:dev": "node configure-env.js development && vite build",
     "lint": "eslint . --ext js,jsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview",

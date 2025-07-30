@@ -20,7 +20,8 @@ import {
   Clock,
   Video,
   FileText,
-  Menu
+  Menu,
+  Briefcase
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
@@ -225,7 +226,7 @@ const RefugeeDashboard = () => {
       if (messagesEnabled) {
         refetchMessages();
       }
-    }, 30000);
+    }, 60000); // Increased to 60 seconds to reduce load
     
     return () => clearInterval(interval);
   }, [refetchNotifications, refetchMessages, settings?.notifications?.push, settings?.notifications?.types?.messages]);
@@ -234,7 +235,9 @@ const RefugeeDashboard = () => {
   useEffect(() => {
     const testBackend = async () => {
       try {
-        const response = await fetch('http://localhost:5001/api/health');
+        // Use the same API base URL as the rest of the app
+        const apiBaseUrl = import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL || 'https://refuture-backend-1.onrender.com/api';
+        const response = await fetch(`${apiBaseUrl}/health`);
         console.log('Backend health check:', response.status, response.ok);
         if (!response.ok) {
           console.error('Backend is not responding properly');
@@ -413,6 +416,7 @@ const RefugeeDashboard = () => {
           opportunitiesError={opportunitiesError}
           interviewsError={interviewsError}
           applicationsError={applicationsError}
+          setActiveItem={setActiveItem}
         />;
 
       case 'opportunities':
@@ -443,6 +447,7 @@ const RefugeeDashboard = () => {
           markMessageAsRead={markMessageAsRead}
           markConversationAsRead={markConversationAsRead}
           setShowMessageCenter={setShowMessageCenter}
+          refetchMessages={refetchMessages}
         />;
 
       case 'notifications':
@@ -605,6 +610,13 @@ const RefugeeDashboard = () => {
 
         {/* Main Content */}
         <div className="flex-1 overflow-y-auto">
+          {activeItem === 'profile' ? (
+            // Full width for profile view
+            <div className="p-3 sm:p-4 lg:p-6">
+              {renderMainContent()}
+            </div>
+          ) : (
+            // Standard layout for other sections
           <div className="p-3 sm:p-4 lg:p-6">
             <div className="max-w-6xl mx-auto">
               <div className="bg-white rounded-lg shadow-sm p-4 sm:p-6">
@@ -617,6 +629,7 @@ const RefugeeDashboard = () => {
               </div>
             </div>
           </div>
+          )}
         </div>
         
         {/* MessageCenter Modal */}
@@ -630,20 +643,7 @@ const RefugeeDashboard = () => {
 };
 
 // Overview Section Component
-const OverviewSection = ({ opportunities = [], interviews = [], applications = [], opportunitiesLoading, interviewsLoading, applicationsLoading, opportunitiesError, interviewsError, applicationsError }) => {
-  // Debug logging
-  console.log('OverviewSection Debug:', {
-    opportunities: opportunities.length,
-    interviews: interviews.length,
-    applications: applications.length,
-    opportunitiesLoading,
-    interviewsLoading,
-    applicationsLoading,
-    opportunitiesError,
-    interviewsError,
-    applicationsError
-  });
-
+const OverviewSection = ({ opportunities = [], interviews = [], applications = [], opportunitiesLoading, interviewsLoading, applicationsLoading, opportunitiesError, interviewsError, applicationsError, setActiveItem }) => {
   const activeApplications = applications.filter(app => 
     app.status === 'pending' || app.status === 'accepted' || app.status === 'under_review'
   ).length;
@@ -654,20 +654,8 @@ const OverviewSection = ({ opportunities = [], interviews = [], applications = [
   
   const newOpportunities = opportunities.filter(opp => opp.isActive).length;
 
-  // Only show loading if we have no data at all
-  const hasAnyData = opportunities.length > 0 || interviews.length > 0 || applications.length > 0;
-  const showLoading = !hasAnyData && (opportunitiesLoading || interviewsLoading || applicationsLoading);
-
-  console.log('OverviewSection Calculated:', {
-    activeApplications,
-    interviewsScheduled,
-    newOpportunities,
-    hasAnyData,
-    showLoading
-  });
-
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       {/* Error Display */}
       {(opportunitiesError || interviewsError || applicationsError) && (
         <div className="bg-red-50 border border-red-200 rounded-lg p-4">
@@ -680,175 +668,125 @@ const OverviewSection = ({ opportunities = [], interviews = [], applications = [
         </div>
       )}
 
-      {/* Loading State - only show if we have no data */}
-      {showLoading && (
-        <div className="space-y-4">
-          <div className="animate-pulse">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {[1, 2, 3].map(i => (
-                <div key={i} className="bg-gray-200 p-4 rounded-lg h-20"></div>
-              ))}
+      {/* Key Metrics */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+        <div className="bg-white p-6 rounded-lg border border-gray-200 shadow-sm">
+          <div className="flex items-center">
+            <div className="p-2 bg-blue-100 rounded-lg">
+              <FileText className="h-6 w-6 text-blue-600" />
             </div>
+            <div className="ml-4">
+              <p className="text-sm font-medium text-gray-600">Active Applications</p>
+              <p className="text-2xl font-bold text-gray-900">{activeApplications}</p>
           </div>
         </div>
-      )}
-
-      {/* Data Display - always show if we have data */}
-      {hasAnyData && (
-        <>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
-            <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-6 shadow-sm">
-              <div>
-                <p className="text-gray-600 text-xs sm:text-sm font-medium mb-1">Active Applications</p>
-                <p className="text-2xl sm:text-3xl font-bold text-gray-900">{activeApplications}</p>
-                <p className="text-gray-500 text-xs mt-1">In progress</p>
+              </div>
+        <div className="bg-white p-6 rounded-lg border border-gray-200 shadow-sm">
+          <div className="flex items-center">
+            <div className="p-2 bg-green-100 rounded-lg">
+              <Calendar className="h-6 w-6 text-green-600" />
+            </div>
+            <div className="ml-4">
+              <p className="text-sm font-medium text-gray-600">Scheduled Interviews</p>
+              <p className="text-2xl font-bold text-gray-900">{interviewsScheduled}</p>
               </div>
             </div>
-            
-            <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-6 shadow-sm">
-              <div>
-                <p className="text-gray-600 text-xs sm:text-sm font-medium mb-1">Scheduled Interviews</p>
-                <p className="text-2xl sm:text-3xl font-bold text-gray-900">{interviewsScheduled}</p>
-                <p className="text-gray-500 text-xs mt-1">Upcoming</p>
               </div>
+        <div className="bg-white p-6 rounded-lg border border-gray-200 shadow-sm">
+          <div className="flex items-center">
+            <div className="p-2 bg-purple-100 rounded-lg">
+              <Briefcase className="h-6 w-6 text-purple-600" />
             </div>
-            
-            <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-6 shadow-sm">
-              <div>
-                <p className="text-gray-600 text-xs sm:text-sm font-medium mb-1">Available Opportunities</p>
-                <p className="text-2xl sm:text-3xl font-bold text-gray-900">{newOpportunities}</p>
-                <p className="text-gray-500 text-xs mt-1">Ready to apply</p>
-              </div>
-            </div>
-            
-            <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-6 shadow-sm">
-              <div>
-                <p className="text-gray-600 text-xs sm:text-sm font-medium mb-1">Total Interviews</p>
-                <p className="text-2xl sm:text-3xl font-bold text-gray-900">{interviews.length}</p>
-                <p className="text-gray-500 text-xs mt-1">All time</p>
+            <div className="ml-4">
+              <p className="text-sm font-medium text-gray-600">Available Opportunities</p>
+              <p className="text-2xl font-bold text-gray-900">{newOpportunities}</p>
               </div>
             </div>
           </div>
-          
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-            <h3 className="font-semibold text-gray-900 mb-4 flex items-center">
-              <div className="w-2 h-2 bg-blue-500 rounded-full mr-3"></div>
-              Recent Activity
-            </h3>
-            <div className="space-y-3">
-              {[...applications.slice(0, 2), ...interviews.slice(0, 2)]
-                .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
-                .slice(0, 4)
-                .map((item) => {
-                  const isApplication = item.hasOwnProperty('opportunityId');
-                  return (
-                    <div key={item._id} className="flex items-center p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors duration-200">
-                      <div className={`w-3 h-3 rounded-full mr-4 ${
-                        isApplication ? (
-                          item.status === 'pending' ? 'bg-yellow-500' :
-                          item.status === 'accepted' ? 'bg-green-500' :
-                          item.status === 'rejected' ? 'bg-red-500' :
-                          'bg-blue-500'
-                        ) : (
-                          item.status === 'pending' ? 'bg-yellow-500' :
-                          item.status === 'accepted' ? 'bg-green-500' :
-                          item.status === 'declined' ? 'bg-red-500' :
-                          'bg-blue-500'
-                        )
-                      }`}></div>
-                      <div className="flex-1">
-                        <div className="text-sm font-medium text-gray-900">
-                          {isApplication ? (
-                            <>
-                              {item.status === 'pending' ? 'Application submitted for ' :
-                               item.status === 'accepted' ? 'Application accepted for ' :
-                               item.status === 'rejected' ? 'Application rejected for ' :
-                               'Application for '}
-                              {item.opportunityId?.title || 'Opportunity'}
-                            </>
-                          ) : (
-                            <>
-                              {item.status === 'pending' ? 'Interview invitation received from ' :
-                               item.status === 'accepted' ? 'Interview accepted with ' :
-                               item.status === 'declined' ? 'Interview declined with ' :
-                               'Interview with '}
-                              {item.provider?.firstName && item.provider?.lastName
-                                ? `${item.provider.firstName} ${item.provider.lastName}`
-                                : 'Unknown Provider'
-                              }
-                            </>
-                          )}
+        <div className="bg-white p-6 rounded-lg border border-gray-200 shadow-sm">
+          <div className="flex items-center">
+            <div className="p-2 bg-indigo-100 rounded-lg">
+              <Video className="h-6 w-6 text-indigo-600" />
                         </div>
-                        <div className="text-xs text-gray-500 mt-1">
-                          {new Date(item.createdAt).toLocaleDateString()} • {new Date(item.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+            <div className="ml-4">
+              <p className="text-sm font-medium text-gray-600">Total Interviews</p>
+              <p className="text-2xl font-bold text-gray-900">{interviews.length}</p>
                         </div>
                       </div>
                     </div>
-                  );
-                })}
-              {applications.length === 0 && interviews.length === 0 && (
-                <div className="text-center py-8 text-gray-500">
-                  <div className="bg-gray-100 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4">
-                    <MessageCircle className="h-8 w-8 text-gray-400" />
                   </div>
-                  <p className="font-medium text-gray-600">No recent activity</p>
-                  <p className="text-sm text-gray-500 mt-1">Your activity will appear here</p>
-                </div>
-              )}
-            </div>
-          </div>
-        </>
-      )}
 
-      {/* Show empty state if no data and not loading */}
-      {!hasAnyData && !showLoading && (
-        <div className="text-center py-16">
-          <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-full w-24 h-24 flex items-center justify-center mx-auto mb-6">
-            <Home className="h-12 w-12 text-blue-500" />
-          </div>
-          <h3 className="text-2xl font-bold text-gray-900 mb-3">Welcome to your dashboard!</h3>
-          <p className="text-gray-600 mb-8 max-w-md mx-auto">Start by exploring opportunities and building your profile to showcase your talents.</p>
-          
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-4xl mx-auto">
-            <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-              <Search className="h-8 w-8 text-blue-500 mx-auto mb-3" />
-              <h4 className="font-semibold text-gray-900 mb-2">Find Opportunities</h4>
-              <p className="text-sm text-gray-600">Browse scholarships, jobs, and internships</p>
-            </div>
-            <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-              <User className="h-8 w-8 text-green-500 mx-auto mb-3" />
-              <h4 className="font-semibold text-gray-900 mb-2">Build Profile</h4>
-              <p className="text-sm text-gray-600">Showcase your skills and experience</p>
-            </div>
-            <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-              <Calendar className="h-8 w-8 text-purple-500 mx-auto mb-3" />
-              <h4 className="font-semibold text-gray-900 mb-2">Get Interviews</h4>
-              <p className="text-sm text-gray-600">Connect with providers and mentors</p>
-            </div>
-          </div>
-          
-          {/* Debug information - only show in development */}
-          {process.env.NODE_ENV === 'development' && (
-            <div className="bg-gray-50 p-6 rounded-xl text-left max-w-2xl mx-auto mt-8">
-              <h4 className="font-medium text-gray-900 mb-3">Debug Info:</h4>
-              <div className="text-sm text-gray-600 space-y-2">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>Opportunities: {opportunities.length} (Loading: {opportunitiesLoading ? 'Yes' : 'No'})</div>
-                  <div>Interviews: {interviews.length} (Loading: {interviewsLoading ? 'Yes' : 'No'})</div>
-                  <div>Applications: {applications.length} (Loading: {applicationsLoading ? 'Yes' : 'No'})</div>
+      {/* Recent Applications and Interviews */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="bg-white p-6 rounded-lg border">
+          <div className="flex justify-between items-center mb-4">
+            <h3 className="font-medium text-gray-900">Recent Applications</h3>
+            <button
+              onClick={() => setActiveItem('opportunities')}
+              className="text-blue-600 hover:text-blue-700 text-sm"
+            >
+              View All
+            </button>
                 </div>
-                {(opportunitiesError || interviewsError || applicationsError) && (
-                  <div className="mt-3 p-3 bg-red-50 rounded-lg">
-                    {opportunitiesError && <div className="text-red-600">Opportunities Error: {opportunitiesError}</div>}
-                    {interviewsError && <div className="text-red-600">Interviews Error: {interviewsError}</div>}
-                    {applicationsError && <div className="text-red-600">Applications Error: {applicationsError}</div>}
+          <div className="space-y-3">
+            {applications.slice(0, 3).map(app => (
+              <div key={app._id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                <div>
+                  <p className="font-medium text-sm">{app.opportunity?.title || 'Opportunity'}</p>
+                  <p className="text-xs text-gray-500">
+                    {new Date(app.createdAt).toLocaleDateString()}
+                  </p>
+            </div>
+                <span className={`text-xs px-2 py-1 rounded-full ${
+                  app.status === 'accepted' ? 'bg-green-100 text-green-800' :
+                  app.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
+                  app.status === 'rejected' ? 'bg-red-100 text-red-800' :
+                  'bg-gray-100 text-gray-800'
+                }`}>
+                  {app.status}
+                </span>
+          </div>
+            ))}
+            {applications.length === 0 && (
+              <p className="text-gray-500 text-sm text-center py-4">No applications yet</p>
+            )}
+            </div>
+          </div>
+          
+        <div className="bg-white p-6 rounded-lg border">
+          <div className="flex justify-between items-center mb-4">
+            <h3 className="font-medium text-gray-900">Upcoming Interviews</h3>
+            <button
+              onClick={() => setActiveItem('interviews')}
+              className="text-blue-600 hover:text-blue-700 text-sm"
+            >
+              View All
+            </button>
+                </div>
+          <div className="space-y-3">
+            {interviews.filter(int => int.status === 'scheduled' || int.status === 'accepted').slice(0, 3).map(interview => (
+              <div key={interview._id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                <div>
+                  <p className="font-medium text-sm">{interview.title || 'Interview'}</p>
+                  <p className="text-xs text-gray-500">
+                    {interview.scheduledDate ? new Date(interview.scheduledDate).toLocaleDateString() : 'Date TBD'}
+                  </p>
                   </div>
+                <span className={`text-xs px-2 py-1 rounded-full ${
+                  interview.status === 'scheduled' ? 'bg-blue-100 text-blue-800' :
+                  interview.status === 'accepted' ? 'bg-green-100 text-green-800' :
+                  'bg-gray-100 text-gray-800'
+                }`}>
+                  {interview.status}
+                </span>
+              </div>
+            ))}
+            {interviews.filter(int => int.status === 'scheduled' || int.status === 'accepted').length === 0 && (
+              <p className="text-gray-500 text-sm text-center py-4">No upcoming interviews</p>
                 )}
               </div>
             </div>
-          )}
         </div>
-      )}
     </div>
   );
 };
@@ -1423,7 +1361,7 @@ const InterviewsSection = ({ interviews, loading, error, respondToInterview, sel
 };
 
 // Messages Section Component (copied/adapted from ProviderDashboard)
-const MessagesSection = ({ messages, loading, error, user, markMessageAsRead, markConversationAsRead, setShowMessageCenter }) => {
+const MessagesSection = ({ messages, loading, error, user, markMessageAsRead, markConversationAsRead, setShowMessageCenter, refetchMessages }) => {
   const [selectedConversation, setSelectedConversation] = useState(null);
   const [newMessage, setNewMessage] = useState('');
   const [sendingMessage, setSendingMessage] = useState(false);
@@ -1431,15 +1369,41 @@ const MessagesSection = ({ messages, loading, error, user, markMessageAsRead, ma
   // Group messages into conversations
   const conversations = useMemo(() => groupMessagesByConversation(messages, user), [messages, user]);
 
-  // Send message function (stub, replace with actual API call)
+  // Send message function
   const sendMessage = async () => {
     if (!newMessage.trim() || !selectedConversation || sendingMessage) return;
-    setSendingMessage(true);
-    // TODO: Implement send message API call
-    setTimeout(() => {
+    
+    try {
+      setSendingMessage(true);
+      
+      const messageData = {
+        recipient: selectedConversation.userId,
+        content: newMessage.trim(),
+        metadata: {
+          type: 'direct_message'
+        }
+      };
+
+      console.log('Sending message:', messageData);
+      
+      // Send the message using the messages API service
+      const response = await messagesAPI.send(messageData);
+      console.log('Message sent successfully:', response.data);
+
+      // Clear the input
       setNewMessage('');
+      
+      // Refresh messages to show the new message
+      if (refetchMessages) {
+        refetchMessages();
+      }
+      
+    } catch (error) {
+      console.error('Error sending message:', error);
+      alert('Failed to send message. Please try again.');
+    } finally {
       setSendingMessage(false);
-    }, 500);
+    }
   };
 
   const handleKeyPress = (e) => {
@@ -1762,18 +1726,25 @@ const ProfileSection = ({ profile, profileMode, setProfileMode, refetchProfile }
   const handleProfileUpdated = async () => {
     console.log('Profile updated, starting refresh process...');
     
-    // Add a longer delay to ensure backend has processed the update
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    
+    try {
+      // Force immediate profile refresh
     console.log('Refreshing profile data...');
-    // Force a complete profile refresh
     await refetchProfile();
     
-    // Add another delay to ensure UI updates
+      // Add a short delay to ensure backend has processed the update
     await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      // Refresh again to ensure we have the latest data
+      console.log('Refreshing profile data again...');
+      await refetchProfile();
     
     console.log('Profile refresh completed, switching to view mode');
     setProfileMode('view');
+    } catch (error) {
+      console.error('Error refreshing profile:', error);
+      // Still switch to view mode even if refresh fails
+      setProfileMode('view');
+    }
   };
 
   // Debug logging
@@ -1783,7 +1754,7 @@ const ProfileSection = ({ profile, profileMode, setProfileMode, refetchProfile }
     profileData: profile ? {
       id: profile._id,
       fullName: profile.fullName,
-      photoUrl: profile.photoUrl, // Add photoUrl to debug
+      photoUrl: profile.photoUrl,
       age: profile.age,
       gender: profile.gender,
       nationality: profile.nationality,
@@ -1795,13 +1766,33 @@ const ProfileSection = ({ profile, profileMode, setProfileMode, refetchProfile }
   return (
     <div className="w-full">
       {profileMode === 'view' ? (
+        <div className="bg-white rounded-lg shadow-sm">
+          <div className="p-4 sm:p-6 border-b border-gray-200">
+            <h2 className="text-xl sm:text-2xl font-bold text-gray-900">
+              My Profile
+            </h2>
+            <p className="text-gray-600 mt-1">View and manage your profile information</p>
+          </div>
+          <div className="p-4 sm:p-6">
         <ProfileView profile={profile} onEdit={() => setProfileMode('edit')} />
+          </div>
+        </div>
       ) : (
+        <div className="bg-white rounded-lg shadow-sm">
+          <div className="p-4 sm:p-6 border-b border-gray-200">
+            <h2 className="text-xl sm:text-2xl font-bold text-gray-900">
+              Edit Profile
+            </h2>
+            <p className="text-gray-600 mt-1">Update your profile information</p>
+          </div>
+          <div className="p-4 sm:p-6">
         <CreateProfile 
           existingProfile={profile} 
           isEditing={true}
           onProfileUpdated={handleProfileUpdated} 
         />
+          </div>
+        </div>
       )}
     </div>
   );

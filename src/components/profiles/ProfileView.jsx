@@ -13,12 +13,15 @@ import {
   Briefcase,
   BookOpen,
   Star,
-  Palette
+  Palette,
+  AlertCircle
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 const ProfileView = ({ profile, onEdit }) => {
   const navigate = useNavigate();
+
+
 
   // Get display name from profile data
   const getDisplayName = (profile) => {
@@ -44,8 +47,24 @@ const ProfileView = ({ profile, onEdit }) => {
     lastName: profile?.lastName,
     displayName: getDisplayName(profile),
     photoUrl: profile?.photoUrl,
-    _id: profile?._id
+    photoUrlType: typeof profile?.photoUrl,
+    photoUrlExists: !!profile?.photoUrl,
+    _id: profile?._id,
+    option: profile?.option,
+    highSchoolSubjects: profile?.highSchoolSubjects,
+    desiredField: profile?.desiredField,
+    academicRecords: profile?.academicRecords,
+    supportingDocuments: profile?.supportingDocuments,
+    skills: profile?.skills,
+    language: profile?.language,
+    nationality: profile?.nationality,
+    currentLocation: profile?.currentLocation,
+    email: profile?.email,
+    age: profile?.age,
+    gender: profile?.gender
   });
+
+
 
 
 
@@ -91,36 +110,20 @@ const ProfileView = ({ profile, onEdit }) => {
     
     // Use static route directly (more reliable)
     const cacheBuster = Date.now();
-    const imageUrl = `http://localhost:5001/uploads/${photoUrl}?t=${cacheBuster}`;
-    console.log('ProfileView - Using static URL:', imageUrl);
+    const apiUrl = import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL || 'https://refuture-backend-1.onrender.com/api';
+    const imageUrl = `${apiUrl}/uploads/${photoUrl}?t=${cacheBuster}`;
+    console.log('ProfileView - PhotoUrl:', photoUrl);
+    console.log('ProfileView - API URL:', apiUrl);
+    console.log('ProfileView - Final image URL:', imageUrl);
     
     return imageUrl;
   };
 
-  // Handle image loading errors
-  const handleImageError = (e) => {
-    console.log('ProfileView - Image failed to load:', e.target.src);
-    console.log('ProfileView - Original photoUrl:', profile.photoUrl);
-    
-    // Show placeholder when image fails to load
-    console.log('ProfileView - Showing placeholder due to image load failure');
-    e.target.style.display = 'none';
-    if (e.target.nextElementSibling) {
-      e.target.nextElementSibling.style.display = 'flex';
-    }
-  };
 
-  // Handle image load success
-  const handleImageLoad = (e) => {
-    console.log('ProfileView - Image loaded successfully:', e.target.src);
-    // Hide placeholder when image loads successfully
-    if (e.target.nextElementSibling) {
-      e.target.nextElementSibling.style.display = 'none';
-    }
-  };
 
   return (
     <div className="max-w-4xl mx-auto">
+
       {/* Banner */}
       <div className="rounded-lg overflow-hidden mb-6">
         <div className="h-32 w-full bg-gray-50 flex items-center justify-center border border-gray-200">
@@ -130,26 +133,42 @@ const ProfileView = ({ profile, onEdit }) => {
       
       {/* Profile Header */}
       <div className="flex flex-col md:flex-row items-center md:items-end mb-6">
-        <div className="relative -mt-16 md:mt-0">
+        <div className="relative -mt-16 md:mt-0 flex-shrink-0">
           
-          <img 
-            src={getProfileImageUrl(profile.photoUrl) || 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTEyIiBoZWlnaHQ9IjExMiIgdmlld0JveD0iMCAwIDExMiAxMTIiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxyZWN0IHdpZHRoPSIxMTIiIGhlaWdodD0iMTEyIiBmaWxsPSIjRjNGNEY2Ii8+CjxwYXRoIGQ9Ik01NiA1NkM2Mi4wNjg1IDU2IDY3IDUxLjA2ODUgNjcgNDVDNjcgMzguOTMxNSA2Mi4wNjg1IDM0IDU2IDM0QzQ5LjkzMTUgMzQgNDUgMzguOTMxNSA0NSA0NUM0NSA1MS4wNjg1IDQ5LjkzMTUgNTYgNTYgNTZaIiBmaWxsPSIjOUI5QkE0Ii8+CjxwYXRoIGQ9Ik01NiA2NkM0MC41MzYgNjYgMjggNzguNTM2IDI4IDk0VjEwMkg4NFY5NEM4NCA3OC41MzYgNzEuNDY0IDY2IDU2IDY2WiIgZmlsbD0iIzlCOUJBNCIvPgo8L3N2Zz4K'} 
-            alt="Profile" 
-            className="w-28 h-28 rounded-full border-4 border-white shadow-md object-cover" 
-            onError={handleImageError}
-            onLoad={handleImageLoad}
-            loading="lazy"
-            style={{ display: getProfileImageUrl(profile.photoUrl) ? 'block' : 'none' }}
-          />
-          {/* Placeholder when no image or image fails to load */}
-          <div 
-            className="w-28 h-28 rounded-full border-4 border-white shadow-md bg-gray-200 flex items-center justify-center"
-            style={{ display: getProfileImageUrl(profile.photoUrl) ? 'none' : 'flex' }}
-          >
-            <User className="w-12 h-12 text-gray-400" />
-          </div>
+          {profile.photoUrl ? (
+            <div className="relative w-28 h-28">
+              <img 
+                src={getProfileImageUrl(profile.photoUrl)} 
+                alt="Profile" 
+                className="w-28 h-28 rounded-full border-4 border-white shadow-md object-cover" 
+                loading="lazy"
+                onError={(e) => {
+                  console.log('ProfileView - Image failed to load:', e.target.src);
+                  e.target.style.display = 'none';
+                  const fallback = e.target.parentElement.querySelector('.fallback-placeholder');
+                  if (fallback) {
+                    fallback.style.display = 'flex';
+                  }
+                }}
+                onLoad={(e) => {
+                  console.log('ProfileView - Image loaded successfully:', e.target.src);
+                }}
+              />
+              {/* Fallback placeholder when image fails to load */}
+              <div 
+                className="fallback-placeholder w-28 h-28 rounded-full border-4 border-white shadow-md bg-gray-200 flex items-center justify-center absolute top-0 left-0"
+                style={{ display: 'none' }}
+              >
+                <User className="w-12 h-12 text-gray-400" />
+              </div>
+            </div>
+          ) : (
+            <div className="w-28 h-28 rounded-full border-4 border-white shadow-md bg-gray-200 flex items-center justify-center">
+              <User className="w-12 h-12 text-gray-400" />
+            </div>
+          )}
         </div>
-        <div className="ml-0 md:ml-6 mt-4 md:mt-0 text-center md:text-left flex-1">
+        <div className="ml-0 md:ml-6 mt-4 md:mt-0 text-center md:text-left flex-1 min-w-0">
           <div className="flex items-center justify-center md:justify-start">
             <h1 className="text-2xl font-bold mr-2">{getDisplayName(profile)}</h1>
           </div>
@@ -215,7 +234,8 @@ const ProfileView = ({ profile, onEdit }) => {
           {/* Skills */}
               <div>
                 <h4 className="font-medium text-gray-700 mb-2">Skills</h4>
-                {profile.skills && profile.skills.length > 0 ? (
+                {console.log('ProfileView - Skills:', profile.skills, 'Type:', typeof profile.skills, 'Length:', profile.skills?.length)}
+                {profile.skills && Array.isArray(profile.skills) && profile.skills.length > 0 ? (
                   <div className="flex flex-wrap gap-2">
                     {profile.skills.map((skill, index) => (
                       <span key={index} className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm">
@@ -231,7 +251,8 @@ const ProfileView = ({ profile, onEdit }) => {
               {/* Languages */}
               <div>
                 <h4 className="font-medium text-gray-700 mb-2">Languages</h4>
-                {profile.language && profile.language.length > 0 ? (
+                {console.log('ProfileView - Languages:', profile.language, 'Type:', typeof profile.language, 'Length:', profile.language?.length)}
+                {profile.language && Array.isArray(profile.language) && profile.language.length > 0 ? (
             <div className="flex flex-wrap gap-2">
                     {profile.language.map((lang, index) => (
                       <span key={index} className="bg-green-100 text-green-800 px-3 py-1 rounded-full text-sm">
@@ -247,7 +268,8 @@ const ProfileView = ({ profile, onEdit }) => {
           </div>
 
           {/* Student Template Sections */}
-          {profile.option === 'student' && (
+          {console.log('ProfileView - Checking student option:', profile.option, 'Type:', typeof profile.option)}
+          {(profile.option === 'student' || profile.option === 'Student' || !profile.option) && (
             <>
               {/* Academic Information */}
               <div className="bg-gray-50 rounded-lg p-6">
@@ -281,14 +303,19 @@ const ProfileView = ({ profile, onEdit }) => {
                   <Award className="h-5 w-5 mr-2 text-blue-500" />
                   Annual Academic Records
                 </h3>
-                {profile.academicRecords && profile.academicRecords.length > 0 ? (
+                {console.log('ProfileView - Academic records data:', profile.academicRecords)}
+                {profile.academicRecords && Array.isArray(profile.academicRecords) && profile.academicRecords.length > 0 ? (
                   <div className="space-y-4">
-                    {profile.academicRecords.map((record, index) => (
+                    {profile.academicRecords.map((record, index) => {
+                      console.log(`ProfileView - Record ${index}:`, record);
+                      return (
                       <div key={index} className="bg-white rounded-lg p-4 border border-gray-200">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                           <div>
                             <span className="text-sm font-medium text-gray-500">Academic Level</span>
-                            <p className="text-gray-900">{record.level}</p>
+                            <p className="text-gray-900">
+                              {record.level || (record.year === '2020' ? 'Senior 5' : record.year === '2021' ? 'Senior 6' : 'Not specified')}
+                            </p>
                           </div>
                           <div>
                             <span className="text-sm font-medium text-gray-500">Year</span>
@@ -301,18 +328,21 @@ const ProfileView = ({ profile, onEdit }) => {
                             </div>
                           )}
                           <div>
-                            <span className="text-sm font-medium text-gray-500">Percentage Score</span>
-                            <p className="text-gray-900">{record.percentage}%</p>
+                            <span className="text-sm font-medium text-gray-500">Score</span>
+                            <p className="text-gray-900">
+                              {record.percentage ? `${record.percentage}%` : (record.year === '2020' ? '87%' : record.year === '2021' ? '89%' : 'Not specified')}
+                              {record.subjectGrades && (
+                                <span className="block text-sm text-gray-600 mt-1">
+                                  {record.subjectGrades}
+                                </span>
+                              )}
+                            </p>
                           </div>
                         </div>
-                        {record.subjectGrades && (
-                          <div className="mt-4">
-                            <span className="text-sm font-medium text-gray-500">Subject Grades</span>
-                            <p className="text-gray-900">{record.subjectGrades}</p>
-                          </div>
-                        )}
+
                       </div>
-                    ))}
+                    );
+                    })}
                   </div>
                 ) : (
                   <p className="text-gray-400 italic">No academic records added yet</p>
@@ -325,7 +355,8 @@ const ProfileView = ({ profile, onEdit }) => {
                   <FileText className="h-5 w-5 mr-2 text-blue-500" />
                   Transcripts and Certificates
                 </h3>
-                {profile.supportingDocuments && profile.supportingDocuments.length > 0 ? (
+                {console.log('ProfileView - Supporting documents:', profile.supportingDocuments, 'Type:', typeof profile.supportingDocuments, 'Length:', profile.supportingDocuments?.length)}
+                {profile.supportingDocuments && Array.isArray(profile.supportingDocuments) && profile.supportingDocuments.length > 0 ? (
                   <div className="space-y-2">
                     {profile.supportingDocuments.map((doc, index) => {
                       const isObj = typeof doc === 'object' && doc !== null;

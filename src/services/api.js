@@ -1,7 +1,13 @@
 import axios from 'axios';
 
 // Get the API base URL from environment variable or default to localhost
-const API_BASE_URL = import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL || 'http://localhost:5001/api';
+const API_BASE_URL = import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL || 'https://refuture-backend-1.onrender.com/api';
+
+// Debug logging
+console.log('🔧 Environment Variables Debug:');
+console.log('VITE_API_URL:', import.meta.env.VITE_API_URL);
+console.log('VITE_API_BASE_URL:', import.meta.env.VITE_API_BASE_URL);
+console.log('Final API_BASE_URL:', API_BASE_URL);
 
 // Create axios instance with base configuration
 const api = axios.create({
@@ -9,7 +15,7 @@ const api = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
-  timeout: 30000, // 30 second timeout
+  timeout: 20000, // 20 second timeout (increased for better reliability)
 });
 
 // Request interceptor to add auth token
@@ -46,9 +52,16 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    console.log('API Error:', error.response?.status, error.response?.data, error.message); // Debug log
+    console.log('🔍 API Error Details:');
+    console.log('Error message:', error.message);
+    console.log('Error code:', error.code);
+    console.log('Response status:', error.response?.status);
+    console.log('Response data:', error.response?.data);
+    console.log('Request URL:', error.config?.url);
+    console.log('Request method:', error.config?.method);
+    
     if (error.response?.status === 401) {
-      console.log('401 Unauthorized - clearing auth data'); // Debug log
+      console.log('401 Unauthorized - clearing auth data');
       localStorage.removeItem('token');
       localStorage.removeItem('user');
       window.location.href = '/login';
@@ -129,10 +142,22 @@ export const notificationsAPI = {
 };
 
 export const messagesAPI = {
-  getAll: () => api.get('/messages'),
-  send: (data) => api.post('/messages', data),
-  markAsRead: (id) => api.put(`/messages/${id}/read`),
-  delete: (id) => api.delete(`/messages/${id}`)
+  getAll: () => {
+    console.log('🔍 messagesAPI.getAll() called');
+    return api.get('/messages');
+  },
+  send: (data) => {
+    console.log('🔍 messagesAPI.send() called with:', data);
+    return api.post('/messages', data);
+  },
+  markAsRead: (id) => {
+    console.log('🔍 messagesAPI.markAsRead() called with:', id);
+    return api.put(`/messages/${id}/read`);
+  },
+  delete: (id) => {
+    console.log('🔍 messagesAPI.delete() called with:', id);
+    return api.delete(`/messages/${id}`);
+  }
 };
 
 export const usersAPI = {

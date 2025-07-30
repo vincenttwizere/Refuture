@@ -12,7 +12,7 @@ export const usePlatformStats = () => {
     
     try {
       const token = localStorage.getItem('token');
-      const response = await axios.get('http://localhost:5001/api/users/stats', {
+      const response = await axios.get(`${import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL || 'https://refuture-backend-1.onrender.com/api'}/users/stats`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       setStats(response.data.stats);

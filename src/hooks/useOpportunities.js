@@ -30,7 +30,7 @@ function deepEqual(arr1, arr2) {
 export const useOpportunities = (filters = {}) => {
   const { user } = useAuth();
   const [opportunities, setOpportunities] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false); // Start with false to prevent flickering
   const [error, setError] = useState(null);
   const [pagination, setPagination] = useState({
     currentPage: 1,
@@ -42,35 +42,40 @@ export const useOpportunities = (filters = {}) => {
   const isInitialLoad = useRef(true);
   const opportunitiesRef = useRef([]);
   const lastFetchTime = useRef(0);
+  const filtersRef = useRef(filters);
+  const retryCount = useRef(0);
+  const maxRetries = 3;
+  const hasLoadedOnce = useRef(false); // Track if we've loaded data at least once
 
   const fetchOpportunities = useCallback(async (params = {}) => {
+    // Prevent multiple simultaneous requests
+    if (loading && !isInitialLoad.current) {
+      console.log('Skipping fetch - already loading');
+      return;
+    }
+    
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
     }
     abortControllerRef.current = new AbortController();
     
     try {
-      // Only set loading to true on initial load or when explicitly refetching
-      if (isInitialLoad.current || opportunitiesRef.current.length === 0) {
+      // Only set loading to true if we haven't loaded data yet or explicitly refetching
+      if (!hasLoadedOnce.current || opportunitiesRef.current.length === 0) {
         setLoading(true);
       }
       setError(null);
-      console.log('Fetching opportunities with filters:', filters, 'params:', params);
+      console.log('Fetching opportunities with filters:', filtersRef.current, 'params:', params);
       
-      // Add timeout logic
-      const timeoutMs = 30000; // 30 seconds
-      const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => {
-          abortControllerRef.current.abort();
-          reject(new Error('Request timed out after 30 seconds'));
-        }, timeoutMs)
-      );
-      const fetchPromise = opportunitiesAPI.getAll({
-        ...filters,
+      // Use axios timeout instead of custom timeout
+      const response = await opportunitiesAPI.getAll({
+        ...filtersRef.current,
         ...params,
         signal: abortControllerRef.current.signal
       });
-      const response = await Promise.race([fetchPromise, timeoutPromise]);
+      
+      // Reset retry count on success
+      retryCount.current = 0;
       console.log('Opportunities response:', response.data);
       // Handle both response formats: {opportunities: []} and {data: []}
       const newOpportunities = response.data.opportunities || response.data.data || [];
@@ -86,15 +91,42 @@ export const useOpportunities = (filters = {}) => {
       
       setPagination(response.data.pagination || {});
       isInitialLoad.current = false;
+      hasLoadedOnce.current = true; // Mark that we've loaded data at least once
       lastFetchTime.current = Date.now();
     } catch (err) {
       if (err.name === 'AbortError') {
         setError('Request was aborted or timed out');
         return;
       }
-      setError(err.response?.data?.message || err.message || 'Failed to fetch opportunities');
+      
+      // Increment retry count
+      retryCount.current += 1;
+      
+      // Don't retry if we've exceeded max retries
+      if (retryCount.current >= maxRetries) {
+        setError('Failed to fetch opportunities after multiple attempts. Please refresh the page.');
+        console.error('Max retries exceeded for opportunities fetch');
+        return;
+      }
+      
+      // Don't retry immediately on timeout errors
+      if (err.message && err.message.includes('timeout')) {
+        setError('Request timed out. Please try again later.');
+        console.error('Timeout error fetching opportunities:', err);
+        
+        // Wait longer before retrying on timeout
+        setTimeout(() => {
+          if (retryCount.current < maxRetries) {
+            console.log('Retrying after timeout...');
+            fetchOpportunities();
+          }
+        }, 5000); // Wait 5 seconds before retry
+      } else {
+        setError(err.response?.data?.message || err.message || 'Failed to fetch opportunities');
+        console.error('Error fetching opportunities:', err);
+      }
+      
       // Do NOT clear opportunities on error - keep existing data
-      console.error('Error fetching opportunities:', err);
     } finally {
       setLoading(false);
     }
@@ -157,32 +189,52 @@ export const useOpportunities = (filters = {}) => {
 
   useEffect(() => {
     if (user && user._id) {
-      // Add more aggressive debounce to prevent rapid re-fetching
-      const now = Date.now();
-      const timeSinceLastFetch = now - lastFetchTime.current;
-      const minInterval = 3000; // Increased to 3 seconds between fetches
-      
-      if (timeSinceLastFetch < minInterval) {
-        console.log(`Skipping fetch, too soon since last fetch: ${timeSinceLastFetch}ms`);
-        return;
-      }
-      
-      console.log('Starting opportunities fetch...');
-      const timer = setTimeout(() => {
+      // Only fetch on initial load or if we haven't loaded data yet
+      if (!hasLoadedOnce.current) {
+        console.log('Initial opportunities fetch...');
         fetchOpportunities();
-      }, 200); // Increased delay to 200ms
-      return () => clearTimeout(timer);
+      } else {
+        // For subsequent loads, use debouncing
+        const now = Date.now();
+        const timeSinceLastFetch = now - lastFetchTime.current;
+        const minInterval = 30000; // Increased to 30 seconds between fetches
+        
+        if (timeSinceLastFetch < minInterval) {
+          console.log(`Skipping fetch, too soon since last fetch: ${timeSinceLastFetch}ms`);
+          return;
+        }
+        
+        console.log('Starting opportunities fetch...');
+        const timer = setTimeout(() => {
+          fetchOpportunities();
+        }, 2000); // Increased delay to 2 seconds
+        return () => clearTimeout(timer);
+      }
     }
     return () => {
       if (abortControllerRef.current) {
         abortControllerRef.current.abort();
       }
     };
-  }, [user?._id, JSON.stringify(filters)]); // Use JSON.stringify for filters comparison
+  }, [user?._id]); // Remove fetchOpportunities from dependencies to prevent infinite loops
+
+  // Update filters ref when filters change
+  useEffect(() => {
+    const filtersChanged = JSON.stringify(filtersRef.current) !== JSON.stringify(filters);
+    if (filtersChanged) {
+      console.log('Filters changed, updating ref');
+      filtersRef.current = filters;
+      // Only refetch if we've already loaded data once
+      if (hasLoadedOnce.current) {
+        console.log('Filters changed, refetching opportunities');
+        fetchOpportunities();
+      }
+    }
+  }, [filters]);
 
   return {
     opportunities: opportunities,
-    loading,
+    loading: loading && !hasLoadedOnce.current, // Only show loading if we haven't loaded data yet
     error,
     pagination,
     fetchOpportunities,

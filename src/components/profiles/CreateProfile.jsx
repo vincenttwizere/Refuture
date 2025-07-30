@@ -497,12 +497,12 @@ const CreateProfile = ({ existingProfile = null, isEditing = false, onProfileUpd
                   />
                 ) : existingProfile?.photoUrl ? (
                   <img 
-                    src={`http://localhost:5001/api/images/${existingProfile.photoUrl}?t=${Date.now()}`}
+                    src={`${import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL || 'https://refuture-backend-1.onrender.com/api'}/images/${existingProfile.photoUrl}?t=${Date.now()}`}
                     alt="Profile" 
                     className="w-24 h-24 rounded-full object-cover"
                     onError={(e) => {
                       console.log('CreateProfile - Image failed to load, trying static route');
-                      const fallbackUrl = `http://localhost:5001/uploads/${existingProfile.photoUrl}?t=${Date.now()}`;
+                      const fallbackUrl = `${import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL || 'https://refuture-backend-1.onrender.com/api'}/uploads/${existingProfile.photoUrl}?t=${Date.now()}`;
                       if (e.target.src !== fallbackUrl) {
                         e.target.src = fallbackUrl;
                       } else {

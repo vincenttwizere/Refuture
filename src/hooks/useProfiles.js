@@ -8,12 +8,19 @@ export const useProfiles = (filters = {}) => {
   const hasFetched = useRef(false);
   const lastFetchTime = useRef(0);
 
-  const fetchProfiles = useCallback(async (params = {}) => {
+  const fetchProfiles = useCallback(async (params = {}, forceRefresh = false) => {
     try {
       setLoading(true);
       setError(null);
-      console.log('Fetching profiles with filters:', filters, 'params:', params);
+      console.log('Fetching profiles with filters:', filters, 'params:', params, 'forceRefresh:', forceRefresh);
       console.log('Full request params:', { ...filters, ...params });
+      
+      // Add cache buster for force refresh
+      const requestParams = {
+        ...filters,
+        ...params,
+        ...(forceRefresh && { _t: Date.now() }) // Add timestamp for cache busting
+      };
       
       // Add timeout logic
       const timeoutMs = 30000; // 30 seconds
@@ -25,8 +32,7 @@ export const useProfiles = (filters = {}) => {
         }, timeoutMs)
       );
       const fetchPromise = profilesAPI.getAll({
-        ...filters,
-        ...params,
+        ...requestParams,
         signal: controller.signal
       });
       const response = await Promise.race([fetchPromise, timeoutPromise]);
@@ -114,7 +120,7 @@ export const useProfiles = (filters = {}) => {
     createProfile,
     updateProfile,
     deleteProfile,
-    refetch: () => fetchProfiles(),
+    refetch: () => fetchProfiles({}, true), // Force refresh with cache buster
     // Add a helper for timeout
     isTimeout: error && error.toLowerCase().includes('timeout')
   };

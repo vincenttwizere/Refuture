@@ -34,7 +34,7 @@ export const useNotifications = (userSettings = null) => {
 
     const interval = setInterval(() => {
       fetchNotifications();
-    }, 5000); // Poll every 5 seconds for better real-time updates
+    }, 30000); // Poll every 30 seconds to reduce load
 
     return () => clearInterval(interval);
   }, [userSettings?.notifications?.push]);

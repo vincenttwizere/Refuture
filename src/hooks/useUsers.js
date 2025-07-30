@@ -25,7 +25,7 @@ export const useUsers = () => {
     
     try {
       const token = localStorage.getItem('token');
-      const response = await axios.get('http://localhost:5001/api/users', {
+      const response = await axios.get(`${import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL || 'https://refuture-backend-1.onrender.com/api'}/users`, {
         headers: { Authorization: `Bearer ${token}` },
         params
       });
@@ -50,7 +50,7 @@ export const useUsers = () => {
     try {
       const token = localStorage.getItem('token');
       const response = await axios.put(
-        `http://localhost:5001/api/users/${userId}/status`,
+        `${import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL || 'https://refuture-backend-1.onrender.com/api'}/users/${userId}/status`,
         statusData, // Send the status data directly (isActive, isVerified)
         { headers: { Authorization: `Bearer ${token}` } }
       );
@@ -83,7 +83,7 @@ export const useUsers = () => {
     try {
       const token = localStorage.getItem('token');
       await axios.delete(
-        `http://localhost:5001/api/users/${userId}`,
+        `${import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL || 'https://refuture-backend-1.onrender.com/api'}/users/${userId}`,
         { headers: { Authorization: `Bearer ${token}` } }
       );
       
@@ -107,7 +107,7 @@ export const useUsers = () => {
     try {
       const token = localStorage.getItem('token');
       const response = await axios.get(
-        `http://localhost:5001/api/users/${userId}`,
+        `${import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL || 'https://refuture-backend-1.onrender.com/api'}/users/${userId}`,
         { headers: { Authorization: `Bearer ${token}` } }
       );
       

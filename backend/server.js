@@ -23,6 +23,9 @@ const Opportunity = require('./models/Opportunity');
 const app = express();
 const PORT = process.env.PORT || 5001;
 
+// Trust proxy for rate limiting (fix for Render deployment)
+app.set('trust proxy', 1);
+
 // Security middleware with adjusted CSP for images
 app.use(helmet({
   crossOriginResourcePolicy: { policy: "cross-origin" },

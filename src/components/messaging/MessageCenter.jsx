@@ -30,6 +30,7 @@ const MessageCenter = ({ isOpen, onClose, preSelectedRecipient = null }) => {
   const [newMessageRecipientEmail, setNewMessageRecipientEmail] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [success, setSuccess] = useState(null);
   const [allUsers, setAllUsers] = useState([]);
   const [userSearch, setUserSearch] = useState('');
   const [filteredUsers, setFilteredUsers] = useState([]);
@@ -45,6 +46,11 @@ const MessageCenter = ({ isOpen, onClose, preSelectedRecipient = null }) => {
       fetchConversations();
       if (preSelectedRecipient) {
         setNewMessageRecipientEmail(preSelectedRecipient.email || '');
+        // Also set the userSearch to match the display format
+        const displayName = `${preSelectedRecipient.firstName} ${preSelectedRecipient.lastName} (${preSelectedRecipient.email})`;
+        setUserSearch(displayName);
+        setSelectedUser(preSelectedRecipient);
+        console.log('MessageCenter: preSelectedRecipient set:', preSelectedRecipient);
       }
     }
   }, [isOpen, preSelectedRecipient]);
@@ -83,10 +89,19 @@ const MessageCenter = ({ isOpen, onClose, preSelectedRecipient = null }) => {
           (u.firstName + ' ' + u.lastName).toLowerCase().includes(userSearch.toLowerCase())
         )
       );
-      // Auto-select user if exact email match
+      // Auto-select user if exact email match or if the search text matches the full display name
       const exactMatch = allUsers.find(u => u.email.toLowerCase() === userSearch.toLowerCase());
+      const displayMatch = allUsers.find(u => {
+        const fullDisplay = `${u.firstName} ${u.lastName} (${u.email})`;
+        return fullDisplay.toLowerCase() === userSearch.toLowerCase();
+      });
+      
       if (exactMatch) {
         setSelectedUser(exactMatch);
+        console.log('Auto-selected user by email:', exactMatch);
+      } else if (displayMatch) {
+        setSelectedUser(displayMatch);
+        console.log('Auto-selected user by display name:', displayMatch);
       } else {
         setSelectedUser(null);
       }
@@ -215,6 +230,7 @@ const MessageCenter = ({ isOpen, onClose, preSelectedRecipient = null }) => {
     try {
       setLoading(true);
       setError(null);
+      setSuccess(null);
       
       const messageData = {
         content: newMessage.trim(),
@@ -225,6 +241,13 @@ const MessageCenter = ({ isOpen, onClose, preSelectedRecipient = null }) => {
       
       if (response.data.success) {
         setNewMessage('');
+        setSuccess('Message sent successfully!');
+        
+        // Clear success message after 3 seconds
+        setTimeout(() => {
+          setSuccess(null);
+        }, 3000);
+        
         // Refresh conversations to show the new message
         await fetchConversations();
         // Update the current conversation messages
@@ -251,23 +274,55 @@ const MessageCenter = ({ isOpen, onClose, preSelectedRecipient = null }) => {
   const sendNewMessage = async () => {
     if (!newMessage.trim()) return;
     setError('');
+    setSuccess(null);
     
     let recipientValue = '';
     
+    // Debug logging
+    console.log('sendNewMessage Debug:', {
+      preSelectedRecipient,
+      selectedUser,
+      newMessageRecipientEmail,
+      userSearch,
+      allUsers: allUsers.length
+    });
+    
+    // Check if we have a preSelectedRecipient
     if (preSelectedRecipient && preSelectedRecipient._id) {
       recipientValue = preSelectedRecipient._id;
-    } else if (selectedUser?._id) {
+      console.log('Using preSelectedRecipient:', recipientValue);
+    } 
+    // Check if we have a selectedUser
+    else if (selectedUser?._id) {
       recipientValue = selectedUser._id;
-    } else if (newMessageRecipientEmail) {
-      // Find user by email
+      console.log('Using selectedUser:', recipientValue);
+    } 
+    // Check if we have a userSearch that contains a valid user
+    else if (userSearch) {
+      // Try to find user by the search text
+      const userBySearch = allUsers.find(u => {
+        const fullName = `${u.firstName} ${u.lastName} (${u.email})`;
+        return fullName.toLowerCase().includes(userSearch.toLowerCase()) || 
+               u.email.toLowerCase().includes(userSearch.toLowerCase());
+      });
+      if (userBySearch) {
+        recipientValue = userBySearch._id;
+        console.log('Using userBySearch:', recipientValue);
+      }
+    }
+    // Check if we have a newMessageRecipientEmail
+    else if (newMessageRecipientEmail) {
       const userByEmail = allUsers.find(u => u.email.toLowerCase() === newMessageRecipientEmail.trim().toLowerCase());
       if (userByEmail) {
         recipientValue = userByEmail._id;
+        console.log('Using userByEmail:', recipientValue);
       } else {
         setError('User not found with this email address.');
         return;
       }
     }
+    
+    console.log('Final recipientValue:', recipientValue);
     
     if (!recipientValue) {
       setError('Please select a recipient.');
@@ -287,6 +342,8 @@ const MessageCenter = ({ isOpen, onClose, preSelectedRecipient = null }) => {
         recipient: recipientValue
       };
       
+      console.log('Sending message with data:', messageData);
+      
       const response = await messagesAPI.send(messageData);
       
       if (response.data.success) {
@@ -294,7 +351,13 @@ const MessageCenter = ({ isOpen, onClose, preSelectedRecipient = null }) => {
         setNewMessageRecipientEmail('');
         setSelectedUser(null);
         setUserSearch('');
+        setSuccess('Message sent successfully!');
         await fetchConversations();
+        
+        // Clear success message after 3 seconds
+        setTimeout(() => {
+          setSuccess(null);
+        }, 3000);
       }
     } catch (error) {
       console.error('Error sending new message:', error);
@@ -413,6 +476,13 @@ const MessageCenter = ({ isOpen, onClose, preSelectedRecipient = null }) => {
                   </div>
                 )}
 
+                {/* Success Display */}
+                {success && (
+                  <div className="p-3 bg-green-50 border border-green-200">
+                    <p className="text-green-800 text-sm">{success}</p>
+                  </div>
+                )}
+
                 {/* Messages */}
                 <div className="flex-1 overflow-y-auto p-4 space-y-4">
                   {messages.map((message) => {
@@ -495,9 +565,11 @@ const MessageCenter = ({ isOpen, onClose, preSelectedRecipient = null }) => {
                       {preSelectedRecipient ? (
                         <div>
                           <label className="block text-xs font-medium text-gray-700 mb-1">To:</label>
-                          <div className="w-full border border-gray-300 rounded-lg px-3 py-2 bg-gray-50 text-gray-700 mb-1 text-sm">
-                            {preSelectedRecipient.firstName} {preSelectedRecipient.lastName} ({preSelectedRecipient.email})
+                          <div className="w-full border border-green-300 rounded-lg px-3 py-2 bg-green-50 text-gray-700 mb-1 text-sm flex items-center justify-between">
+                            <span>{preSelectedRecipient.firstName} {preSelectedRecipient.lastName} ({preSelectedRecipient.email})</span>
+                            <span className="text-green-600 text-xs">✓ Selected</span>
                           </div>
+                          <input type="hidden" value={preSelectedRecipient._id} />
                         </div>
                       ) : (
                         <div>
@@ -530,6 +602,16 @@ const MessageCenter = ({ isOpen, onClose, preSelectedRecipient = null }) => {
                               ))}
                             </div>
                           )}
+                          {selectedUser && (
+                            <div className="mt-2 p-2 border border-green-300 rounded-lg bg-green-50">
+                              <div className="flex items-center justify-between">
+                                <span className="text-sm text-gray-700">
+                                  {selectedUser.firstName} {selectedUser.lastName} ({selectedUser.email})
+                                </span>
+                                <span className="text-green-600 text-xs">✓ Selected</span>
+                              </div>
+                            </div>
+                          )}
                         </div>
                       )}
                       <div>
@@ -546,6 +628,11 @@ const MessageCenter = ({ isOpen, onClose, preSelectedRecipient = null }) => {
                       {error && (
                         <div className="bg-red-50 border border-red-200 rounded-lg p-2">
                           <p className="text-red-800 text-xs">{error}</p>
+                        </div>
+                      )}
+                      {success && (
+                        <div className="bg-green-50 border border-green-200 rounded-lg p-2">
+                          <p className="text-green-800 text-xs">{success}</p>
                         </div>
                       )}
                       <button

@@ -365,7 +365,11 @@ const AdminDashboard = () => {
         console.error('Error loading profiles:', error);
         setProfilesLoaded(true); // Set to true even on error to prevent infinite loading
       }
-      fetchOpportunities();
+      
+      // Only fetch opportunities if not already loading and we haven't loaded them yet
+      if (!opportunitiesLoading && opportunities.length === 0) {
+        fetchOpportunities();
+      }
       
       // Create a welcome notification for admin (only once)
       const hasWelcomeNotification = localStorage.getItem('adminWelcomeNotification');
@@ -466,20 +470,7 @@ const AdminDashboard = () => {
                   <p className="text-sm text-red-700">Error loading applications: {applicationsError}</p>
                 </div>
               )}
-              {!applicationsLoading && applications && applications.length === 0 && (
-                <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-                  <p className="text-sm text-yellow-700">No applications found. This might be normal if no applications have been submitted yet.</p>
-                <button
-                  onClick={() => {
-                      console.log('Manually refreshing applications...');
-                    refetchApplications();
-                  }}
-                    className="mt-2 px-3 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700"
-                >
-                    Refresh Applications
-                </button>
-              </div>
-              )}
+
               
               <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
                 <div className="bg-white p-6 rounded-lg border border-gray-200 shadow-sm">
@@ -1658,19 +1649,7 @@ const AdminDashboard = () => {
           {/* Description */}
           <div className="flex items-center justify-between">
             <p className="text-gray-600">Real-time platform analytics and performance metrics</p>
-            <button 
-              onClick={() => {
-                refetchStats();
-                refetchUsers();
-                refetchApplications();
-                refetchOpportunities();
-                refetchProfiles();
-              }}
-              className="flex items-center text-blue-600 hover:text-blue-700 text-sm"
-            >
-              <RefreshCw className="h-4 w-4 mr-1" />
-              Refresh Data
-            </button>
+
           </div>
 
           {/* Key Metrics Cards */}
@@ -2281,7 +2260,6 @@ const AdminDashboard = () => {
           )}
           
           <div className="flex justify-between items-center">
-            <h2 className="text-2xl font-bold text-gray-900">All Notifications</h2>
             <div className="flex items-center space-x-2">
               {unreadNotificationsCount > 0 && (
                 <button
@@ -2302,7 +2280,7 @@ const AdminDashboard = () => {
                   onChange={(e) => setNotificationFilter(e.target.value)}
                   className="appearance-none px-4 py-2 text-sm bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 pr-8 cursor-pointer hover:border-gray-400 hover:shadow-sm transition-all duration-200 shadow-sm"
                 >
-                  <option value="all">All Notifications</option>
+                  <option value="all">All</option>
                   <option value="unread">Unread Only</option>
                 </select>
                 <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
